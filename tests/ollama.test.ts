@@ -32,11 +32,12 @@ Debes responder SIEMPRE en formato JSON.`;
     
     const userText = 'El nuevo framework de frontend añade view transitions nativos que podemos aplicar a la UI del dashboard.';
 
-    const result = await provider.evaluateContent(systemPrompt, userText, schema);
+    const { data: result, model } = await provider.evaluateContent(systemPrompt, userText, schema);
 
     expect(result).toBeDefined();
     expect(result.verdict).toBeDefined();
     expect(typeof result.confidenceScore).toBe('number');
     expect(typeof result.reasoning).toBe('string');
+    expect(typeof model).toBe('string');
   }, 120000); // 120s timeout
 });

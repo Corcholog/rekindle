@@ -3,18 +3,19 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { boss } from '../../queue';
-import { canonicalizeUrl } from '../../workers/ingestionWorker';
+import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
 import { sql } from 'drizzle-orm';
 
 const IngestRequestSchema = z.object({
   url: z.string().url().refine((val) => {
     try {
       const parsed = new URL(val);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+      return !isPrivateOrLoopbackHost(parsed.hostname);
     } catch {
       return false;
     }
-  }, { message: 'Only http and https protocols are supported' }),
+  }, { message: 'Solo se admiten URLs públicas http y https (direcciones locales o privadas no permitidas)' }),
 });
 
 export default async function (server: FastifyInstance) {

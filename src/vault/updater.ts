@@ -118,13 +118,12 @@ export async function writeAcceptedSuggestionToVault(suggestionId: string, vault
  * Recovery path (used by the sync_suggestions worker): writes every accepted suggestion
  * of a project that has not reached the vault yet (e.g. a previous writeback failed).
  */
-export async function syncProjectSuggestions(projectId: string, vaultPath: string) {
+export async function syncProjectSuggestions(projectId: string, vaultPath: string): Promise<number> {
   const [projectRecord] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
-  if (!projectRecord) return;
+  if (!projectRecord) return 0;
 
-  const unwritten = await db.select(writableSelection)
+  const unwritten = await db.select({ id: actionSuggestions.id })
     .from(actionSuggestions)
-    .leftJoin(contents, eq(actionSuggestions.contentId, contents.id))
     .where(and(
       eq(actionSuggestions.projectId, projectId),
       eq(actionSuggestions.status, 'accepted'),
@@ -133,17 +132,15 @@ export async function syncProjectSuggestions(projectId: string, vaultPath: strin
 
   if (unwritten.length === 0) {
     console.log(`[VaultUpdater] No accepted suggestions pending writeback for project ${projectId}`);
-    return;
+    return 0;
   }
 
-  const markdown = unwritten.map(s => formatAcceptedCallout(s)).join('');
-  const filePath = await appendToProjectFile(projectRecord.folderPath, vaultPath, markdown);
-
+  let writtenCount = 0;
   for (const sug of unwritten) {
-    await db.update(actionSuggestions)
-      .set({ writtenToVault: true })
-      .where(eq(actionSuggestions.id, sug.id));
+    const success = await writeAcceptedSuggestionToVault(sug.id, vaultPath);
+    if (success) writtenCount++;
   }
 
-  console.log(`[VaultUpdater] Recovered ${unwritten.length} accepted suggestions into ${filePath}`);
+  console.log(`[VaultUpdater] Recovered ${writtenCount} accepted suggestions for project ${projectId}`);
+  return writtenCount;
 }

@@ -13,6 +13,35 @@ import { YoutubeTranscript } from 'youtube-transcript';
 const QUEUE_NAME = 'ingest_url';
 const ollama = sharedAiProvider;
 
+export function isPrivateOrLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().trim().replace(/^\[|\]$/g, '');
+  if (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host === '169.254.169.254'
+  ) {
+    return true;
+  }
+
+  const parts = host.split('.').map(Number);
+  if (parts.length === 4 && parts.every(p => !isNaN(p) && p >= 0 && p <= 255)) {
+    if (parts[0] === 10) return true;
+    if (parts[0] === 127) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 0) return true;
+  }
+
+  if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan') || host.endsWith('.localhost')) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isYouTubeUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
@@ -108,7 +137,16 @@ export const setupIngestionWorker = async () => {
       console.log(`Processing ingestion job for: ${url} (Content ID: ${contentId})`);
 
       try {
-        // 1. Update status to extracting
+        // 1. Validate against SSRF
+        const parsedUrl = new URL(url);
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+          throw new Error(`Protocolo '${parsedUrl.protocol}' no permitido. Solo se admite http y https.`);
+        }
+        if (isPrivateOrLoopbackHost(parsedUrl.hostname)) {
+          throw new Error(`Acceso denegado (SSRF): no se permite la ingesta de direcciones locales o privadas (${parsedUrl.hostname}).`);
+        }
+
+        // 2. Update status to extracting
         await db.update(contents)
           .set({ ingestStatus: 'extracting', ingestStatusReason: null })
           .where(eq(contents.id, contentId));
@@ -183,7 +221,7 @@ export const setupIngestionWorker = async () => {
 
         // 3. Summarize using Ollama
         const systemPrompt = "Eres un analista experto. Resume el texto proporcionado de manera concisa enfocándote en los puntos clave. Importante: Escribe el resumen siempre en Español, incluso si el texto original está en Inglés u otro idioma.";
-        const summaryResult = await ollama.evaluateContent(systemPrompt, rawText, summarySchema);
+        const { data: summaryResult } = await ollama.evaluateContent(systemPrompt, rawText, summarySchema);
         
         await db.update(contents)
           .set({ summary: summaryResult.summary, ingestStatus: 'embedding' })

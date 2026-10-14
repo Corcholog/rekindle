@@ -28,9 +28,10 @@ server.setSerializerCompiler(serializerCompiler);
 // Custom error handler
 server.setErrorHandler((error: any, request, reply) => {
   if (error.validation) {
+    const issueMsg = error.validation?.[0]?.message;
     reply.status(400).send({
       error: 'Bad Request',
-      message: 'Validation failed',
+      message: issueMsg ? `Validation failed: ${issueMsg}` : 'Validation failed',
       issues: error.validation
     });
     return;

@@ -111,7 +111,8 @@ export default async function (server: FastifyInstance) {
     .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
     .where(and(
       inArray(projectSnapshots.projectId, projectIds),
-      inArray(evaluations.verdict, ['tentative', 'irrelevant'])
+      inArray(evaluations.verdict, ['tentative', 'irrelevant']),
+      sql`(evaluations.verdict = 'irrelevant' OR NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = ${evaluations.id}))`
     ))
     .groupBy(projectSnapshots.projectId, evaluations.verdict);
 
@@ -215,7 +216,8 @@ export default async function (server: FastifyInstance) {
       .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
       .where(and(
         eq(projectSnapshots.projectId, proj.id),
-        eq(evaluations.verdict, 'tentative')
+        eq(evaluations.verdict, 'tentative'),
+        sql`NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = ${evaluations.id})`
       ));
     const tentative = tentativeRow?.count ?? 0;
 

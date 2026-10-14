@@ -245,4 +245,90 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(body.error).toBe('Conflict');
     expect(body.message).toContain("already resolved as 'accepted'");
   });
+
+  it('Resuelve evaluaciones tentativas sin mutar evaluations.verdict ni generar duplicados zombies (K1)', async () => {
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { evaluations, actionSuggestions } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    // 1. Seed a tentative evaluation
+    const [evTentative] = await drizzleDb.insert(evaluations).values({
+      contentId: content1Id,
+      projectSnapshotId: (await drizzleDb.query.projectSnapshots.findFirst())!.id,
+      verdict: 'tentative',
+      confidenceScore: 0.55,
+      triageReasoning: 'Relación tentativa sobre microservicios.',
+      consumptionSeq: 2,
+    }).returning({ id: evaluations.id });
+
+    // 2. Before resolution: must appear in active suggestions
+    const beforeRes = await server.inject({
+      method: 'GET',
+      url: '/api/suggestions?status=active',
+    });
+    expect(beforeRes.statusCode).toBe(200);
+    const beforeBody = JSON.parse(beforeRes.payload);
+    expect(beforeBody.items.some((i: any) => i.id === evTentative.id)).toBe(true);
+
+    // 3. User discards the tentative suggestion
+    const patchRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/suggestions/${evTentative.id}`,
+      payload: { status: 'discarded', userFeedback: 'No aplica para este sprint' },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // 4. Verify evaluations.verdict was NOT mutated to 'irrelevant' (immutable history)
+    const [evInDb] = await drizzleDb.select().from(evaluations).where(eq(evaluations.id, evTentative.id));
+    expect(evInDb.verdict).toBe('tentative');
+
+    // 5. Verify action_suggestions has recorded the user decision
+    const sugInDb = await drizzleDb.query.actionSuggestions.findFirst({
+      where: eq(actionSuggestions.evaluationId, evTentative.id),
+    });
+    expect(sugInDb).toBeDefined();
+    expect(sugInDb!.status).toBe('discarded');
+
+    // 6. After resolution: must NOT appear in active suggestions (no zombie duplicate)
+    const afterRes = await server.inject({
+      method: 'GET',
+      url: '/api/suggestions?status=active',
+    });
+    const afterBody = JSON.parse(afterRes.payload);
+    expect(afterBody.items.some((i: any) => i.id === evTentative.id)).toBe(false);
+
+    // 7. Must appear in discarded suggestions
+    const discardedRes = await server.inject({
+      method: 'GET',
+      url: '/api/suggestions?status=discarded',
+    });
+    const discardedBody = JSON.parse(discardedRes.payload);
+    expect(discardedBody.items.some((i: any) => i.evaluationId === evTentative.id || i.id === sugInDb!.id)).toBe(true);
+  });
+
+  it('POST /api/ingest rechaza URLs privadas o loopback protegiendo contra SSRF (K4)', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/ingest',
+      payload: { url: 'http://127.0.0.1:5432/secrets' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.payload).toContain('direcciones locales o privadas no permitidas');
+  });
+
+  it('POST /api/settings/vault rechaza peticiones cross-origin no autorizadas (K4)', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/settings/vault',
+      headers: {
+        origin: 'https://malicious-website.com',
+      },
+      payload: { vaultPath: 'C:\\Users\\victim\\Documents' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    const body = JSON.parse(res.payload);
+    expect(body.error).toBe('Forbidden');
+  });
 });

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { actionSuggestions, projects, contents, evaluations, projectSnapshots } from '../../db/schema';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss } from '../../queue';
 
@@ -113,7 +113,10 @@ export default async function (server: FastifyInstance) {
     }
 
     if (status === 'tentative') {
-      const conds = [eq(evaluations.verdict, 'tentative')];
+      const conds = [
+        eq(evaluations.verdict, 'tentative'),
+        sql`NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = ${evaluations.id})`,
+      ];
       if (projectId) conds.push(eq(projectSnapshots.projectId, projectId));
       const where = and(...conds);
 
@@ -194,6 +197,7 @@ export default async function (server: FastifyInstance) {
         FROM evaluations e
         JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
         WHERE e.verdict = ${evalVerdict} ${projectFilterE}
+          AND NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = e.id)
       )
       SELECT count(*)::int AS count FROM combined
     `);
@@ -266,6 +270,7 @@ export default async function (server: FastifyInstance) {
         JOIN projects p ON ps.project_id = p.id
         JOIN contents c ON e.content_id = c.id
         WHERE e.verdict = ${evalVerdict} ${projectFilterE}
+          AND NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = e.id)
       )
       SELECT * FROM combined
       ORDER BY "createdAt" DESC
@@ -319,7 +324,7 @@ export default async function (server: FastifyInstance) {
     .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
     .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
     .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
-    .where(eq(actionSuggestions.id, id))
+    .where(or(eq(actionSuggestions.id, id), eq(actionSuggestions.evaluationId, id)))
     .limit(1);
 
     if (rows.length === 0) {
@@ -401,7 +406,11 @@ export default async function (server: FastifyInstance) {
     const { id } = request.params as z.infer<typeof IdParamSchema>;
     const { status, userFeedback } = request.body as z.infer<typeof UpdateSuggestionBodySchema>;
 
-    const [existing] = await db.select().from(actionSuggestions).where(eq(actionSuggestions.id, id)).limit(1);
+    const [existing] = await db.select()
+      .from(actionSuggestions)
+      .where(or(eq(actionSuggestions.id, id), eq(actionSuggestions.evaluationId, id)))
+      .limit(1);
+
     if (!existing) {
       // Check if it is an evaluation row (e.g. tentative)
       const [evalRow] = await db.select({
@@ -420,80 +429,72 @@ export default async function (server: FastifyInstance) {
 
       if (evalRow) {
         if (status === 'discarded') {
-          await db.update(evaluations).set({ verdict: 'irrelevant' }).where(eq(evaluations.id, id));
+          const [newSug] = await db.insert(actionSuggestions).values({
+            projectId: evalRow.projectId,
+            contentId: evalRow.contentId,
+            evaluationId: evalRow.id,
+            actionType: 'other',
+            targetFile: 'discarded',
+            observation: 'Descarte por el usuario',
+            suggestedAction: evalRow.triageReasoning || 'Descarte analítico',
+            status: 'discarded',
+            userFeedback: userFeedback ?? null,
+            writtenToVault: false,
+            resolvedAt: new Date(),
+          }).returning();
+
           const [details] = await db.select({
-            id: evaluations.id,
-            projectId: projectSnapshots.projectId,
+            id: actionSuggestions.id,
+            projectId: actionSuggestions.projectId,
             projectTitle: projects.title,
-            contentId: contents.id,
+            contentId: actionSuggestions.contentId,
             contentTitle: contents.title,
             contentUri: contents.uri,
-            actionType: sql<string>`'other'`,
-            targetFile: sql<string>`'discarded'`,
-            observation: sql<string>`'Descartado'`,
-            suggestedAction: evaluations.triageReasoning,
-            status: sql<string>`'discarded'`,
-            userFeedback: sql<string | null>`null`,
-            writtenToVault: sql<boolean>`false`,
-            resolvedAt: sql<Date>`now()`,
-            createdAt: evaluations.evaluatedAt,
+            actionType: actionSuggestions.actionType,
+            targetFile: actionSuggestions.targetFile,
+            observation: actionSuggestions.observation,
+            suggestedAction: actionSuggestions.suggestedAction,
+            status: actionSuggestions.status,
+            userFeedback: actionSuggestions.userFeedback,
+            writtenToVault: actionSuggestions.writtenToVault,
+            resolvedAt: actionSuggestions.resolvedAt,
+            createdAt: actionSuggestions.createdAt,
             triageReasoning: evaluations.triageReasoning,
             confidenceScore: evaluations.confidenceScore,
           })
-          .from(evaluations)
-          .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-          .innerJoin(projects, eq(projectSnapshots.projectId, projects.id))
-          .innerJoin(contents, eq(evaluations.contentId, contents.id))
-          .where(eq(evaluations.id, id))
+          .from(actionSuggestions)
+          .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
+          .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
+          .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
+          .where(eq(actionSuggestions.id, newSug.id))
           .limit(1);
 
           return reply.send({
             ...details,
-            actionType: 'other' as const,
-            status: 'discarded' as const,
-            resolvedAt: new Date().toISOString(),
+            resolvedAt: details.resolvedAt ? details.resolvedAt.toISOString() : null,
             createdAt: details.createdAt.toISOString(),
           });
         } else if (status === 'accepted') {
-          // Idempotency check: prevent duplicate suggestions on double click
-          const existingSuggestion = await db.query.actionSuggestions.findFirst({
-            where: eq(actionSuggestions.evaluationId, evalRow.id),
-          });
-
-          let currentSug = existingSuggestion;
-          if (existingSuggestion) {
-            const [updated] = await db.update(actionSuggestions)
-              .set({
-                status: 'accepted',
-                userFeedback: userFeedback ?? existingSuggestion.userFeedback,
-                resolvedAt: new Date(),
-              })
-              .where(eq(actionSuggestions.id, existingSuggestion.id))
-              .returning();
-            currentSug = updated;
-          } else {
-            const [newSug] = await db.insert(actionSuggestions).values({
-              projectId: evalRow.projectId,
-              contentId: evalRow.contentId,
-              evaluationId: evalRow.id,
-              actionType: 'narrative_bridge',
-              targetFile: 'ideas.md',
-              observation: 'Afinidad temática aceptada por el usuario',
-              suggestedAction: evalRow.triageReasoning || 'Integrar conceptos clave en el proyecto',
-              status: 'accepted',
-              userFeedback: userFeedback ?? null,
-              writtenToVault: false,
-              resolvedAt: new Date(),
-            }).returning();
-            currentSug = newSug;
-          }
+          const [newSug] = await db.insert(actionSuggestions).values({
+            projectId: evalRow.projectId,
+            contentId: evalRow.contentId,
+            evaluationId: evalRow.id,
+            actionType: 'narrative_bridge',
+            targetFile: 'ideas.md',
+            observation: 'Afinidad temática aceptada por el usuario',
+            suggestedAction: evalRow.triageReasoning || 'Integrar conceptos clave en el proyecto',
+            status: 'accepted',
+            userFeedback: userFeedback ?? null,
+            writtenToVault: false,
+            resolvedAt: new Date(),
+          }).returning();
 
           const vaultPath = process.env.VAULT_PATH;
-          if (vaultPath && currentSug && !currentSug.writtenToVault) {
+          if (vaultPath && !newSug.writtenToVault) {
             try {
-              await writeAcceptedSuggestionToVault(currentSug.id, vaultPath);
+              await writeAcceptedSuggestionToVault(newSug.id, vaultPath);
             } catch (err) {
-              server.log.error({ err }, `Failed writing converted suggestion ${currentSug.id} to vault`);
+              server.log.error({ err }, `Failed writing converted suggestion ${newSug.id} to vault`);
             }
           }
 
@@ -520,7 +521,7 @@ export default async function (server: FastifyInstance) {
           .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
           .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
           .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
-          .where(eq(actionSuggestions.id, currentSug.id))
+          .where(eq(actionSuggestions.id, newSug.id))
           .limit(1);
 
           return reply.send({
@@ -545,12 +546,12 @@ export default async function (server: FastifyInstance) {
           userFeedback: userFeedback ?? existing.userFeedback,
           resolvedAt: new Date(),
         })
-        .where(and(eq(actionSuggestions.id, id), eq(actionSuggestions.status, 'pending')))
+        .where(and(eq(actionSuggestions.id, existing.id), eq(actionSuggestions.status, 'pending')))
         .returning({ id: actionSuggestions.id });
 
       if (transitioned.length === 0) {
         // Lost a race with another request; fall through to the resolved-state checks below
-        const [current] = await db.select().from(actionSuggestions).where(eq(actionSuggestions.id, id)).limit(1);
+        const [current] = await db.select().from(actionSuggestions).where(eq(actionSuggestions.id, existing.id)).limit(1);
         if (current.status !== status) {
           return reply.status(409).send({
             error: 'Conflict',
@@ -570,13 +571,13 @@ export default async function (server: FastifyInstance) {
       const vaultPath = process.env.VAULT_PATH;
       if (vaultPath) {
         try {
-          await writeAcceptedSuggestionToVault(id, vaultPath);
+          await writeAcceptedSuggestionToVault(existing.id, vaultPath);
         } catch (vaultError) {
-          server.log.error({ err: vaultError }, `Failed writing accepted suggestion ${id} to vault; queued for retry`);
+          server.log.error({ err: vaultError }, `Failed writing accepted suggestion ${existing.id} to vault; queued for retry`);
           await boss.send('sync_suggestions', { projectId: existing.projectId }, { singletonKey: `sync:${existing.projectId}`, retryLimit: 2 }).catch(() => {});
         }
       } else {
-        server.log.warn(`VAULT_PATH not set; accepted suggestion ${id} not written to vault`);
+        server.log.warn(`VAULT_PATH not set; accepted suggestion ${existing.id} not written to vault`);
       }
     }
 
@@ -600,7 +601,7 @@ export default async function (server: FastifyInstance) {
     .from(actionSuggestions)
     .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
     .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
-    .where(eq(actionSuggestions.id, id))
+    .where(eq(actionSuggestions.id, existing.id))
     .limit(1);
 
     return reply.send({

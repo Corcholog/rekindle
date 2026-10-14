@@ -108,12 +108,31 @@ export default async function (server: FastifyInstance) {
     };
   });
 
+function isOriginAllowed(request: any): boolean {
+  const origin = request.headers['origin'];
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  } catch {
+    return false;
+  }
+}
+
   // 2. POST /api/settings/vault: Change or Set Vault Path
   server.post('/api/settings/vault', {
     schema: {
       body: UpdateVaultBodySchema,
     },
   }, async (request, reply) => {
+    if (!isOriginAllowed(request)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        message: 'Cross-origin requests are not allowed on settings endpoints',
+      });
+    }
+
     const { vaultPath } = request.body as z.infer<typeof UpdateVaultBodySchema>;
 
     const validation = await validateVaultPath(vaultPath);
@@ -159,6 +178,13 @@ export default async function (server: FastifyInstance) {
 
   // 3. POST /api/settings/vault/rescan: Force Re-scan Current Vault
   server.post('/api/settings/vault/rescan', async (request, reply) => {
+    if (!isOriginAllowed(request)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        message: 'Cross-origin requests are not allowed on settings endpoints',
+      });
+    }
+
     const currentVaultPath = getCurrentVaultPath();
 
     if (!currentVaultPath) {

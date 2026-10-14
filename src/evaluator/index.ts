@@ -4,6 +4,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
+import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT } from '../config';
 
 const ollama = sharedAiProvider;
 
@@ -56,8 +57,9 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
     WHERE p.is_active = true
       ${projectFilter}
       AND ls.embedding IS NOT NULL 
-      AND ls.embedding <=> ${targetVector}::vector < 0.6
+      AND ls.embedding <=> ${targetVector}::vector < ${VECTOR_DISTANCE_THRESHOLD}
     ORDER BY ls.embedding <=> ${targetVector}::vector
+    LIMIT ${TOP_K_PROJECTS_LIMIT}
   `);
 
   if (topSnapshots.rows.length === 0) {
@@ -119,9 +121,8 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
 
     const startTime = Date.now();
     try {
-      const result = await ollama.evaluateContent(systemPrompt, userMessage, unifiedEvaluationSchema);
+      const { data: result, model: modelUsed } = await ollama.evaluateContent(systemPrompt, userMessage, unifiedEvaluationSchema);
       const latencyMs = Date.now() - startTime;
-      const modelUsed = ollama.lastUsedModel || 'unknown';
       
       // 1. Record Evaluation in DB
       let evalId: string;

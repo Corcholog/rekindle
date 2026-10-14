@@ -3,6 +3,11 @@ import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { env } from '../config';
 
+export interface EvaluationOutput<T> {
+  data: T;
+  model: string;
+}
+
 export class OllamaProvider {
   private embedder: OllamaEmbeddings;
   private chatModel: ChatOllama;
@@ -55,6 +60,7 @@ export class OllamaProvider {
     }
   }
 
+
   /**
    * Evalúa contenido y fuerza la salida a cumplir con un esquema Zod.
    * Utiliza Gemini si GEMINI_API_KEY está presente, o ChatOllama local como fallback.
@@ -63,7 +69,7 @@ export class OllamaProvider {
     systemPrompt: string,
     userText: string,
     schema: T
-  ): Promise<z.infer<T>> {
+  ): Promise<EvaluationOutput<z.infer<T>>> {
     const gemini = this.getGeminiClient();
     if (gemini) {
       const modelName = process.env.GEMINI_MODEL || env.CHAT_MODEL || 'gemini-3.1-flash-lite';
@@ -95,8 +101,9 @@ export class OllamaProvider {
 
         const parsedJson = JSON.parse(text);
         const validated = schema.parse(parsedJson);
-        this.lastUsedModel = `gemini:${modelName}`;
-        return validated;
+        const fullModel = `gemini:${modelName}`;
+        this.lastUsedModel = fullModel;
+        return { data: validated, model: fullModel };
       } catch (geminiError) {
         console.warn(`[AI Provider] Gemini (${modelName}) evaluation failed, falling back to local Ollama:`, geminiError);
       }
@@ -112,8 +119,9 @@ export class OllamaProvider {
         { role: 'user', content: userText }
       ]);
 
-      this.lastUsedModel = `ollama:${this.chatModel.model}`;
-      return response as z.infer<T>;
+      const fullModel = `ollama:${this.chatModel.model}`;
+      this.lastUsedModel = fullModel;
+      return { data: response as z.infer<T>, model: fullModel };
     } catch (error) {
       console.error('[AI Provider] Error in structured evaluation with Ollama:', error);
       throw error;

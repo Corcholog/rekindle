@@ -11,11 +11,13 @@ import { PROJECT_DIR_NAMES } from '../config';
 
 const ollama = sharedAiProvider;
 const activeProjectReconciliations = new Set<string>();
+const pendingProjectReconciliations = new Set<string>();
 
 export async function reconcileProject(projectPath: string, vaultPath: string, force = false): Promise<void> {
   const normalizedPath = path.resolve(projectPath);
   if (activeProjectReconciliations.has(normalizedPath)) {
-    console.log(`[Reconciler] Project ${normalizedPath} is already being reconciled. Skipping concurrent execution.`);
+    console.log(`[Reconciler] Project ${normalizedPath} is already being reconciled. Queuing follow-up pass.`);
+    pendingProjectReconciliations.add(normalizedPath);
     return;
   }
   activeProjectReconciliations.add(normalizedPath);
@@ -86,7 +88,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
               foundTaggedThesis = parsed.thesis;
             }
 
-            if (parsed.thesis) {
+            if (parsed.thesis && !isProjectMd) {
               notesContent += `### Nota: ${parsed.title}\n${parsed.thesis}\n\n`;
             }
           }
@@ -165,6 +167,13 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
     console.log(`[Reconciler] Project synchronized: ${title} (${relativePath}) with ${noteTitles.length} notes`);
   } finally {
     activeProjectReconciliations.delete(normalizedPath);
+    if (pendingProjectReconciliations.delete(normalizedPath)) {
+      setImmediate(() => {
+        reconcileProject(projectPath, vaultPath, force).catch(err => {
+          console.error(`[Reconciler] Error in queued follow-up reconciliation for ${normalizedPath}:`, err);
+        });
+      });
+    }
   }
 }
 
