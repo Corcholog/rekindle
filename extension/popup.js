@@ -1,7 +1,9 @@
 // Loom Web Clipper - Popup Script (Manifest V3)
-// Supports immediate saving and offline queueing with auto-sync
+// Direct storage-backed offline queue with background sync
 
 const SERVER_URL = 'http://localhost:3000';
+const STORAGE_QUEUE_KEY = 'offline_queue';
+const SYNC_ALARM_NAME = 'loom-offline-sync';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const statusDot = document.getElementById('status-dot');
@@ -20,14 +22,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let isOnline = false;
 
-  // --- Queue State Management ---
+  // --- Queue State Management (Direct chrome.storage access) ---
 
   async function getLocalQueue() {
     try {
-      const data = await chrome.storage.local.get({ offline_queue: [] });
-      return Array.isArray(data.offline_queue) ? data.offline_queue : [];
+      const data = await chrome.storage.local.get({ [STORAGE_QUEUE_KEY]: [] });
+      return Array.isArray(data[STORAGE_QUEUE_KEY]) ? data[STORAGE_QUEUE_KEY] : [];
     } catch {
       return [];
+    }
+  }
+
+  async function updateBadgeDirectly(queueLength) {
+    try {
+      if (queueLength > 0) {
+        await chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
+        await chrome.action.setBadgeText({ text: String(queueLength) });
+      } else {
+        await chrome.action.setBadgeText({ text: '' });
+      }
+    } catch {
+      // Ignored if action API restricted
     }
   }
 
@@ -46,6 +61,106 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       queueBanner.style.display = 'none';
     }
+    await updateBadgeDirectly(queue.length);
+  }
+
+  async function enqueueDirectly(item) {
+    const queue = await getLocalQueue();
+    
+    // Avoid duplicate rapid enqueues
+    const isDuplicate = queue.some(
+      q => q.url === item.url && q.selection === (item.selection || '') && (Date.now() - q.timestamp < 30000)
+    );
+
+    if (!isDuplicate) {
+      const newItem = {
+        id: typeof crypto.randomUUID === 'function' 
+          ? crypto.randomUUID() 
+          : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        url: item.url,
+        title: item.title || '',
+        selection: item.selection || '',
+        timestamp: Date.now(),
+        retries: 0
+      };
+      queue.push(newItem);
+      await chrome.storage.local.set({ [STORAGE_QUEUE_KEY]: queue });
+    }
+
+    await updateBadgeDirectly(queue.length);
+
+    // Register sync alarm directly from popup
+    try {
+      await chrome.alarms.create(SYNC_ALARM_NAME, { periodInMinutes: 1 });
+    } catch {}
+
+    // Wake up background worker if awake, but never fail if it's inactive
+    try {
+      chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }).catch(() => {});
+    } catch {}
+
+    return queue.length;
+  }
+
+  async function flushDirectly() {
+    const queue = await getLocalQueue();
+    if (queue.length === 0) {
+      await updateBadgeDirectly(0);
+      return { success: true, flushed: 0, remaining: 0 };
+    }
+
+    const remaining = [];
+    let flushedCount = 0;
+
+    for (const item of queue) {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/ingest`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            url: item.url,
+            title: item.title,
+            selection: item.selection
+          }),
+          signal: AbortSignal.timeout(6000)
+        });
+
+        if (res.ok) {
+          flushedCount++;
+        } else if (res.status >= 400 && res.status < 500) {
+          if ((item.retries || 0) < 3) {
+            remaining.push({ ...item, retries: (item.retries || 0) + 1 });
+          }
+        } else {
+          remaining.push(item);
+          break;
+        }
+      } catch {
+        remaining.push(item);
+        break;
+      }
+    }
+
+    await chrome.storage.local.set({ [STORAGE_QUEUE_KEY]: remaining });
+
+    if (remaining.length === 0) {
+      try {
+        await chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
+        await chrome.action.setBadgeText({ text: '✓' });
+        setTimeout(async () => {
+          try {
+            const latest = await getLocalQueue();
+            if (latest.length === 0) await chrome.action.setBadgeText({ text: '' });
+          } catch {}
+        }, 3000);
+      } catch {}
+    } else {
+      await updateBadgeDirectly(remaining.length);
+    }
+
+    return { success: true, flushed: flushedCount, remaining: remaining.length };
   }
 
   // --- Connectivity Check ---
@@ -77,18 +192,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Listen for sync notifications from service worker
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'QUEUE_SYNC_COMPLETE') {
-      refreshQueueUI();
-    }
-  });
+  try {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'QUEUE_SYNC_COMPLETE') {
+        refreshQueueUI();
+      }
+    });
+  } catch {}
 
   // Manual sync button
   btnSyncQueue.addEventListener('click', async () => {
     btnSyncQueue.disabled = true;
     btnSyncQueue.textContent = 'Enviando...';
     try {
-      const res = await chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' });
+      const res = await flushDirectly();
       if (res && res.success) {
         queueMsg.textContent = `✓ ${res.flushed} enviado(s) a Loom`;
         setTimeout(async () => {
@@ -176,8 +293,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         feedback.textContent = '✦ ¡Guardado en Loom! Analizando contra tus notas de Obsidian...';
         btnText.textContent = '✓ Guardado';
 
-        // Also trigger sync for any existing queue
-        chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }).catch(() => {});
+        // Also flush any items that were queued previously
+        flushDirectly().catch(() => {});
 
         setTimeout(() => {
           window.close();
@@ -190,12 +307,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    // 2. Offline Path / Fallback Queueing
+    // 2. Offline Path / Fallback Queueing (Direct storage access, never fails on sleeping SW)
     try {
-      await chrome.runtime.sendMessage({
-        type: 'ENQUEUE_ITEM',
-        payload
-      });
+      const newQueueLength = await enqueueDirectly(payload);
 
       feedback.className = 'feedback warning';
       feedback.textContent = isOnline 
@@ -212,7 +326,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       console.error('Failed to enqueue item:', err);
       feedback.className = 'feedback error';
-      feedback.textContent = `Error al encolar: ${err.message || 'Error desconocido'}`;
+      feedback.textContent = `Error al guardar en cola: ${err.message || 'Error desconocido'}`;
       submitBtn.disabled = false;
       btnText.textContent = 'Reintentar';
     }

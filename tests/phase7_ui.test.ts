@@ -541,7 +541,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(popupHtml).toContain('id="offline-hint"');
 
     const popupJs = await fs.readFile(path.join(extensionDir, 'popup.js'), 'utf-8');
-    expect(popupJs).toContain('ENQUEUE_ITEM');
+    expect(popupJs).toContain('enqueueDirectly');
     expect(popupJs).toContain('TRIGGER_SYNC');
     expect(popupJs).toContain('Modo Offline');
   });

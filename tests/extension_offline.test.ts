@@ -73,7 +73,7 @@ describe('Loom Web Clipper Extension: Offline Queue & Sync Suite', () => {
     expect(popupJs).toContain('checkServer');
     expect(popupJs).toContain('getLocalQueue');
     expect(popupJs).toContain('refreshQueueUI');
-    expect(popupJs).toContain('ENQUEUE_ITEM');
+    expect(popupJs).toContain('enqueueDirectly');
     expect(popupJs).toContain('TRIGGER_SYNC');
     expect(popupJs).toContain('QUEUE_SYNC_COMPLETE');
     expect(popupJs).toContain('Modo Offline');
