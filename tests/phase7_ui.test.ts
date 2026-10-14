@@ -367,5 +367,78 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(snapshots[0].noteTitles).toContain('Mecánicas de Juego');
     expect(snapshots[0].notesContent).toContain('Lluvia de ideas');
     expect(snapshots[0].notesContent).toContain('mecánicas de decisión');
+
+    // 4. Verify hierarchical note-level snapshots are populated
+    const { projectNoteSnapshots } = await import('../src/db/schema');
+    const noteSnapshots = await drizzleDb.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshots[0].id));
+    expect(noteSnapshots.length).toBe(2);
+
+    const ideasNote = noteSnapshots.find(n => n.notePath === 'ideas.md');
+    const mechanicsNote = noteSnapshots.find(n => n.notePath.includes('mechanics.md'));
+    expect(ideasNote).toBeDefined();
+    expect(ideasNote!.embedding).toBeDefined();
+    expect(ideasNote!.embedding!.length).toBe(1024);
+    expect(mechanicsNote).toBeDefined();
+    expect(mechanicsNote!.embedding).toBeDefined();
+    expect(mechanicsNote!.embedding!.length).toBe(1024);
+  });
+
+  it('Hierarchical note-level embeddings detect focal note and resolve targetFile in evaluations', async () => {
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { projects, projectSnapshots, projectNoteSnapshots, contents, actionSuggestions } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const { evaluateContentMatch, findBacklogUnevaluatedContents } = await import('../src/evaluator');
+
+    const [p] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Brainstorming_Project'));
+    expect(p).toBeDefined();
+
+    const [snap] = await drizzleDb.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, p.id));
+    expect(snap).toBeDefined();
+
+    const noteSnapshots = await drizzleDb.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snap.id));
+    const mechanicsNote = noteSnapshots.find(n => n.notePath.includes('mechanics.md'));
+    expect(mechanicsNote).toBeDefined();
+    expect(mechanicsNote!.embedding).toBeDefined();
+
+    // 1. Insert an ingested content with vector identical to mechanics.md
+    const [content] = await drizzleDb.insert(contents).values({
+      uri: 'https://gamestudies.org/mechanics-in-narrative',
+      title: 'Mecánicas y Consecuencias en Juegos de Rol',
+      summary: 'Estudio sobre cómo los árboles de consecuencias y decisiones refuerzan la inmersión del jugador.',
+      embedding: mechanicsNote!.embedding,
+      ingestStatus: 'ready',
+    }).returning({ id: contents.id });
+
+    // 2. Verify findBacklogUnevaluatedContents finds this content via note snapshot matching
+    const backlogIds = await findBacklogUnevaluatedContents(p.id);
+    expect(backlogIds).toContain(content.id);
+
+    // 3. Mock ollama.evaluateContent so it returns an actionable verdict without needing actual LLM network
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const evaluateSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
+      data: {
+        verdict: 'actionable',
+        confidenceScore: 0.95,
+        triageReasoning: 'Aporta teoría clave sobre consecuencias para el diseño de mecánicas.',
+        action: {
+          actionType: 'evidence_citation',
+          observation: 'Explica modelos de decisión aplicables.',
+          suggestedAction: 'Citar en la sección de árboles de decisión.',
+          // targetFile omitted so evaluator resolves it to matchedNotePath
+        },
+      },
+      model: 'mock-llm',
+    });
+
+    // 4. Run Step 1 + Step 2 evaluation
+    await evaluateContentMatch(content.id, p.id);
+
+    // 5. Verify action suggestion was created with targetFile resolved to mechanics.md and not 'unknown'
+    const suggestions = await drizzleDb.select().from(actionSuggestions).where(eq(actionSuggestions.contentId, content.id));
+    expect(suggestions.length).toBe(1);
+    expect(suggestions[0].targetFile).toBe(mechanicsNote!.notePath);
+    expect(suggestions[0].targetFile).not.toBe('unknown');
+
+    evaluateSpy.mockRestore();
   });
 });

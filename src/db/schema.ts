@@ -84,6 +84,22 @@ export const projectSnapshots = pgTable('project_snapshots', {
   index('project_snapshots_proj_captured_idx').on(table.projectId, table.capturedAt)
 ]);
 
+// 3.1 Project Note Snapshots Table (Hierarchical / Note-Level Embeddings)
+export const projectNoteSnapshots = pgTable('project_note_snapshots', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectSnapshotId: uuid('project_snapshot_id').references(() => projectSnapshots.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  notePath: text('note_path').notNull(),
+  noteTitle: text('note_title').notNull(),
+  contentSnippet: text('content_snippet'),
+  embedding: vector('embedding'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('project_note_snapshots_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
+  index('project_note_snapshots_snap_idx').on(table.projectSnapshotId),
+  index('project_note_snapshots_proj_idx').on(table.projectId)
+]);
+
 // 4. Evaluations Table
 export const evaluations = pgTable('evaluations', {
   id: uuid('id').defaultRandom().primaryKey(),

@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { db } from '../db';
-import { projects, projectSnapshots } from '../db/schema';
+import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getDirectoryHash } from './hash';
 import { parseMarkdownFile } from './parser';
@@ -91,6 +91,11 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
     const noteTitles: string[] = [];
     let foundTaggedThesis = '';
     let taggedNoteTitle = '';
+    const parsedNotes: {
+      notePath: string;
+      noteTitle: string;
+      contentSnippet: string;
+    }[] = [];
     
     try {
       const mdFiles = await getProjectMarkdownFiles(projectPath);
@@ -108,6 +113,12 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
           if (parsed.thesis) {
             notesContent += `### Nota: ${parsed.title}\n${parsed.thesis}\n\n`;
           }
+
+          parsedNotes.push({
+            notePath: file.relPath,
+            noteTitle: parsed.title,
+            contentSnippet: parsed.thesis || '',
+          });
         }
       }
     } catch (error) {
@@ -128,7 +139,32 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       thesisText = 'Proyecto sin contenido. Agrega notas markdown dentro de la carpeta.';
     }
 
-    // Generar Embedding combinando el título del proyecto y las notas recopiladas
+    // Generate individual embeddings for each note (Hierarchical / Note-Level Embeddings)
+    const noteSnapshotsData: {
+      notePath: string;
+      noteTitle: string;
+      contentSnippet: string;
+      embedding: number[];
+    }[] = [];
+
+    for (const note of parsedNotes) {
+      const textForNote = `Nota: ${note.noteTitle}\n\n${note.contentSnippet}`.substring(0, 4000);
+      try {
+        const noteEmb = await ollama.getEmbedding(textForNote);
+        if (noteEmb.length > 0) {
+          noteSnapshotsData.push({
+            notePath: note.notePath,
+            noteTitle: note.noteTitle,
+            contentSnippet: note.contentSnippet,
+            embedding: noteEmb,
+          });
+        }
+      } catch (err) {
+        console.warn(`[Reconciler] Failed generating note-level embedding for ${note.notePath}:`, err);
+      }
+    }
+
+    // Generar Embedding colectivo combinando el título del proyecto y las notas recopiladas
     const fullTextForEmbedding = `Proyecto: ${title}\n\n${notesContent || thesisText}`.substring(0, 6000);
     let embedding: number[] = [];
     try {
@@ -163,14 +199,28 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       }
 
       // Create new snapshot
-      await tx.insert(projectSnapshots).values({
+      const [snap] = await tx.insert(projectSnapshots).values({
         projectId: pid,
         treeHash: currentHash,
         thesisText,
         notesContent,
         noteTitles,
         embedding,
-      });
+      }).returning({ id: projectSnapshots.id });
+
+      // Insert hierarchical note-level snapshots
+      if (noteSnapshotsData.length > 0) {
+        await tx.insert(projectNoteSnapshots).values(
+          noteSnapshotsData.map(nd => ({
+            projectSnapshotId: snap.id,
+            projectId: pid,
+            notePath: nd.notePath,
+            noteTitle: nd.noteTitle,
+            contentSnippet: nd.contentSnippet,
+            embedding: nd.embedding,
+          }))
+        );
+      }
 
       return pid;
     });

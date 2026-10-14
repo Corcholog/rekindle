@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { contents, projectSnapshots, evaluations, actionSuggestions, projects, llmTelemetry } from '../db/schema';
+import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions, projects, llmTelemetry } from '../db/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { boss } from '../queue';
@@ -12,6 +12,7 @@ const evaluationActionSchema = z.object({
   actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']).describe("Tipo de acción constructiva para Obsidian"),
   observation: z.string().describe("Observación específica de lo que aporta constructivamente el artículo al proyecto"),
   suggestedAction: z.string().describe("Instrucción concreta de redacción o integración en las notas de Obsidian (ej. citar en Acto 2, crear puente narrativo)."),
+  targetFile: z.string().optional().describe("Archivo de nota de Obsidian al que apunta la acción (ej. ideas.md o research/combat.md). Si no se especifica, se usará la nota con mayor afinidad."),
 });
 
 const unifiedEvaluationSchema = z.object({
@@ -50,15 +51,39 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
       SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, captured_at
       FROM ${projectSnapshots}
       ORDER BY project_id, captured_at DESC
+    ),
+    matching_notes AS (
+      SELECT DISTINCT ON (pns.project_id)
+        pns.project_id,
+        pns.note_path,
+        pns.note_title,
+        pns.content_snippet,
+        (pns.embedding <=> ${targetVector}::vector) AS note_distance
+      FROM ${projectNoteSnapshots} pns
+      JOIN latest_snapshots ls ON pns.project_snapshot_id = ls.id
+      WHERE pns.embedding IS NOT NULL
+        AND (pns.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD}
+      ORDER BY pns.project_id, (pns.embedding <=> ${targetVector}::vector) ASC
     )
-    SELECT ls.id, ls.project_id, ls.thesis_text, ls.notes_content 
+    SELECT 
+      ls.id AS snapshot_id,
+      ls.project_id,
+      ls.thesis_text,
+      ls.notes_content,
+      mn.note_path AS matched_note_path,
+      mn.note_title AS matched_note_title,
+      mn.content_snippet AS matched_note_snippet,
+      COALESCE(mn.note_distance, (ls.embedding <=> ${targetVector}::vector)) AS best_distance
     FROM latest_snapshots ls
     JOIN ${projects} p ON ls.project_id = p.id
+    LEFT JOIN matching_notes mn ON ls.project_id = mn.project_id
     WHERE p.is_active = true
       ${projectFilter}
-      AND ls.embedding IS NOT NULL 
-      AND ls.embedding <=> ${targetVector}::vector < ${VECTOR_DISTANCE_THRESHOLD}
-    ORDER BY ls.embedding <=> ${targetVector}::vector
+      AND (
+        mn.note_path IS NOT NULL 
+        OR (ls.embedding IS NOT NULL AND (ls.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD})
+      )
+    ORDER BY best_distance ASC
     LIMIT ${TOP_K_PROJECTS_LIMIT}
   `);
 
@@ -69,10 +94,13 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
 
   // Step 2: Unified Synthesis for each matching project (Single LLM Call)
   for (const row of topSnapshots.rows) {
-    const snapshotId = row.id as string;
+    const snapshotId = (row.snapshot_id || row.id) as string;
     const projectId = row.project_id as string;
     const thesisText = row.thesis_text as string;
     const notesContent = (row.notes_content as string) || '';
+    const matchedNotePath = (row.matched_note_path as string) || null;
+    const matchedNoteTitle = (row.matched_note_title as string) || null;
+    const matchedNoteSnippet = (row.matched_note_snippet as string) || null;
 
     // Idempotency: Check if evaluation already exists before invoking LLM
     const [existing] = await db.select({ id: evaluations.id })
@@ -89,7 +117,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
       continue;
     }
 
-    console.log(`[Evaluator] [Step 2 Synthesizing] Evaluating against Project Snapshot ${snapshotId}...`);
+    console.log(`[Evaluator] [Step 2 Synthesizing] Evaluating against Project Snapshot ${snapshotId} (focal note: ${matchedNotePath || 'project-level'})...`);
 
     const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a los BORRADORES Y NOTAS DEL PROYECTO.
 Debes responder SIEMPRE en ESPAÑOL.
@@ -105,7 +133,13 @@ REGLAS DE EVALUACIÓN:
     const cappedProjectNotes = notesContent.substring(0, 15000);
     const cappedSummary = (content.summary || '').substring(0, 10000);
 
+    let matchedNoteContext = '';
+    if (matchedNotePath) {
+      matchedNoteContext = `\nNOTA CON MAYOR AFINIDAD SEMÁNTICA DETECTADA:\n- Archivo: ${matchedNotePath}${matchedNoteTitle ? ` ("${matchedNoteTitle}")` : ''}\n${matchedNoteSnippet ? `- Extracto relevante:\n${matchedNoteSnippet}\n` : ''}`;
+    }
+
     const userMessage = `<PROJECT_CONTEXT>
+${matchedNoteContext}
 NOTAS Y BORRADORES DEL PROYECTO:
 ${cappedProjectNotes || thesisText || 'Proyecto sin notas adicionales.'}
 </PROJECT_CONTEXT>
@@ -166,6 +200,8 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           continue;
         }
 
+        const resolvedTargetFile = result.action.targetFile || matchedNotePath || 'ideas.md';
+
         const [sugRecord] = await db.insert(actionSuggestions).values({
           evaluationId: evalId,
           projectId: projectId,
@@ -173,12 +209,12 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           actionType: result.action.actionType,
           observation: result.action.observation,
           suggestedAction: result.action.suggestedAction,
-          targetFile: 'unknown',
+          targetFile: resolvedTargetFile,
           status: 'pending',
         }).returning({ id: actionSuggestions.id });
         suggestionId = sugRecord.id;
         
-        console.log(`[Evaluator] Action suggestion created for Project ${projectId} (pending user review)`);
+        console.log(`[Evaluator] Action suggestion created for Project ${projectId} targeting "${resolvedTargetFile}" (pending user review)`);
       }
 
       // 3. Record LLM Telemetry
@@ -202,7 +238,7 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
 }
 
 /**
- * Finds unevaluated ready contents whose embeddings match the project's thesis (< 0.6 distance).
+ * Finds unevaluated ready contents whose embeddings match the project's thesis or any of its notes (< 0.6 distance).
  */
 export async function findBacklogUnevaluatedContents(projectId: string, limit = 100): Promise<string[]> {
   const [latestSnapshot] = await db.select({
@@ -217,18 +253,27 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
   .orderBy(desc(projectSnapshots.capturedAt))
   .limit(1);
 
-  if (!latestSnapshot || !latestSnapshot.embedding) {
+  if (!latestSnapshot) {
     return [];
   }
 
-  const projectVector = `[${latestSnapshot.embedding.join(',')}]`;
+  const projectVector = latestSnapshot.embedding ? `[${latestSnapshot.embedding.join(',')}]` : null;
 
   const result = await db.execute(sql`
     SELECT c.id
     FROM ${contents} c
     WHERE c.ingest_status = 'ready'
       AND c.embedding IS NOT NULL
-      AND c.embedding <=> ${projectVector}::vector < 0.6
+      AND (
+        ${projectVector ? sql`(c.embedding <=> ${projectVector}::vector < ${VECTOR_DISTANCE_THRESHOLD}) OR ` : sql``}
+        EXISTS (
+          SELECT 1 
+          FROM ${projectNoteSnapshots} pns
+          WHERE pns.project_snapshot_id = ${latestSnapshot.id}
+            AND pns.embedding IS NOT NULL
+            AND (c.embedding <=> pns.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
+        )
+      )
       AND NOT EXISTS (
         SELECT 1 
         FROM ${evaluations} e
@@ -236,7 +281,7 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
         WHERE e.content_id = c.id
           AND ps.project_id = ${projectId}
       )
-    ORDER BY c.embedding <=> ${projectVector}::vector ASC
+    ORDER BY c.consumed_at DESC
     LIMIT ${limit}
   `);
 
