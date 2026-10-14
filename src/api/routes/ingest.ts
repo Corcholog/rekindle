@@ -16,9 +16,19 @@ const IngestRequestSchema = z.object({
       return false;
     }
   }, { message: 'Solo se admiten URLs públicas http y https (direcciones locales o privadas no permitidas)' }),
+  title: z.string().optional(),
+  selection: z.string().optional(),
 });
 
 export default async function (server: FastifyInstance) {
+  // CORS Preflight Handler for Browser Bookmarklet & Web Clipper
+  server.options('/api/ingest', async (_request, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return reply.status(204).send();
+  });
+
   server.post('/api/ingest', {
     schema: {
       body: IngestRequestSchema,
@@ -43,17 +53,26 @@ export default async function (server: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const rawUrl = (request.body as { url: string }).url;
+    reply.header('Access-Control-Allow-Origin', '*');
+    const { url: rawUrl, title: passedTitle, selection } = request.body as { url: string; title?: string; selection?: string };
     const url = canonicalizeUrl(rawUrl);
 
     try {
       // Atomic upsert avoids race condition between concurrent requests
+      const insertValues: any = {
+        uri: url,
+        ingestStatus: 'pending',
+        consumedAt: new Date(),
+      };
+      if (passedTitle) {
+        insertValues.title = passedTitle;
+      }
+      if (selection) {
+        insertValues.rawText = selection;
+      }
+
       const [record] = await db.insert(contents)
-        .values({
-          uri: url,
-          ingestStatus: 'pending',
-          consumedAt: new Date(),
-        })
+        .values(insertValues)
         .onConflictDoUpdate({
           target: contents.uri,
           set: {
@@ -61,6 +80,8 @@ export default async function (server: FastifyInstance) {
             ingestStatus: 'pending',
             ingestStatusReason: null,
             consumptionSeq: sql`${contents.consumptionSeq} + 1`,
+            ...(passedTitle ? { title: passedTitle } : {}),
+            ...(selection ? { rawText: selection } : {}),
           },
         })
         .returning({ id: contents.id, createdAt: contents.createdAt, consumedAt: contents.consumedAt });
@@ -70,7 +91,12 @@ export default async function (server: FastifyInstance) {
       const isNew = Math.abs(record.consumedAt.getTime() - record.createdAt.getTime()) < 1000;
 
       // Enqueue job with singletonKey and retryLimit to prevent duplicate runs and infinite loops
-      await boss.send('ingest_url', { contentId, url }, { singletonKey: contentId, retryLimit: 2 });
+      await boss.send('ingest_url', { 
+        contentId, 
+        url,
+        initialTitle: passedTitle,
+        selection,
+      }, { singletonKey: contentId, retryLimit: 2 });
 
       const statusCode = isNew ? 202 : 200;
       return reply.status(statusCode).send({

@@ -441,4 +441,94 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
 
     evaluateSpy.mockRestore();
   });
+
+  it('Feature 2: OPTIONS /api/ingest responde preflight CORS para bookmarklet y extensiones', async () => {
+    const res = await server.inject({
+      method: 'OPTIONS',
+      url: '/api/ingest',
+      headers: {
+        origin: 'https://news.ycombinator.com',
+        'access-control-request-method': 'POST',
+      },
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['access-control-allow-methods']).toContain('POST');
+  });
+
+  it('Feature 2: POST /api/ingest acepta title y selection desde Web Clipper y almacena metadatos', async () => {
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { contents } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const { boss } = await import('../src/queue/index');
+    const bossSpy = vi.spyOn(boss, 'send').mockResolvedValue('mock-job-id');
+
+    const testUrl = 'https://arstechnica.com/science/2026/quantum-leap';
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/ingest',
+      headers: {
+        origin: 'chrome-extension://abcdefghijklmno',
+      },
+      payload: {
+        url: testUrl,
+        title: 'Avance en Computación Cuántica',
+        selection: 'Un nuevo método de corrección de errores reduce el ruido en un 99%.',
+      },
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    const body = JSON.parse(res.payload);
+    expect(body.contentId).toBeDefined();
+
+    // Verify metadata stored in DB
+    const [c] = await drizzleDb.select().from(contents).where(eq(contents.id, body.contentId));
+    expect(c).toBeDefined();
+    expect(c.title).toBe('Avance en Computación Cuántica');
+    expect(c.rawText).toBe('Un nuevo método de corrección de errores reduce el ruido en un 99%.');
+
+    expect(bossSpy).toHaveBeenCalledWith('ingest_url', expect.objectContaining({
+      contentId: body.contentId,
+      url: testUrl,
+      initialTitle: 'Avance en Computación Cuántica',
+      selection: 'Un nuevo método de corrección de errores reduce el ruido en un 99%.',
+    }), expect.any(Object));
+
+    bossSpy.mockRestore();
+  });
+
+  it('Feature 2: Extensión Web Clipper cuenta con manifest V3 e iconos reales de pixel exacto', async () => {
+    const extensionDir = path.resolve(__dirname, '../extension');
+    const manifestPath = path.join(extensionDir, 'manifest.json');
+    const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+    const manifest = JSON.parse(manifestContent);
+
+    expect(manifest.manifest_version).toBe(3);
+    expect(manifest.name).toBe('Loom Web Clipper');
+    expect(manifest.action.default_popup).toBe('popup.html');
+    expect(manifest.background.service_worker).toBe('background.js');
+
+    // Verify icons exist and have valid size
+    for (const [sizeStr, iconPath] of Object.entries(manifest.icons)) {
+      const fullIconPath = path.join(extensionDir, iconPath as string);
+      const stat = await fs.stat(fullIconPath);
+      expect(stat.size).toBeGreaterThan(0);
+    }
+  });
+
+  it('Feature 2: Frontend sirve markup del Bookmarklet arrastrable y modal de instalación', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/index.html',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain('id="bookmarklet-btn"');
+    expect(res.payload).toContain('id="btn-copy-bookmarklet"');
+    expect(res.payload).toContain('id="extension-guide-modal"');
+    expect(res.payload).toContain('c:\\Projects\\loom\\extension');
+  });
 });
+

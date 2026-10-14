@@ -133,7 +133,12 @@ export const setupIngestionWorker = async () => {
     for (const job of jobArray) {
       if (!job || !job.data) continue;
       
-      const { contentId, url } = job.data as { contentId: string, url: string };
+      const { contentId, url, initialTitle, selection } = job.data as { 
+        contentId: string; 
+        url: string; 
+        initialTitle?: string; 
+        selection?: string; 
+      };
       console.log(`Processing ingestion job for: ${url} (Content ID: ${contentId})`);
 
       try {
@@ -180,35 +185,49 @@ export const setupIngestionWorker = async () => {
             throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
           }
 
-          const contentType = response.headers.get('content-type') || '';
+          const contentType = response.headers?.get?.('content-type') || 'text/html';
           if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml') && !contentType.includes('text/plain')) {
             throw new Error(`Unsupported content type "${contentType}". Only HTML or text web pages are supported.`);
           }
 
-          const contentLength = response.headers.get('content-length');
+          const contentLength = response.headers?.get?.('content-length');
           if (contentLength && parseInt(contentLength, 10) > MAX_HTML_BYTES) {
             throw new Error(`Content size exceeds 5MB limit (${contentLength} bytes)`);
           }
 
-          const arrayBuffer = await response.arrayBuffer();
-          if (arrayBuffer.byteLength > MAX_HTML_BYTES) {
-            throw new Error(`Downloaded content exceeds 5MB limit (${arrayBuffer.byteLength} bytes)`);
+          let html: string;
+          if (typeof response.arrayBuffer === 'function') {
+            const arrayBuffer = await response.arrayBuffer();
+            if (arrayBuffer.byteLength > MAX_HTML_BYTES) {
+              throw new Error(`Downloaded content exceeds 5MB limit (${arrayBuffer.byteLength} bytes)`);
+            }
+            const decoder = new TextDecoder('utf-8');
+            html = decoder.decode(arrayBuffer);
+          } else if (typeof (response as any).text === 'function') {
+            html = await (response as any).text();
+          } else {
+            throw new Error('Unsupported response body format');
           }
-
-          const decoder = new TextDecoder('utf-8');
-          const html = decoder.decode(arrayBuffer);
           const doc = new JSDOM(html, { url });
           const reader = new Readability(doc.window.document);
           const article = reader.parse();
 
           if (!article || !article.textContent) {
-            throw new Error('Readability failed to extract text content');
+            if (selection && selection.trim().length > 0) {
+              rawText = selection.trim();
+            } else {
+              throw new Error('Readability failed to extract text content');
+            }
+          } else {
+            rawText = article.textContent.trim().substring(0, 50000);
+            if (selection && selection.trim().length > 0 && !rawText.includes(selection.trim().substring(0, 50))) {
+              rawText = `[Cita seleccionada por el usuario]:\n${selection.trim()}\n\n---\n\n${rawText}`;
+            }
           }
 
-          rawText = article.textContent.trim().substring(0, 50000); // safety limit
-          const author = article.byline ? article.byline.trim() : null;
+          const author = article?.byline ? article.byline.trim() : null;
           channelOrDomain = author || new URL(url).hostname.replace(/^www\./, '');
-          const baseTitle = article.title ? article.title.trim() : 'Unknown Title';
+          const baseTitle = article?.title?.trim() || initialTitle || 'Unknown Title';
           title = author && !baseTitle.toLowerCase().includes(author.toLowerCase())
             ? `${baseTitle} - ${author}`
             : baseTitle;
