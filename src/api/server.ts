@@ -7,6 +7,7 @@ import projectsRoute from './routes/projects';
 import contentsRoute from './routes/contents';
 import settingsRoute from './routes/settings';
 import systemRoute from './routes/system';
+import libraryRoute from './routes/library';
 import fastifyStatic from '@fastify/static';
 import * as path from 'path';
 import { startQueue, boss } from '../queue';
@@ -76,6 +77,7 @@ server.register(suggestionsRoute);
 server.register(projectsRoute);
 server.register(settingsRoute);
 server.register(systemRoute);
+server.register(libraryRoute);
 
 // Serve static frontend files from web/
 server.register(fastifyStatic, {

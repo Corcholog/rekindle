@@ -530,5 +530,90 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.payload).toContain('id="extension-guide-modal"');
     expect(res.payload).toContain('c:\\Projects\\loom\\extension');
   });
+
+  it('Feature 3: GET /api/library/search realiza búsqueda semántica vectorial sobre contenidos listos', async () => {
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { contents } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    // Retrieve mechanics note vector from previous test or content1
+    const [c1] = await drizzleDb.select().from(contents).where(eq(contents.id, content1Id));
+    expect(c1).toBeDefined();
+
+    const embedSpy = vi.spyOn(sharedAiProvider, 'getEmbedding').mockResolvedValueOnce(new Array(1024).fill(0.05));
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/library/search?q=agentes%20autonomos&limit=5',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.query).toBe('agentes autonomos');
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results.length).toBeGreaterThanOrEqual(1);
+    expect(body.results[0].id).toBeDefined();
+    expect(body.results[0].similarityScore).toBeGreaterThanOrEqual(0);
+
+    embedSpy.mockRestore();
+  });
+
+  it('Feature 3: POST /api/library/ask sintetiza respuesta RAG con citas directas [1], [2]', async () => {
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { contents } = await import('../src/db/schema');
+    const { eq, and, isNotNull } = await import('drizzle-orm');
+
+    const [readyContent] = await drizzleDb.select().from(contents)
+      .where(and(eq(contents.ingestStatus, 'ready'), isNotNull(contents.embedding)))
+      .limit(1);
+    expect(readyContent).toBeDefined();
+    expect(readyContent.embedding).toBeDefined();
+
+    const embedSpy = vi.spyOn(sharedAiProvider, 'getEmbedding').mockResolvedValueOnce(readyContent.embedding!);
+    const evalSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
+      data: {
+        answer: 'Los agentes autónomos utilizan arquitecturas orientadas a eventos y brokers pub/sub [1] para coordinar tareas complejas.',
+        keyInsights: [
+          'El desacoplamiento por eventos previene cuellos de botella.',
+          'Permite escalabilidad horizontal en microservicios.',
+        ],
+      },
+      model: 'mock-llm',
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/library/ask',
+      payload: {
+        query: '¿Cómo se coordinan los agentes autónomos?',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.answer).toContain('[1]');
+    expect(body.keyInsights.length).toBe(2);
+    expect(body.sources.length).toBeGreaterThanOrEqual(1);
+    expect(body.sources[0].index).toBe(1);
+
+    embedSpy.mockRestore();
+    evalSpy.mockRestore();
+  });
+
+  it('Feature 3: Frontend sirve interfaz de búsqueda semántica y síntesis de biblioteca', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/index.html',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain('id="library-query-form"');
+    expect(res.payload).toContain('id="btn-mode-search"');
+    expect(res.payload).toContain('id="btn-mode-ask"');
+    expect(res.payload).toContain('id="library-results-box"');
+  });
 });
+
 

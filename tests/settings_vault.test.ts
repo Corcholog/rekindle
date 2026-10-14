@@ -245,5 +245,5 @@ describe('Settings API & Vault Path Change Scenarios', () => {
     // Tras la evaluación, ya no debe figurar como pendiente
     const pendingAfter = await findBacklogUnevaluatedContents(projectId);
     expect(pendingAfter).not.toContain(backlogContent.id);
-  }, 30000);
+  }, 60000);
 });

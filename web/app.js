@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
   setupIngestionForm();
   setupBookmarkletAndClipper();
+  setupLibrarySearchAndAsk();
   setupTriageStatusTabs();
   setupSettingsView();
   setupModalEvents();
@@ -360,6 +361,176 @@ function handleQuickIngestUrlParam() {
     elements.ingestForm.dispatchEvent(new Event('submit', { cancelable: true }));
     window.history.replaceState({}, document.title, window.location.pathname);
   }
+}
+
+function setupLibrarySearchAndAsk() {
+  const form = document.getElementById('library-query-form');
+  const input = document.getElementById('library-query-input');
+  const btnSubmit = document.getElementById('btn-submit-library-query');
+  const btnText = document.getElementById('library-btn-text');
+  const spinner = document.getElementById('library-spinner');
+  const resultsBox = document.getElementById('library-results-box');
+  const btnModeSearch = document.getElementById('btn-mode-search');
+  const btnModeAsk = document.getElementById('btn-mode-ask');
+
+  if (!form || !input || !resultsBox) return;
+
+  let currentMode = 'search'; // 'search' | 'ask'
+
+  btnModeSearch?.addEventListener('click', () => {
+    currentMode = 'search';
+    btnModeSearch.classList.add('active');
+    btnModeAsk?.classList.remove('active');
+    btnText.textContent = 'Buscar en Biblioteca';
+    input.placeholder = '¿Qué métodos de diseño de agentes o argumentos tenemos?...';
+  });
+
+  btnModeAsk?.addEventListener('click', () => {
+    currentMode = 'ask';
+    btnModeAsk.classList.add('active');
+    btnModeSearch?.classList.remove('active');
+    btnText.textContent = 'Preguntar (Sintetizar)';
+    input.placeholder = 'Formula una pregunta para sintetizar con citas de tu biblioteca...';
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const query = input.value.trim();
+    if (!query) return;
+
+    btnSubmit.disabled = true;
+    spinner.style.display = 'inline-block';
+    resultsBox.style.display = 'block';
+    resultsBox.innerHTML = `
+      <div class="empty-state">
+        <span class="spinner"></span>
+        <p>${currentMode === 'ask' ? 'Consultando y sintetizando con tus fuentes...' : 'Buscando afinidad semántica en tus lecturas...'}</p>
+      </div>
+    `;
+
+    try {
+      if (currentMode === 'search') {
+        const res = await fetch(`/api/library/search?q=${encodeURIComponent(query)}&limit=8`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || 'Error en la búsqueda');
+
+        if (!data.results || data.results.length === 0) {
+          resultsBox.innerHTML = `
+            <div class="empty-state">
+              <p>No se encontraron contenidos coincidentes en tu biblioteca.</p>
+            </div>
+          `;
+          return;
+        }
+
+        resultsBox.innerHTML = `
+          <div class="feed-header" style="padding-bottom: 0.5rem;">
+            <span class="feed-title" style="font-size: 1.05rem;">Resultados Semánticos (${data.total})</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-library-results">Cerrar</button>
+          </div>
+          <div class="items-list">
+            ${data.results.map(r => `
+              <div class="feed-item" data-id="${r.id}">
+                <div class="feed-item-header">
+                  <span class="domain-tag">${escapeHtml(r.channelOrDomain || 'Web')}</span>
+                  <span class="badge badge-accent">${Math.round(r.similarityScore * 100)}% afinidad</span>
+                </div>
+                <h4 class="feed-item-title">${escapeHtml(r.title || r.uri)}</h4>
+                <p class="feed-item-summary">${escapeHtml((r.summary || '').substring(0, 200))}...</p>
+                <div class="feed-item-meta">
+                  <a href="${escapeHtml(r.uri)}" target="_blank" rel="noopener" class="source-link">Ver enlace original ↗</a>
+                  <button type="button" class="btn btn-secondary btn-sm btn-view-library-detail" data-id="${r.id}">Ver Ficha</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+
+        document.getElementById('btn-clear-library-results')?.addEventListener('click', () => {
+          resultsBox.style.display = 'none';
+          resultsBox.innerHTML = '';
+        });
+
+        resultsBox.querySelectorAll('.btn-view-library-detail').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const cid = btn.getAttribute('data-id');
+            const found = state.contents.find(c => c.id === cid) || data.results.find(c => c.id === cid);
+            if (found) openContentDetailModal(found);
+          });
+        });
+
+      } else {
+        // Mode === 'ask' (RAG Synthesis)
+        const res = await fetch('/api/library/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || 'Error al sintetizar respuesta');
+
+        let formattedAnswer = escapeHtml(data.answer);
+        formattedAnswer = formattedAnswer.replace(/\[(\d+)\]/g, (match, num) => {
+          return `<a href="#source-${num}" class="ask-source-badge" title="Ver Fuente [${num}]">[${num}]</a>`;
+        });
+
+        const insightsHtml = (data.keyInsights && data.keyInsights.length > 0)
+          ? `
+            <div class="ask-insights-title">✦ Conclusiones Clave:</div>
+            <ul class="ask-insights-list">
+              ${data.keyInsights.map(k => `<li>${escapeHtml(k)}</li>`).join('')}
+            </ul>
+          ` : '';
+
+        const sourcesHtml = (data.sources && data.sources.length > 0)
+          ? `
+            <div class="ask-sources-header">Fuentes Consultadas de tu Biblioteca:</div>
+            <div class="ask-sources-grid">
+              ${data.sources.map(s => `
+                <div class="ask-source-item" id="source-${s.index}">
+                  <div class="ask-source-top">
+                    <span class="ask-source-idx">[${s.index}]</span>
+                    <span class="badge badge-accent">${Math.round(s.similarityScore * 100)}% afinidad</span>
+                  </div>
+                  <h5 class="ask-source-title">${escapeHtml(s.title || s.uri)}</h5>
+                  <div class="ask-source-meta">
+                    <span>${escapeHtml(s.channelOrDomain || 'Web')}</span>
+                    <a href="${escapeHtml(s.uri)}" target="_blank" rel="noopener" class="source-link">Abrir ↗</a>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : '';
+
+        resultsBox.innerHTML = `
+          <div class="ask-answer-card">
+            <div class="feed-header" style="padding-bottom: 0.6rem; margin-bottom: 0.8rem;">
+              <span class="feed-title" style="font-size: 1.05rem;">Síntesis de Biblioteca</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-ask-results">Cerrar</button>
+            </div>
+            <div class="ask-answer-text">${formattedAnswer}</div>
+            ${insightsHtml}
+            ${sourcesHtml}
+          </div>
+        `;
+
+        document.getElementById('btn-clear-ask-results')?.addEventListener('click', () => {
+          resultsBox.style.display = 'none';
+          resultsBox.innerHTML = '';
+        });
+      }
+    } catch (err) {
+      resultsBox.innerHTML = `
+        <div class="form-error">
+          ${escapeHtml(err.message || 'Error en la consulta')}
+        </div>
+      `;
+      showToast(err.message, 'error');
+    } finally {
+      btnSubmit.disabled = false;
+      spinner.style.display = 'none';
+    }
+  });
 }
 
 async function loadContents() {
