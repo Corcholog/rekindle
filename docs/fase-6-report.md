@@ -41,3 +41,12 @@
 - **Separación de Feedback y Estado:** Se agregaron las columnas `user_feedback` y `resolved_at` a la tabla `action_suggestions` para capturar la justificación del usuario, habilitando futuros bucles de aprendizaje y ajuste del evaluador.
 
 **Estado:** Fase 6 COMPLETADA. Loom cuenta con un ciclo de vida de sugerencias robusto, API tipada de triaje, trazabilidad completa de feedback y sincronización idempotente hacia Obsidian.
+
+---
+
+## D. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Escritura Atómica en Disco:** En `src/vault/updater.ts`, la función `writeAcceptedSuggestionToVault` implementa ahora una estrategia de escritura atómica: el contenido actualizado con el callout de Obsidian se escribe primero en un archivo temporal (`suggestions.md.tmp.<timestamp>`) y se reemplaza mediante `fs.rename`. Esto elimina cualquier riesgo de corrupción o truncamiento de notas ante cierres forzados del sistema.
+- **Garantías de Idempotencia:** Se verifica que el bloque exacto del callout no exista previamente en el archivo antes de anexarlo, previniendo duplicación ante reintentos de red o fallos transitorios en el endpoint `PATCH /api/suggestions/:id`.
+- **Transición de Sugerencias Virtuales:** Se añadió soporte para que las sugerencias virtuales procedentes de evaluaciones `tentative` generen un registro persistido en `action_suggestions` con estado `accepted` y callout en la bóveda al ser aprobadas por el usuario.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Sección 10) para el protocolo de sincronización y persistencia en Vault.
+

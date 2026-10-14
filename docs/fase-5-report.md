@@ -25,3 +25,12 @@
   - *Evaluación Dirigida y Backlog (Opción A):* Se agregó el parámetro opcional `targetProjectId` y las funciones `findBacklogUnevaluatedContents` y `enqueueProjectBacklogEvaluations` para evaluar retrospectivamente contenidos históricos cuando un proyecto se reactiva.
 
 **Estado:** Fase 5 COMPLETADA y refinada. El "Cerebro" de Loom está funcionando de forma robusta, conectando lecturas web con los Proyectos de Obsidian y generando valor accionable.
+
+---
+
+## D. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Acotación de Ventana de Contexto:** Se implementó truncamiento preventivo a 15,000 caracteres en las notas de proyectos y 50,000 en artículos web enviados al evaluador, impidiendo saturación de contexto y latencias excesivas en inferencias locales.
+- **Sugerencias Virtuales (`tentative` / `irrelevant`):** Para mantener la integridad relacional de la tabla `evaluations`, los veredictos no accionables se presentan en la API como sugerencias virtuales. Esto permite al usuario explorar ideas tentativas o descartadas desde la interfaz sin sobreescribir el veredicto del modelo ni crear filas redundantes en `action_suggestions` hasta que exista una decisión explícita.
+- **Filtro de Descarte Temprano:** Se agregó un filtro semántico que descarta sugerencias con frases vacías antes de persistirlas, reduciendo ruido en la bandeja de triaje.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Sección 9) para detalles completos del motor de evaluación.
+

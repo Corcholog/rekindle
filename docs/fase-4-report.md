@@ -17,3 +17,12 @@
   - `tests/full_e2e.test.ts`: Prueba de integración end-to-end con BGE-M3 y base de datos pgvector.
 
 **Estado:** Fase 4 COMPLETADA. Sincronización continua de Vault operando y validada por suites de integración automatizadas.
+
+---
+
+## D. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Seguridad en Rutas y Prevención de Path Traversal:** Se reforzó la reconciliación con resolución canónica de rutas (`path.resolve`), asegurando que cualquier carpeta o archivo procesado resida estrictamente dentro de la raíz de la bóveda (`VAULT_PATH`).
+- **Filtrado Exclusivo de Archivos Markdown:** El parser ignora archivos no Markdown, directorios ocultos y `suggestions.md` (para no reinyectar sugerencias al hash de la tesis).
+- **Gestión de Bloqueos de Reconciliación:** Se implementó un candado en memoria (`reconcilingProjects` Set) para prevenir condiciones de carrera cuando se disparan múltiples eventos de disco concurrentes durante la edición en Obsidian.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Sección 8) para el ciclo de vida del reconciliador y watcher.
+

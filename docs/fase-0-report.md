@@ -25,3 +25,11 @@
 - **Memoria RAM Crítica (RNF-01):** El spike de embeddings demuestra que cargar el modelo ONNX más Node empuja el RSS a ~665 MB de entrada. Si cargamos además colas e inyecciones a la BD, rondaremos los 800 MB. Tendremos que usar embeddings vía Ollama, una API externa, o abstraer el worker de embeddings en un script separado (ej. Python/C++) que se lance por spawn solo cuando se requiera.
 
 **Estado:** Fase 0 completada. Esperando dictamen sobre el NO-GO de la memoria RAM de embeddings y la orden (OK) para avanzar a la Fase 1.
+
+---
+
+## E. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Resolución de Spike 2 (Embeddings):** Como se anticipó en el veredicto NO-GO de Fase 0 respecto al consumo excesivo de memoria de `@huggingface/transformers` en el proceso Node (>660 MB), la arquitectura adoptó `bge-m3` ejecutado de forma desacoplada en el servidor de Ollama (`@langchain/ollama`). Esto mantuvo el proceso Node en márgenes estrictos de consumo (RNF-01).
+- **Evolución de ADRs:** Los borradores iniciales fueron formalizados y actualizados con adendas en [001-decisiones-arquitectura-a1-a10.md](file:///c:/Projects/loom/docs/adr/001-decisiones-arquitectura-a1-a10.md) y [002-modelo-embedding.md](file:///c:/Projects/loom/docs/adr/002-modelo-embedding.md), y se formalizó el endurecimiento de seguridad e idempotencia en [003-endurecimiento-post-revision.md](file:///c:/Projects/loom/docs/adr/003-endurecimiento-post-revision.md).
+- **Especificación Completa:** Para la referencia técnica exhaustiva del sistema, consultar [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md).
+

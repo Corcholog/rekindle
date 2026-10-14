@@ -16,3 +16,12 @@
 - En lugar de fragmentar los pasos (ej. jobs distintos de `extract`, `summary`, `embedding`), el usuario optó por un único pipeline secuencial dentro del mismo worker job `ingest_url`, simplificando la gestión de estado de la BDD, lo cual es válido para un MVP.
 
 **Estado:** Fase 3 COMPLETADA exitosamente. Infraestructura de procesamiento asíncrono validada.
+
+---
+
+## D. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Validación Estricta de URLs y Normalización:** Se restringieron los esquemas de entrada a `http:` y `https:` exclusivamente. Se normalizan parámetros canónicos para deduplicación confiable de URLs en la base de datos.
+- **Soporte Extendido de YouTube:** Se incorporó `src/workers/youtubeIngest.ts` usando `youtube-transcript` para extraer transcripciones completas de videos de YouTube y la API oEmbed para títulos fidedignos, permitiendo procesar contenido audiovisual en el mismo pipeline unificado.
+- **Manejo de Errores No Recuperables:** Detección de fallos permanentes (ej. URLs inválidas o sin contenido textual extraíble) para marcar el registro como `failed` de inmediato sin reintentos innecesarios en la cola de `pg-boss`.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Sección 7) para el pipeline detallado de ingesta.
+

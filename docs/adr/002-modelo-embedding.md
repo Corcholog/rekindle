@@ -16,3 +16,12 @@ Dado que el usuario redacta en **español** pero consume contenido en **español
 - El sistema delegará las cargas más pesadas a Ollama, usando de 6 a 8 GB de RAM/VRAM en total.
 - Se elimina la dependencia de `@huggingface/transformers` en Node.js, manteniendo el servidor de API extremadamente ligero, a cambio de que Ollama asuma la carga de memoria.
 - Alta fidelidad semántica bilingüe.
+
+---
+
+## Addendum (2026-10): estado actual
+
+- **Estado:** Aceptado e implementado. La opción ONNX (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`, 384 dimensiones) quedó **descartada** tras el spike de la Fase 0 (≈665 MB de RSS, NO-GO frente al límite de 500 MB).
+- **Configuración:** el modelo de embeddings es `EMBED_MODEL` (por defecto `bge-m3`, vía `OLLAMA_URL`). La columna es `vector(1024)`: cambiar a un modelo con otra dimensionalidad exige una migración y recalcular todos los embeddings.
+- **Triaje y resumen:** si hay `GEMINI_API_KEY` se usa Gemini (modelo `GEMINI_MODEL` o `CHAT_MODEL`, por defecto `gemini-3.1-flash-lite`); ante cualquier error de Gemini, o sin clave, se usa `qwen2.5:7b-instruct` en Ollama con ventana de contexto `numCtx = 16384`. Los embeddings **siempre** son locales.
+- **Dependencias residuales:** `@huggingface/transformers` y `ollama` siguen en `devDependencies` solo por los *spikes* (`spikes/`).

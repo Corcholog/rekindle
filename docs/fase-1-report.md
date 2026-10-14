@@ -21,3 +21,11 @@
 - **Operador de Distancia KNN:** Actualmente se utiliza el operador de distancia del coseno `<=>` en el test. Si `bge-m3` devuelve vectores no normalizados, habrá que aplicar L2 (`<->`). Aseguraremos que la inserción normalice (pooling `mean` + normalize).
 
 **Estado:** Fase 1 COMPLETADA exitosamente. Todas las pruebas pasan (constraints, KNN y performance HNSW index). Esperando OK para iniciar la **Fase 2 (Ollama Provider + LangChain).**
+
+---
+
+## E. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Gestión de Configuración y Resiliencia del Pool:** Se centralizó la configuración mediante Zod en `src/config.ts`. Se configuró el pool de conexiones de Postgres (`src/db/index.ts`) con el manejador de eventos `pool.on('error')` para evitar cierres del proceso ante interrupciones de conexión de red o conexiones inactivas descartadas.
+- **Esquema de Base de Datos y Vectorial:** Las 6 tablas de Drizzle operan con la columna vectorial `vector(1024)` optimizada para `bge-m3`. Se mantiene el filtrado de esquemas para coexistencia limpia con `pgboss`.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Secciones 4 y 5) para detalles de esquemas y transacciones.
+

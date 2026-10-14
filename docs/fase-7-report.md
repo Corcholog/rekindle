@@ -38,3 +38,11 @@
 3. **Resiliencia en Pool de PostgreSQL:** Se incorporó el manejador de eventos `pool.on('error')` en `src/db/index.ts` para evitar que caídas de conexiones inactivas (TCP FIN) provoquen un cierre no controlado del proceso Node.js.
 
 **Estado:** Fase 7 COMPLETADA. Loom cuenta con una interfaz web totalmente operativa, tablero de triaje contextualmente enlazado con Obsidian, pantalla de ajustes para reubicar la bóveda y evaluación retrospectiva automática.
+
+---
+
+## D. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Seguridad de Red en la API y Servidor Web:** El servidor Fastify se vincula por defecto a `127.0.0.1` (`HOST` configurable en `.env`) en lugar de `0.0.0.0`, impidiendo la exposición involuntaria de la interfaz web y endpoints de manipulación de la bóveda a redes locales o públicas.
+- **Unificación de Configuración:** Se sincronizó `.env.example` y el esquema Zod en `src/config.ts` para cubrir de forma fidedigna todas las variables operativas (`HOST`, `PORT`, `DATABASE_URL`, `OLLAMA_URL`, `EMBED_MODEL`, `CHAT_MODEL`, `GEMINI_MODEL`, `GEMINI_API_KEY`, `VAULT_PATH`, `LOG_LEVEL`).
+- **Documentación Técnica Integral para Auditoría:** Se elaboró la especificación técnica profunda en [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md), que documenta el modelo de datos, flujo de estados, contratos de API, suite de pruebas y los 13 desafíos arquitectónicos abiertos (K1 a K13) para revisión por LLMs de frontera o ingenieros externos.
+

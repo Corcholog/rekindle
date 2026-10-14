@@ -19,3 +19,12 @@
 - **Gestión de Memoria en la Máquina Host:** Al cargar alternadamente o en paralelo `bge-m3` y `qwen2.5`, Ollama consume ~6 GB de memoria. Si bien los límites de hardware se relajaron (como definimos en el ADR 002), el tiempo de respuesta (latencia) inicial puede rondar los 30-40 segundos por documento si el modelo sufre de swapping frecuentemente. Se recomienda evaluar en el futuro pasar un parámetro `keep_alive` extendido a la API si se harán procesamientos en lote masivos (Fase 3).
 
 **Estado:** Fase 2 COMPLETADA exitosamente. Infraestructura base de IA local validada.
+
+---
+
+## E. Addendum Post-Endurecimiento (Arquitectura Actual - Git `master`)
+- **Arquitectura Híbrida Cloud / Local con Fallback:** Se integró `@google/genai` en `src/ai/OllamaProvider.ts` para permitir el uso opcional de Gemini (`gemini-2.5-pro` por defecto) cuando se proporciona `GEMINI_API_KEY`. En caso de desconexión, error de red o cuota excedida de la API cloud, el sistema hace fallback automático e imperceptible hacia `ChatOllama` (`qwen2.5:7b-instruct`).
+- **Embeddings Incondicionalmente Locales:** Independientemente del modelo de chat utilizado, la generación de embeddings se realiza de manera 100% local a través de `OllamaEmbeddings` con `bge-m3` (1024D).
+- **Límites de Contexto Seguros:** Se acotaron las entradas de texto en los prompts de inferencia (máximo 15,000 caracteres de notas de proyectos y 50,000 de artículos web) para evitar desbordar ventanas de contexto o saturar la memoria RAM.
+- **Referencia Arquitectónica:** Ver [ARCHITECTURE.md](file:///c:/Projects/loom/docs/ARCHITECTURE.md) (Sección 6) para el contrato de la capa de IA.
+
