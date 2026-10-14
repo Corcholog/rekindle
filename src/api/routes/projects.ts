@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { db } from '../../db';
-import { projects, projectSnapshots, actionSuggestions, evaluations, contents } from '../../db/schema';
+import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents } from '../../db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
 import { reconcileProject } from '../../vault/reconciler';
@@ -42,6 +42,52 @@ const ListProjectsQuerySchema = z.object({
 const IdParamSchema = z.object({
   id: z.string().uuid(),
 });
+
+// Feature 5: Cross-Project Synergy Schemas
+const SynergyNoteSchema = z.object({
+  noteATitle: z.string(),
+  noteAPath: z.string(),
+  noteBSTitle: z.string(),
+  noteBPath: z.string(),
+  distance: z.number(),
+  similarityScore: z.number(),
+});
+
+const ProjectSynergySchema = z.object({
+  id: z.string(),
+  projectA: z.object({
+    id: z.string().uuid(),
+    title: z.string(),
+    folderPath: z.string(),
+    thesisText: z.string().nullable().optional(),
+  }),
+  projectB: z.object({
+    id: z.string().uuid(),
+    title: z.string(),
+    folderPath: z.string(),
+    thesisText: z.string().nullable().optional(),
+  }),
+  similarityScore: z.number(),
+  projectDistance: z.number().nullable().optional(),
+  bestNoteDistance: z.number().nullable().optional(),
+  rationale: z.string(),
+  closestNotes: z.array(SynergyNoteSchema),
+});
+
+function computeCosineDistance(a: number[] | null | undefined, b: number[] | null | undefined): number | null {
+  if (!a || !b || a.length === 0 || b.length === 0 || a.length !== b.length) return null;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 1.0;
+  const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  return Math.max(0, 1 - sim);
+}
 
 export default async function (server: FastifyInstance) {
   // 1. List Projects with latest snapshot and suggestion counts
@@ -160,6 +206,303 @@ export default async function (server: FastifyInstance) {
     });
 
     return reply.send({ projects: results });
+  });
+
+  // 1.5 Get Cross-Project Synergies (Feature 5)
+  server.get('/api/projects/synergies', {
+    schema: {
+      querystring: z.object({
+        minSimilarity: z.coerce.number().min(0).max(100).optional().default(20),
+        limit: z.coerce.number().min(1).max(50).optional().default(15),
+      }),
+      response: {
+        200: z.object({
+          synergies: z.array(ProjectSynergySchema),
+          totalCount: z.number(),
+          message: z.string().optional(),
+        }),
+      },
+    },
+  }, async (request, reply) => {
+    const { minSimilarity = 20, limit = 15 } = request.query as any;
+
+    const activeProjects = await db.select({
+      id: projects.id,
+      title: projects.title,
+      folderPath: projects.folderPath,
+    })
+    .from(projects)
+    .where(eq(projects.isActive, true));
+
+    if (activeProjects.length < 2) {
+      return reply.send({
+        synergies: [],
+        totalCount: 0,
+        message: 'Se requieren al menos dos proyectos activos con notas indexadas para calcular sinergias.',
+      });
+    }
+
+    // Get latest snapshots per project with embeddings
+    const projectIds = activeProjects.map(p => p.id);
+    const snaps = await db.select({
+      id: projectSnapshots.id,
+      projectId: projectSnapshots.projectId,
+      thesisText: projectSnapshots.thesisText,
+      embedding: projectSnapshots.embedding,
+    })
+    .from(projectSnapshots)
+    .where(inArray(projectSnapshots.projectId, projectIds))
+    .orderBy(desc(projectSnapshots.capturedAt));
+
+    const snapMap = new Map<string, typeof snaps[0]>();
+    for (const s of snaps) {
+      if (!snapMap.has(s.projectId)) {
+        snapMap.set(s.projectId, s);
+      }
+    }
+
+    const synergies = [];
+
+    // Compare all pairs of active projects
+    for (let i = 0; i < activeProjects.length; i++) {
+      for (let j = i + 1; j < activeProjects.length; j++) {
+        const pA = activeProjects[i];
+        const pB = activeProjects[j];
+
+        const snapA = snapMap.get(pA.id);
+        const snapB = snapMap.get(pB.id);
+
+        const projectDist = computeCosineDistance(snapA?.embedding, snapB?.embedding);
+
+        // Fetch closest notes between pA and pB via HNSW cosine distance
+        const noteResult = await db.execute<{
+          noteATitle: string;
+          noteAPath: string;
+          noteBTitle: string;
+          noteBPath: string;
+          distance: number;
+        }>(sql`
+          SELECT 
+            na.note_title as "noteATitle",
+            na.note_path as "noteAPath",
+            nb.note_title as "noteBTitle",
+            nb.note_path as "noteBPath",
+            (na.embedding <=> nb.embedding)::float as distance
+          FROM project_note_snapshots na
+          INNER JOIN project_note_snapshots nb ON na.project_id = ${pA.id}::uuid AND nb.project_id = ${pB.id}::uuid
+          WHERE na.embedding IS NOT NULL AND nb.embedding IS NOT NULL
+          ORDER BY distance ASC
+          LIMIT 3
+        `);
+        const noteMatches = noteResult.rows || [];
+
+        const closestNotes = noteMatches.map(nm => {
+          const dist = typeof nm.distance === 'number' ? nm.distance : parseFloat(nm.distance as any);
+          return {
+            noteATitle: nm.noteATitle,
+            noteAPath: nm.noteAPath,
+            noteBSTitle: nm.noteBTitle,
+            noteBPath: nm.noteBPath,
+            distance: Math.round(dist * 1000) / 1000,
+            similarityScore: Math.max(0, Math.min(100, Math.round((1 - dist) * 100))),
+          };
+        });
+
+        let bestDist: number | null = projectDist;
+        if (closestNotes.length > 0) {
+          if (bestDist === null || closestNotes[0].distance < bestDist) {
+            bestDist = closestNotes[0].distance;
+          }
+        }
+
+        if (bestDist === null) continue;
+
+        const similarityScore = Math.max(0, Math.min(100, Math.round((1 - bestDist) * 100)));
+        if (similarityScore < minSimilarity) continue;
+
+        let rationale = '';
+        if (closestNotes.length > 0) {
+          rationale = `Afinidad conceptual detectada entre [[${closestNotes[0].noteATitle}]] (${pA.title}) y [[${closestNotes[0].noteBSTitle}]] (${pB.title}).`;
+        } else {
+          rationale = `Resonancia temática detectada entre ${pA.title} y ${pB.title}.`;
+        }
+
+        synergies.push({
+          id: `${pA.id}_${pB.id}`,
+          projectA: {
+            id: pA.id,
+            title: pA.title,
+            folderPath: pA.folderPath,
+            thesisText: snapA?.thesisText ?? null,
+          },
+          projectB: {
+            id: pB.id,
+            title: pB.title,
+            folderPath: pB.folderPath,
+            thesisText: snapB?.thesisText ?? null,
+          },
+          similarityScore,
+          projectDistance: projectDist !== null ? Math.round(projectDist * 1000) / 1000 : null,
+          bestNoteDistance: closestNotes.length > 0 ? closestNotes[0].distance : null,
+          rationale,
+          closestNotes,
+        });
+      }
+    }
+
+    synergies.sort((a, b) => b.similarityScore - a.similarityScore);
+    const sliced = synergies.slice(0, limit);
+
+    return reply.send({
+      synergies: sliced,
+      totalCount: synergies.length,
+    });
+  });
+
+  // 1.6 Explore and Synthesize Cross-Project Synergy (Feature 5)
+  server.post('/api/projects/synergies/explore', {
+    schema: {
+      body: z.object({
+        projectAId: z.string().uuid(),
+        projectBId: z.string().uuid(),
+        saveToVault: z.boolean().optional().default(true),
+      }),
+      response: {
+        200: z.object({
+          success: z.boolean(),
+          bridgeTitle: z.string(),
+          overview: z.string(),
+          sharedProblems: z.array(z.string()),
+          mutualBenefits: z.array(z.string()),
+          markdownContent: z.string(),
+          filePath: z.string().nullable().optional(),
+          writtenToVault: z.boolean(),
+        }),
+        404: z.object({ error: z.string(), message: z.string() }),
+        500: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+  }, async (request, reply) => {
+    const { projectAId, projectBId, saveToVault = true } = request.body as any;
+
+    const [projA] = await db.select().from(projects).where(eq(projects.id, projectAId)).limit(1);
+    const [projB] = await db.select().from(projects).where(eq(projects.id, projectBId)).limit(1);
+
+    if (!projA || !projB) {
+      return reply.status(404).send({
+        error: 'Not Found',
+        message: 'Uno o ambos proyectos no fueron encontrados.',
+      });
+    }
+
+    const [snapA] = await db.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projA.id)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
+    const [snapB] = await db.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projB.id)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
+
+    const notesA = await db.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectId, projA.id)).limit(10);
+    const notesB = await db.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectId, projB.id)).limit(10);
+
+    const synergySynthesisSchema = z.object({
+      bridgeTitle: z.string().describe('Título sugerido para la nota de puente conceptual entre ambos proyectos'),
+      overview: z.string().describe('Resumen de la sinergia e intersección temática'),
+      sharedProblems: z.array(z.string()).describe('Problemas o preguntas de investigación comunes'),
+      mutualBenefits: z.array(z.string()).describe('Cómo el Proyecto A enriquece al Proyecto B y viceversa'),
+      markdownContent: z.string().describe('Cuerpo completo de la nota en formato Markdown con enlaces wikilink'),
+    });
+
+    const systemPrompt = `Eres un estratega de investigación interdisciplinaria y gestor de conocimiento para Obsidian.
+Tu objetivo es analizar dos proyectos independientes de investigación y descubrir puentes conceptuales, transferencias metodológicas y sinergias creativas.
+REGLAS:
+1. Responde SIEMPRE en ESPAÑOL.
+2. Utiliza wikilinks de Obsidian ([[nombre_nota]]).
+3. Sé analítico, concreto y pragmático para el autor.`;
+
+    const userMessage = `<PROYECTO_A>
+Título: "${projA.title}"
+Tesis: ${snapA?.thesisText || 'Sin tesis formal'}
+Notas clave:
+${notesA.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}
+</PROYECTO_A>
+
+<PROYECTO_B>
+Título: "${projB.title}"
+Tesis: ${snapB?.thesisText || 'Sin tesis formal'}
+Notas clave:
+${notesB.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}
+</PROYECTO_B>
+
+Propón un puente de investigación unificado entre ambos proyectos.`;
+
+    let result;
+    try {
+      const evalResult = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, synergySynthesisSchema);
+      result = evalResult.data;
+    } catch (err: any) {
+      server.log.error({ err }, 'Error in cross-project synergy evaluation');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Error al sintetizar la sinergia entre proyectos con el modelo de IA.',
+      });
+    }
+
+    let writtenToVault = false;
+    let fileName: string | null = null;
+    const vaultPath = getCurrentVaultPath();
+
+    if (saveToVault && vaultPath) {
+      try {
+        const cleanA = projA.title.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
+        const cleanB = projB.title.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
+        fileName = `synergy_${cleanA}_${cleanB}.md`;
+
+        const targetDir = path.join(vaultPath, 'Projects');
+        const targetFilePath = path.join(targetDir, fileName);
+
+        const frontmatter = `---
+title: "${result.bridgeTitle.replace(/"/g, '\\"')}"
+type: cross_project_synergy
+project_a: "${projA.title}"
+project_b: "${projB.title}"
+created_at: "${new Date().toISOString()}"
+tags:
+  - loom/synergy
+  - loom/cross-project
+---
+
+# ${result.bridgeTitle}
+
+> [!abstract] Resonancia Temática
+> ${result.overview.replace(/\n/g, '\n> ')}
+
+## Preguntas y Problemas Compartidos
+${result.sharedProblems.map((p: string) => `- ${p}`).join('\n')}
+
+## Beneficios Mutuos y Transferencia
+${result.mutualBenefits.map((b: string) => `- ${b}`).join('\n')}
+
+${result.markdownContent}
+
+---
+*Generado automáticamente por Loom mediante análisis de sinergia cruzada entre [[${projA.title}]] y [[${projB.title}]].*
+`;
+
+        await fs.mkdir(targetDir, { recursive: true });
+        await fs.writeFile(targetFilePath, frontmatter, 'utf-8');
+        writtenToVault = true;
+      } catch (err) {
+        console.error('[Synergy] Failed to write bridge note to vault:', err);
+      }
+    }
+
+    return reply.send({
+      success: true,
+      bridgeTitle: result.bridgeTitle,
+      overview: result.overview,
+      sharedProblems: result.sharedProblems,
+      mutualBenefits: result.mutualBenefits,
+      markdownContent: result.markdownContent,
+      filePath: fileName,
+      writtenToVault,
+    });
   });
 
   // 2. Get Single Project Detail

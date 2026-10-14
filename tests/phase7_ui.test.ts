@@ -703,6 +703,147 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.payload).toContain('id="synthesis-result-modal"');
     expect(res.payload).toContain('id="synthesis-modal-title"');
   });
+
+  it('Feature 5: GET /api/projects/synergies detecta sinergias y puentes semánticos entre proyectos activos', async () => {
+    const { projects, projectSnapshots, projectNoteSnapshots } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { eq } = await import('drizzle-orm');
+
+    // Create a second active project with snapshot & note
+    const [projB] = await drizzleDb.insert(projects).values({
+      folderPath: 'Projects/Vector_Databases',
+      title: 'Bases de Datos Vectoriales',
+      isActive: true,
+    }).returning({ id: projects.id });
+
+    // Seed snapshot for Project B with vector close to AI_Agents
+    const vectorB = new Array(1024).fill(0.05);
+    const [snapB] = await drizzleDb.insert(projectSnapshots).values({
+      projectId: projB.id,
+      treeHash: 'hash-snap-b',
+      thesisText: 'Indexación vectorial HNSW y búsqueda semántica de alta velocidad.',
+      embedding: vectorB,
+    }).returning({ id: projectSnapshots.id });
+
+    // Update Project A's snapshot with vector
+    const vectorA = new Array(1024).fill(0.052);
+    await drizzleDb.update(projectSnapshots)
+      .set({ embedding: vectorA })
+      .where(eq(projectSnapshots.projectId, projectId));
+
+    // Seed note snapshots for both projects
+    await drizzleDb.insert(projectNoteSnapshots).values([
+      {
+        projectId,
+        projectSnapshotId: snapB.id, // reference valid snap
+        noteTitle: 'Arquitectura de Agentes',
+        notePath: 'Projects/AI_Agents/architecture.md',
+        contentSnippet: 'Coordinación de agentes pub/sub y memoria distribuida.',
+        embedding: vectorA,
+      },
+      {
+        projectId: projB.id,
+        projectSnapshotId: snapB.id,
+        noteTitle: 'Índices HNSW',
+        notePath: 'Projects/Vector_Databases/hnsw_indexes.md',
+        contentSnippet: 'Algoritmos de grafos para recuperación eficiente de vectores.',
+        embedding: vectorB,
+      },
+    ]);
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/projects/synergies?minSimilarity=20&limit=10',
+    });
+
+    if (res.statusCode !== 200) {
+      console.error('GET /api/projects/synergies returned:', res.statusCode, res.payload);
+    }
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.synergies).toBeDefined();
+    expect(body.totalCount).toBeGreaterThanOrEqual(1);
+
+    const synergy = body.synergies.find((s: any) =>
+      (s.projectA.id === projectId && s.projectB.id === projB.id) ||
+      (s.projectB.id === projectId && s.projectA.id === projB.id)
+    );
+
+    expect(synergy).toBeDefined();
+    expect(synergy.similarityScore).toBeGreaterThanOrEqual(80);
+    expect(synergy.rationale).toContain('Afinidad conceptual detectada');
+    expect(synergy.closestNotes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Feature 5: POST /api/projects/synergies/explore genera nota puente en el Vault', async () => {
+    const { projects } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { eq } = await import('drizzle-orm');
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+
+    const [projB] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Vector_Databases'));
+    expect(projB).toBeDefined();
+
+    const evalSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
+      data: {
+        bridgeTitle: 'Puente Conceptual: Agentes y Memoria Vectorial',
+        overview: 'Conexión simbiótica entre la reactividad de agentes autónomos y la persistencia contextual de índices vectoriales.',
+        sharedProblems: [
+          'Gestión de latencia en consultas RAG multi-agente.',
+          'Consistencia eventual del grafo de memoria.',
+        ],
+        mutualBenefits: [
+          'Los agentes se nutren de contexto semántico instantáneo.',
+          'Los índices vectoriales se actualizan automáticamente tras cada interacción.',
+        ],
+        markdownContent: '## Arquitectura de Integración\nAmbos subsistemas se comunican mediante un broker de eventos asíncronos.',
+      },
+      model: 'mock-llm',
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/projects/synergies/explore',
+      payload: {
+        projectAId: projectId,
+        projectBId: projB.id,
+        saveToVault: true,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.success).toBe(true);
+    expect(body.bridgeTitle).toBe('Puente Conceptual: Agentes y Memoria Vectorial');
+    expect(body.sharedProblems.length).toBe(2);
+    expect(body.mutualBenefits.length).toBe(2);
+    expect(body.writtenToVault).toBe(true);
+    expect(body.filePath).toContain('synergy_');
+
+    // Verify bridge file saved in Vault
+    const bridgePath = path.join(vaultPath, 'Projects', body.filePath);
+    const fileExists = await fs.access(bridgePath).then(() => true).catch(() => false);
+    expect(fileExists).toBe(true);
+    const content = await fs.readFile(bridgePath, 'utf-8');
+    expect(content).toContain('type: cross_project_synergy');
+    expect(content).toContain('Puente Conceptual: Agentes y Memoria Vectorial');
+
+    evalSpy.mockRestore();
+  });
+
+  it('Feature 5: Frontend sirve panel de sinergias y modal de exploración en index.html', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/index.html',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain('id="synergies-section"');
+    expect(res.payload).toContain('id="synergies-grid"');
+    expect(res.payload).toContain('id="btn-refresh-synergies"');
+    expect(res.payload).toContain('id="synergy-bridge-modal"');
+    expect(res.payload).toContain('id="synergy-modal-title"');
+  });
 });
 
 

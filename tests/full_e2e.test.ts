@@ -110,7 +110,7 @@ Este proyecto busca construir un ecosistema de agentes autónomos que se comuniq
     // STEP 3: Wait for a pending suggestion (Phase 5)
     console.log('\n⏳ Esperando: Scraping -> Resumen (Gemini) -> Vector (bge-m3) -> Triage (Gemini) -> Acción (Gemini)...');
     let suggestion: any;
-    for (let i = 0; i < 180 && !suggestion; i++) {
+    for (let i = 0; i < 300 && !suggestion; i++) {
       await new Promise(r => setTimeout(r, 1000));
       [suggestion] = await db.select().from(actionSuggestions).where(eq(actionSuggestions.contentId, inserted.id));
     }
@@ -147,5 +147,5 @@ Este proyecto busca construir un ecosistema de agentes autónomos que se comuniq
     console.log('- Veredicto:', dbEval?.verdict, '| Confianza:', dbEval?.confidenceScore);
     console.log('- Razonamiento:', dbEval?.triageReasoning);
     console.log('- Acción:', suggestion.actionType, '->', suggestion.suggestedAction);
-  }, 240000);
+  }, 360000);
 });

@@ -2124,6 +2124,173 @@ body {
 }
 
 /* ==========================================================================
+   Feature 5: Cross-Project Synergies
+   ========================================================================== */
+
+.synergies-section {
+  padding: 1.4rem 1.6rem;
+  background: var(--bg-card);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+}
+
+.synergies-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.synergies-title-group {
+  flex: 1;
+}
+
+.synergies-title {
+  font-family: var(--font-serif);
+  font-size: 1.22rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0.2rem 0 0.35rem;
+}
+
+.synergies-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.synergies-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.synergies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.2rem;
+}
+
+.synergy-card {
+  background: rgba(16, 22, 35, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  transition: all var(--transition-fast);
+}
+
+.synergy-card:hover {
+  background: rgba(22, 31, 49, 0.85);
+  border-color: var(--border-highlight);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transform: translateY(-2px);
+}
+
+.synergy-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.synergy-proj-bridge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.synergy-proj-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.synergy-arrow {
+  color: var(--accent-filament);
+  flex-shrink: 0;
+}
+
+.synergy-score-chip {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--accent-filament-soft);
+  color: var(--accent-primary-hover);
+  border: 1px solid var(--border-highlight);
+}
+
+.synergy-rationale {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  font-style: italic;
+  border-left: 2px solid var(--border-subtle);
+  padding-left: 0.65rem;
+}
+
+.synergy-notes-box {
+  background: rgba(9, 13, 21, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.synergy-notes-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.synergy-notes-pair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.synergy-note-link {
+  color: var(--accent-primary-hover);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.synergy-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ==========================================================================
    Toasts & Notifications
    ========================================================================== */
 

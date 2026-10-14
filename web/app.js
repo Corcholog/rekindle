@@ -16,6 +16,7 @@ const state = {
   feedbackDrafts: new Map(),
   renderedSuggestionsSignature: '',
   vaultStatus: null,
+  synergies: [],
 };
 
 // Action Type Labels in Spanish (User Domain)
@@ -111,6 +112,16 @@ const elements = {
   synthesisModalBody: document.getElementById('synthesis-modal-body'),
   btnCloseSynthesisModal: document.getElementById('btn-close-synthesis-modal'),
 
+  // Cross-Project Synergies (Feature 5)
+  synergiesSection: document.getElementById('synergies-section'),
+  synergiesCountBadge: document.getElementById('synergies-count-badge'),
+  synergiesGrid: document.getElementById('synergies-grid'),
+  btnRefreshSynergies: document.getElementById('btn-refresh-synergies'),
+  synergyBridgeModal: document.getElementById('synergy-bridge-modal'),
+  synergyModalTitle: document.getElementById('synergy-modal-title'),
+  synergyModalBody: document.getElementById('synergy-modal-body'),
+  btnCloseSynergyModal: document.getElementById('btn-close-synergy-modal'),
+
   // Modal & Toast
   contentDetailModal: document.getElementById('content-detail-modal'),
   modalContentTitle: document.getElementById('modal-content-title'),
@@ -132,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSettingsView();
   setupModalEvents();
   setupSynthesisAction();
+  setupSynergies();
   setupSystemStatusPoller();
 
   // Initial Data Load
@@ -139,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadContents();
   loadProjects();
   loadSuggestions();
+  loadSynergies();
 
   handleQuickIngestUrlParam();
 });
@@ -869,6 +882,7 @@ function selectProject(projectId) {
 
   updateAllCountsAndBadges();
   loadSuggestions();
+  renderSynergies();
 }
 
 function setupTriageStatusTabs() {
@@ -1401,6 +1415,226 @@ function openSynthesisResultModal(data, projectTitle) {
   });
 
   elements.synthesisResultModal.showModal();
+}
+
+// ==========================================================================
+// Feature 5: Cross-Project Synergies
+// ==========================================================================
+
+function setupSynergies() {
+  if (elements.btnRefreshSynergies) {
+    elements.btnRefreshSynergies.addEventListener('click', () => {
+      loadSynergies(true);
+    });
+  }
+
+  if (elements.btnCloseSynergyModal && elements.synergyBridgeModal) {
+    elements.btnCloseSynergyModal.addEventListener('click', () => {
+      elements.synergyBridgeModal.close();
+    });
+    elements.synergyBridgeModal.addEventListener('click', (e) => {
+      if (e.target === elements.synergyBridgeModal) {
+        elements.synergyBridgeModal.close();
+      }
+    });
+  }
+}
+
+async function loadSynergies(isManualRefresh = false) {
+  try {
+    const res = await fetch('/api/projects/synergies');
+    if (!res.ok) return;
+    const data = await res.json();
+    state.synergies = data.synergies || [];
+    renderSynergies();
+    if (isManualRefresh) {
+      showToast(`${state.synergies.length} sinergias calculadas con éxito`, 'info');
+    }
+  } catch (err) {
+    console.error('Failed to load synergies:', err);
+  }
+}
+
+function renderSynergies() {
+  if (!elements.synergiesSection || !elements.synergiesGrid) return;
+
+  // Filter synergies by currently selected project (if one is selected)
+  let visibleSynergies = state.synergies;
+  if (state.selectedProjectId) {
+    visibleSynergies = state.synergies.filter(s =>
+      s.projectA.id === state.selectedProjectId || s.projectB.id === state.selectedProjectId
+    );
+  }
+
+  if (visibleSynergies.length === 0) {
+    elements.synergiesSection.style.display = 'none';
+    return;
+  }
+
+  elements.synergiesSection.style.display = 'block';
+  if (elements.synergiesCountBadge) {
+    elements.synergiesCountBadge.textContent = `${visibleSynergies.length} Sinergia${visibleSynergies.length === 1 ? '' : 's'}`;
+  }
+
+  elements.synergiesGrid.innerHTML = visibleSynergies.map(s => {
+    const notesHtml = (s.closestNotes && s.closestNotes.length > 0)
+      ? `
+        <div class="synergy-notes-box">
+          <span class="synergy-notes-label">Notas con mayor afinidad:</span>
+          ${s.closestNotes.slice(0, 2).map(n => `
+            <div class="synergy-notes-pair">
+              <span class="synergy-note-link" title="${escapeHtml(n.noteAPath)}">[[${escapeHtml(n.noteATitle)}]]</span>
+              <span class="synergy-arrow">⇄</span>
+              <span class="synergy-note-link" title="${escapeHtml(n.noteBPath)}">[[${escapeHtml(n.noteBSTitle)}]]</span>
+            </div>
+          `).join('')}
+        </div>
+      `
+      : '';
+
+    return `
+      <div class="synergy-card">
+        <div class="synergy-card-header">
+          <div class="synergy-proj-bridge">
+            <span class="synergy-proj-name" title="${escapeHtml(s.projectA.title)}">${escapeHtml(s.projectA.title)}</span>
+            <span class="synergy-arrow">⇄</span>
+            <span class="synergy-proj-name" title="${escapeHtml(s.projectB.title)}">${escapeHtml(s.projectB.title)}</span>
+          </div>
+          <span class="synergy-score-chip">${s.similarityScore}% Afinidad</span>
+        </div>
+
+        <p class="synergy-rationale">${escapeHtml(s.rationale)}</p>
+
+        ${notesHtml}
+
+        <div class="synergy-card-footer">
+          <button type="button" class="btn btn-secondary btn-sm btn-explore-synergy" 
+            data-proj-a="${s.projectA.id}" 
+            data-proj-b="${s.projectB.id}"
+            data-title-a="${escapeHtml(s.projectA.title)}"
+            data-title-b="${escapeHtml(s.projectB.title)}"
+          >
+            <span>✦ Explorar Puente</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  elements.synergiesGrid.querySelectorAll('.btn-explore-synergy').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const target = e.currentTarget;
+      const pA = target.dataset.projA;
+      const pB = target.dataset.projB;
+      const tA = target.dataset.titleA;
+      const tB = target.dataset.titleB;
+      exploreSynergyBridge(pA, pB, tA, tB);
+    });
+  });
+}
+
+async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
+  if (!elements.synergyBridgeModal) return;
+
+  elements.synergyModalTitle.textContent = `Puente: ${titleA} ⇄ ${titleB}`;
+  elements.synergyModalBody.innerHTML = `
+    <div style="text-align: center; padding: 3rem 1.5rem;">
+      <span class="spinner large"></span>
+      <p style="color: var(--text-secondary); margin-top: 1rem;">Sintetizando conexiones temáticas y metodológicas entre ambos proyectos...</p>
+    </div>
+  `;
+  elements.synergyBridgeModal.showModal();
+
+  try {
+    const res = await fetch('/api/projects/synergies/explore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectAId, projectBId, saveToVault: true }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Error al generar el puente de sinergia.');
+    }
+
+    elements.synergyModalTitle.textContent = data.bridgeTitle;
+
+    const vaultBadge = data.writtenToVault && data.filePath
+      ? `<span class="chip chip-actionable">Guardado en Vault: ${escapeHtml(data.filePath)}</span>`
+      : '';
+
+    elements.synergyModalBody.innerHTML = `
+      <div class="synthesis-content-view">
+        <div class="synthesis-meta-bar">
+          <div class="synergy-proj-bridge">
+            <strong>[[${escapeHtml(titleA)}]]</strong>
+            <span class="synergy-arrow">⇄</span>
+            <strong>[[${escapeHtml(titleB)}]]</strong>
+          </div>
+          ${vaultBadge}
+        </div>
+
+        <div class="synthesis-section">
+          <span class="synthesis-section-title">Resonancia Temática</span>
+          <div class="synthesis-summary-text">${escapeHtml(data.overview).replace(/\n/g, '<br>')}</div>
+        </div>
+
+        <div class="synthesis-section">
+          <span class="synthesis-section-title">Preguntas y Problemas Compartidos</span>
+          <ul class="synthesis-steps-list">
+            ${(data.sharedProblems || []).map(p => `
+              <li class="synthesis-step-item">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>${escapeHtml(p)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+
+        <div class="synthesis-section">
+          <span class="synthesis-section-title">Transferencia y Beneficios Mutuos</span>
+          <ul class="synthesis-steps-list">
+            ${(data.mutualBenefits || []).map(b => `
+              <li class="synthesis-step-item">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span>${escapeHtml(b)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+
+        <div class="synthesis-actions-bar">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar Nota</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Listo</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-close-synergy-view')?.addEventListener('click', () => {
+      elements.synergyBridgeModal.close();
+    });
+
+    document.getElementById('btn-copy-synergy-note')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(`${data.bridgeTitle}\n\n${data.overview}\n\n${data.markdownContent}`);
+        showToast('Nota de sinergia copiada al portapapeles', 'info');
+      } catch {
+        showToast('No se pudo copiar automáticamente', 'warning');
+      }
+    });
+
+    if (data.writtenToVault && data.filePath) {
+      showToast(`Puente de investigación guardado en Obsidian: ${data.filePath}`, 'success');
+    }
+  } catch (err) {
+    console.error('Synergy exploration error:', err);
+    elements.synergyModalBody.innerHTML = `
+      <div style="padding: 2rem 1rem; text-align: center; color: var(--color-danger);">
+        <p><strong>Error al explorar sinergia:</strong> ${escapeHtml(err.message || 'Error inesperado')}</p>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 1rem;" onclick="document.getElementById('synergy-bridge-modal').close()">Cerrar</button>
+      </div>
+    `;
+  }
 }
 
 async function openContentDetailModal(contentId) {
