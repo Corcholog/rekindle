@@ -1,6 +1,7 @@
 import chokidar from 'chokidar';
 import * as path from 'path';
 import { reconcileProject, bootReconcile } from './reconciler';
+import { PROJECT_DIR_NAMES } from '../config';
 
 // Manage timeouts for debouncing
 const debounceTimers = new Map<string, NodeJS.Timeout>();
@@ -52,10 +53,7 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
     console.log(`[Watcher] Skipping boot reconciliation as requested. Starting live file watcher...`);
   }
 
-  const watchPaths = [
-    path.join(resolved, 'Projects'),
-    path.join(resolved, 'Proyectos')
-  ];
+  const watchPaths = PROJECT_DIR_NAMES.map(dir => path.join(resolved, dir));
 
   const watcher = chokidar.watch(watchPaths, {
     ignored: (targetPath: string) => {
@@ -83,7 +81,7 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
     if (parts.length < 2) return;
 
     const [topDir, projectName] = parts;
-    if (topDir !== 'Projects' && topDir !== 'Proyectos') return;
+    if (!(PROJECT_DIR_NAMES as readonly string[]).includes(topDir)) return;
     if (!projectName) return;
 
     const projectPath = path.join(resolved, topDir, projectName);
@@ -107,7 +105,7 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
     if (relFromVault.startsWith('..') || path.isAbsolute(relFromVault)) return;
 
     const parts = relFromVault.split('/');
-    if (parts.length === 2 && (parts[0] === 'Projects' || parts[0] === 'Proyectos')) {
+    if (parts.length === 2 && (PROJECT_DIR_NAMES as readonly string[]).includes(parts[0])) {
       const folderPath = `${parts[0]}/${parts[1]}`;
       try {
         const { db } = await import('../db');
@@ -133,7 +131,7 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
   activeWatcher = watcher;
   activeVaultPath = resolved;
 
-  console.log(`[Watcher] Listening for changes in Projects/ and Proyectos/ at ${resolved}`);
+  console.log(`[Watcher] Listening for changes in ${PROJECT_DIR_NAMES.join('/ and ')}/ at ${resolved}`);
 }
 
 export async function restartVaultWatcher(vaultPath: string, runInitialReconcile = true): Promise<void> {

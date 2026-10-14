@@ -1,10 +1,12 @@
 import { boss } from '../queue';
 import { syncProjectSuggestions } from '../vault/updater';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { env } from '../config';
 
 const QUEUE_NAME = 'sync_suggestions';
+
+interface SyncSuggestionsData {
+  projectId: string;
+}
 
 export const setupVaultWorker = async () => {
   const workerId = await boss.work(QUEUE_NAME, async (jobs: any) => {
@@ -12,9 +14,9 @@ export const setupVaultWorker = async () => {
     
     for (const job of jobArray) {
       if (!job || !job.data) continue;
-      const { projectId } = job.data as { projectId: string };
+      const { projectId } = job.data as SyncSuggestionsData;
       
-      const vaultPath = process.env.VAULT_PATH;
+      const vaultPath = process.env.VAULT_PATH || env.VAULT_PATH;
       if (!vaultPath) {
         console.error('[VaultWorker] VAULT_PATH is not defined. Cannot sync suggestions.');
         continue; // Don't throw, just ignore if no vault path is configured

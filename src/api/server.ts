@@ -15,9 +15,10 @@ import { setupIngestionWorker } from '../workers/ingestionWorker';
 import { setupEvaluationWorker } from '../workers/evaluationWorker';
 import { setupVaultWorker } from '../workers/vaultWorker';
 import { startVaultWatcher, stopVaultWatcher } from '../vault/watcher';
+import { env } from '../config';
 
 export const server = Fastify({
-  logger: process.env.NODE_ENV === 'test' ? false : { level: process.env.LOG_LEVEL || 'warn' }
+  logger: env.NODE_ENV === 'test' ? false : { level: process.env.LOG_LEVEL || 'warn' }
 }).withTypeProvider<ZodTypeProvider>();
 
 // Add Zod validation compilers
@@ -43,11 +44,11 @@ server.setErrorHandler((error: any, request, reply) => {
   });
 });
 
-server.get('/health', async (request, reply) => {
+server.get('/health', async (_request, _reply) => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
-server.get('/favicon.ico', async (request, reply) => {
+server.get('/favicon.ico', async (_request, reply) => {
   return reply.status(204).send();
 });
 
@@ -62,7 +63,7 @@ server.get('/ping', {
       200: z.object({ message: z.string() })
     }
   }
-}, async (request, reply) => {
+}, async (request, _reply) => {
   const { echo } = request.query;
   return { message: echo ? `Pong: ${echo}` : 'Pong' };
 });
@@ -91,16 +92,17 @@ export const startServer = async () => {
     await setupVaultWorker();
     
     // Start Obsidian Vault Watcher if VAULT_PATH is provided
-    if (process.env.VAULT_PATH) {
-      startVaultWatcher(process.env.VAULT_PATH).catch(err => {
+    const vaultPath = process.env.VAULT_PATH || env.VAULT_PATH;
+    if (vaultPath) {
+      startVaultWatcher(vaultPath).catch(err => {
         server.log.error({ err }, 'Vault Watcher Error:');
       });
     } else {
       server.log.warn('VAULT_PATH is not set. Skipping Obsidian Sync Watcher.');
     }
 
-    const host = process.env.HOST || '127.0.0.1';
-    const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    const host = env.HOST;
+    const port = env.PORT;
     await server.listen({ port, host });
     console.log(`Server listening on http://${host}:${port}`);
 
@@ -126,9 +128,9 @@ export const stopServer = async () => {
   try {
     server.log.info('Shutting down server gracefully...');
     await stopVaultWatcher();
-    try { await boss.stop(); } catch {}
-    try { await server.close(); } catch {}
-    try { await pool.end(); } catch {}
+    try { await boss.stop(); } catch { /* ignore boss stop errors */ }
+    try { await server.close(); } catch { /* ignore server close errors */ }
+    try { await pool.end(); } catch { /* ignore pool end errors */ }
     server.log.info('Server shutdown complete');
   } catch (err) {
     server.log.error({ err }, 'Error during shutdown');

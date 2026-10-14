@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { PROJECT_DIR_NAMES } from '../config';
 
 export interface VaultPathStatus {
   vaultPath: string | null;
@@ -51,7 +52,7 @@ export async function validateVaultPath(candidatePath: string): Promise<VaultPat
     try {
       const entries = await fs.readdir(resolved, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isDirectory() && (entry.name === 'Projects' || entry.name === 'Proyectos')) {
+        if (entry.isDirectory() && (PROJECT_DIR_NAMES as readonly string[]).includes(entry.name)) {
           hasProjectsDir = true;
           projectsDirName = entry.name;
           break;

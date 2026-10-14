@@ -8,7 +8,6 @@ import {
   jsonb,
   integer,
   real,
-  uniqueIndex,
   index,
   pgEnum,
   unique
@@ -77,7 +76,7 @@ export const projectSnapshots = pgTable('project_snapshots', {
   treeHash: varchar('tree_hash', { length: 64 }).notNull(),
   thesisText: text('thesis_text'),
   notesContent: text('notes_content'),
-  noteTitles: jsonb('note_titles'),
+  noteTitles: jsonb('note_titles').$type<string[]>(),
   embedding: vector('embedding'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
 }, (table) => [

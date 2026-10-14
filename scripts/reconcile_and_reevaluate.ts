@@ -4,7 +4,6 @@ import { eq, desc } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../src/vault/config';
 import { reconcileAllProjects } from '../src/vault/reconciler';
 import { evaluateContentMatch } from '../src/evaluator';
-import * as path from 'path';
 
 async function main() {
   console.log('====================================================================');

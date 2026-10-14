@@ -40,7 +40,7 @@ Investigación y desarrollo de agentes autónomos guiados por LLMs y arquitectur
     isActive: true,
   }).returning();
 
-  const [proj2] = await db.insert(projects).values({
+  const [_proj2] = await db.insert(projects).values({
     folderPath: 'Projects/Arquitectura_Distribuida',
     title: 'Arquitectura Distribuida',
     currentHash: 'hash_demo_2',

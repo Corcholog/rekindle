@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
-import { contents, evaluations, projectSnapshots, projects, actionSuggestions } from '../../db/schema';
+import { contents, evaluations, projectSnapshots, projects } from '../../db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 
 const IngestStatusSchema = z.enum(['pending', 'extracting', 'summarizing', 'embedding', 'ready', 'failed']);
@@ -164,7 +164,7 @@ function toItem<T extends ItemRow>(row: T) {
   if (Array.isArray(el)) {
     parsedList = el;
   } else if (typeof el === 'string') {
-    try { parsedList = JSON.parse(el); } catch {}
+    try { parsedList = JSON.parse(el); } catch { /* ignore JSON parse error */ }
   }
 
   return {

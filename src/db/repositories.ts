@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from './index';
 import { contents, projects, projectSnapshots, evaluations, actionSuggestions } from './schema';
 

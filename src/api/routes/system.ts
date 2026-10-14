@@ -22,16 +22,20 @@ export default async function (server: FastifyInstance) {
     },
   }, async (request, reply) => {
     // 1. Query active / pending jobs in pgboss
-    const jobsRes = await db.execute(sql`
+    const jobsRes = await db.execute<{
+      active_jobs: number;
+      ingesting_jobs: number;
+      evaluating_jobs: number;
+    }>(sql`
       SELECT 
         count(*) filter (where state in ('created', 'active', 'retry'))::int as active_jobs,
         count(*) filter (where name = 'ingest_url' and state in ('created', 'active', 'retry'))::int as ingesting_jobs,
         count(*) filter (where name = 'evaluate_content' and state in ('created', 'active', 'retry'))::int as evaluating_jobs
       FROM pgboss.job
     `);
-    const activeJobs = (jobsRes.rows[0] as any)?.active_jobs ?? 0;
-    const ingestingJobs = (jobsRes.rows[0] as any)?.ingesting_jobs ?? 0;
-    const evaluatingJobs = (jobsRes.rows[0] as any)?.evaluating_jobs ?? 0;
+    const activeJobs = jobsRes.rows[0]?.active_jobs ?? 0;
+    const ingestingJobs = jobsRes.rows[0]?.ingesting_jobs ?? 0;
+    const evaluatingJobs = jobsRes.rows[0]?.evaluating_jobs ?? 0;
 
     // 2. Query contents in active ingestion phases
     const contentsRes = await db.select({

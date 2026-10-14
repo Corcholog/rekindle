@@ -5,10 +5,11 @@ import { projects, projectSnapshots } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getDirectoryHash } from './hash';
 import { parseMarkdownFile } from './parser';
-import { OllamaProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/OllamaProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
+import { PROJECT_DIR_NAMES } from '../config';
 
-const ollama = new OllamaProvider();
+const ollama = sharedAiProvider;
 const activeProjectReconciliations = new Set<string>();
 
 export async function reconcileProject(projectPath: string, vaultPath: string, force = false): Promise<void> {
@@ -168,7 +169,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
 }
 
 export async function bootReconcile(vaultPath: string, force = false): Promise<void> {
-  const targetDirs = ['Projects', 'Proyectos'];
+  const targetDirs = PROJECT_DIR_NAMES;
   
   for (const dirName of targetDirs) {
     const targetPath = path.join(vaultPath, dirName);

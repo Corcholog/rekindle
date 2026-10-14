@@ -33,7 +33,7 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
   // Escape bracket characters in link text and parentheses in URL to prevent breaking markdown link syntax
   let link = 'Fuente desconocida';
   if (sug.sourceUri) {
-    const safeTitle = (sug.sourceTitle || 'Fuente').replace(/[\[\]]/g, '\\$&');
+    const safeTitle = (sug.sourceTitle || 'Fuente').replace(/[[\]]/g, '\\$&');
     const safeUri = sug.sourceUri.replace(/\(/g, '%28').replace(/\)/g, '%29');
     link = `[${safeTitle}](${safeUri})`;
   }

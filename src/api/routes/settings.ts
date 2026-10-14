@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { db } from '../../db';
 import { projects, actionSuggestions } from '../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   getCurrentVaultPath,
   validateVaultPath,
@@ -47,7 +47,7 @@ export default async function (server: FastifyInstance) {
         200: GetVaultSettingsResponseSchema,
       },
     },
-  }, async (request, reply) => {
+  }, async (_request, _reply) => {
     const currentVaultPath = getCurrentVaultPath();
 
     if (!currentVaultPath) {

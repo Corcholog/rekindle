@@ -1,11 +1,11 @@
 import { db } from '../db';
 import { contents, projectSnapshots, evaluations, actionSuggestions, projects, llmTelemetry } from '../db/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
-import { OllamaProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/OllamaProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
 
-const ollama = new OllamaProvider();
+const ollama = sharedAiProvider;
 
 const evaluationActionSchema = z.object({
   actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']).describe("Tipo de acción constructiva para Obsidian"),
@@ -71,9 +71,6 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
     const projectId = row.project_id as string;
     const thesisText = row.thesis_text as string;
     const notesContent = (row.notes_content as string) || '';
-    const fullProjectContext = notesContent 
-      ? `TESIS DEL PROYECTO:\n${thesisText}\n\nNOTAS Y BORRADORES ASOCIADOS:\n${notesContent}`
-      : thesisText;
 
     // Idempotency: Check if evaluation already exists before invoking LLM
     const [existing] = await db.select({ id: evaluations.id })

@@ -4,13 +4,14 @@ import { contents } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import { OllamaProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/OllamaProvider';
+import { env } from '../config';
 import { z } from 'zod';
 
 import { YoutubeTranscript } from 'youtube-transcript';
 
 const QUEUE_NAME = 'ingest_url';
-const ollama = new OllamaProvider();
+const ollama = sharedAiProvider;
 
 export function isYouTubeUrl(urlStr: string): boolean {
   try {
@@ -195,7 +196,7 @@ export const setupIngestionWorker = async () => {
         await db.update(contents)
           .set({ 
             embedding,
-            embeddingModel: 'bge-m3',
+            embeddingModel: env.EMBED_MODEL,
             ingestStatus: 'ready' 
           })
           .where(eq(contents.id, contentId));

@@ -1,6 +1,7 @@
 import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
+import { env } from '../config';
 
 export class OllamaProvider {
   private embedder: OllamaEmbeddings;
@@ -9,8 +10,8 @@ export class OllamaProvider {
   public lastUsedModel: string = 'unknown';
 
   constructor(
-    private baseUrl: string = 'http://127.0.0.1:11434',
-    embeddingModel: string = 'bge-m3',
+    private baseUrl: string = env.OLLAMA_URL,
+    embeddingModel: string = env.EMBED_MODEL,
     chatModelName: string = 'qwen2.5:7b-instruct'
   ) {
     // Embeddings are ALWAYS local with Ollama (bge-m3)
@@ -30,7 +31,7 @@ export class OllamaProvider {
   }
 
   private getGeminiClient(): GoogleGenAI | undefined {
-    const key = process.env.GEMINI_API_KEY;
+    const key = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     if (key) {
       if (!this.geminiClient) {
         this.geminiClient = new GoogleGenAI({ apiKey: key });
@@ -65,12 +66,12 @@ export class OllamaProvider {
   ): Promise<z.infer<T>> {
     const gemini = this.getGeminiClient();
     if (gemini) {
-      const modelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+      const modelName = process.env.GEMINI_MODEL || env.CHAT_MODEL || 'gemini-3.1-flash-lite';
       try {
-        const rawSchema = (z as any).toJSONSchema ? (z as any).toJSONSchema(schema) : undefined;
+        const rawSchema = z.toJSONSchema(schema) as any;
         let responseSchema = rawSchema;
         if (rawSchema && typeof rawSchema === 'object') {
-          const { $schema, ...rest } = rawSchema;
+          const { $schema: _schema, ...rest } = rawSchema;
           responseSchema = rest;
         }
 
@@ -119,3 +120,7 @@ export class OllamaProvider {
     }
   }
 }
+
+export { OllamaProvider as AiProvider };
+export const sharedAiProvider = new OllamaProvider();
+

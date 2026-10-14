@@ -3,13 +3,18 @@ import { evaluateContentMatch } from '../evaluator';
 
 const QUEUE_NAME = 'evaluate_content';
 
+interface EvaluateContentData {
+  contentId: string;
+  targetProjectId?: string;
+}
+
 export const setupEvaluationWorker = async () => {
   const workerId = await boss.work(QUEUE_NAME, async (jobs: any) => {
     const jobArray = Array.isArray(jobs) ? jobs : [jobs];
     
     for (const job of jobArray) {
       if (!job || !job.data) continue;
-      const { contentId, targetProjectId } = job.data as { contentId: string; targetProjectId?: string };
+      const { contentId, targetProjectId } = job.data as EvaluateContentData;
       
       try {
         await evaluateContentMatch(contentId, targetProjectId);

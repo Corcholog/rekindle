@@ -1,11 +1,7 @@
 import { PgBoss } from 'pg-boss';
-import dotenv from 'dotenv';
+import { env } from '../config';
 
-dotenv.config();
-
-const connectionString = process.env.DATABASE_URL || 'postgres://loom:loompassword@localhost:5432/loomdb';
-
-export const boss = new PgBoss(connectionString);
+export const boss = new PgBoss(env.DATABASE_URL);
 
 export const startQueue = async () => {
   boss.on('error', (error: any) => console.error('pg-boss error:', error));
