@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
+cd /d "%~dp0"
 
 echo ====================================================================
 echo           LOOM - INICIADOR DE SERVICIOS Y SERVIDOR
@@ -19,9 +20,14 @@ pause
 exit /b 1
 
 :NODE_OK
-set "PKG_CMD=npm"
-where pnpm >nul 2>&1
-if %ERRORLEVEL% equ 0 set "PKG_CMD=pnpm"
+set "PKG_CMD=npm.cmd"
+where pnpm.cmd >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    set "PKG_CMD=pnpm.cmd"
+) else (
+    where pnpm >nul 2>&1
+    if %ERRORLEVEL% equ 0 set "PKG_CMD=pnpm"
+)
 
 echo [OK] Gestor de paquetes detectado: %PKG_CMD%
 echo.
@@ -70,7 +76,7 @@ echo [INFO] Esperando a que Docker Engine termine de inicializarse (hasta 75s)..
 set /a DOCKER_WAIT=0
 
 :WAIT_DOCKER_LOOP
-timeout /t 3 /nobreak >nul
+ping 127.0.0.1 -n 4 >nul
 docker info >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] Docker Engine iniciado y conectado con exito.
@@ -117,7 +123,7 @@ echo [INFO] Esperando a que PostgreSQL este listo para aceptar conexiones...
 set /a PG_WAIT=0
 
 :WAIT_PG_LOOP
-timeout /t 1 /nobreak >nul
+ping 127.0.0.1 -n 2 >nul
 docker compose exec -T postgres pg_isready -U loom -d loomdb >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] PostgreSQL con pgvector listo en el puerto 5432.
@@ -147,7 +153,7 @@ REM --------------------------------------------------------------------
 REM 6. Verificacion de Ollama (IA Local)
 REM --------------------------------------------------------------------
 echo [6/6] Verificando servicio de inferencia Ollama (puerto 11434)...
-curl -s -m 2 http://localhost:11434/api/tags >nul 2>&1
+curl.exe -s -m 2 http://localhost:11434/api/tags >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] Ollama activo y respondiendo en http://localhost:11434.
     goto CHECK_MODELS
@@ -158,8 +164,8 @@ where ollama >nul 2>&1
 if %ERRORLEVEL% neq 0 goto OLLAMA_NOT_FOUND
 
 start "" ollama serve
-timeout /t 3 /nobreak >nul
-curl -s -m 2 http://localhost:11434/api/tags >nul 2>&1
+ping 127.0.0.1 -n 4 >nul
+curl.exe -s -m 2 http://localhost:11434/api/tags >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] Ollama iniciado correctamente.
     goto CHECK_MODELS
@@ -171,14 +177,14 @@ echo               El servidor Loom iniciara, pero el resumen y triaje con IA re
 goto OLLAMA_DONE
 
 :CHECK_MODELS
-curl -s http://localhost:11434/api/tags | findstr /i "bge-m3" >nul 2>&1
+curl.exe -s http://localhost:11434/api/tags | findstr /i "bge-m3" >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] Modelo de embeddings 'bge-m3' detectado.
 ) else (
     echo [ADVERTENCIA] Modelo 'bge-m3' no encontrado. Puedes descargarlo con: ollama pull bge-m3
 )
 
-curl -s http://localhost:11434/api/tags | findstr /i "qwen2.5:7b-instruct" >nul 2>&1
+curl.exe -s http://localhost:11434/api/tags | findstr /i "qwen2.5:7b-instruct" >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] Modelo de lenguaje 'qwen2.5:7b-instruct' detectado.
 ) else (
@@ -194,15 +200,20 @@ REM --------------------------------------------------------------------
 echo ====================================================================
 echo           TODOS LOS SERVICIOS PREPARADOS CON EXITO
 echo ====================================================================
-echo   * Servidor Web Loom:   http://localhost:3000
+echo   * Servidor Web Loom:   http://127.0.0.1:3000
 echo   * Base de Datos:       PostgreSQL + pgvector (Puerto 5432)
 echo   * LLM Local:           Ollama (Puerto 11434)
 echo ====================================================================
 echo.
-echo Abriendo navegador en http://localhost:3000...
-start http://localhost:3000
+echo Programando apertura del navegador en http://127.0.0.1:3000...
+start "" cmd /c "ping 127.0.0.1 -n 5 >nul & start http://127.0.0.1:3000"
 
 echo.
 echo Iniciando servidor Loom (Presiona Ctrl+C para detener)...
 echo.
 call !PKG_CMD! run dev
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] El proceso del servidor finalizo con codigo de error %ERRORLEVEL%.
+    pause
+)
