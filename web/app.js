@@ -160,9 +160,13 @@ export function showToast(message, type = 'info') {
 // ==========================================================================
 
 let wasProcessing = false;
+let isStatusPollerInFlight = false;
 
 function setupSystemStatusPoller() {
   const checkStatus = async () => {
+    if (document.hidden) return;
+    if (isStatusPollerInFlight) return;
+    isStatusPollerInFlight = true;
     try {
       const res = await fetch('/api/system/status');
       if (!res.ok) return;
@@ -203,11 +207,22 @@ function setupSystemStatusPoller() {
       }
     } catch {
       // Ignore background network transient errors
+    } finally {
+      isStatusPollerInFlight = false;
     }
   };
 
   checkStatus();
   setInterval(checkStatus, 2500);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      checkStatus();
+      if (state.inFlightPollingTimer) {
+        loadContents();
+      }
+    }
+  });
 }
 
 // ==========================================================================
@@ -317,6 +332,8 @@ async function loadContents() {
   }
 }
 
+let isInFlightPollActive = false;
+
 function checkInFlightPolling(items) {
   const inFlightCount = items.filter(i => ['pending', 'extracting', 'summarizing', 'embedding'].includes(i.ingestStatus) || i.isEvaluating).length;
 
@@ -326,12 +343,19 @@ function checkInFlightPolling(items) {
 
     if (!state.inFlightPollingTimer) {
       state.inFlightPollingTimer = setInterval(async () => {
-        const prevReadyCount = state.contents.filter(i => i.ingestStatus === 'ready').length;
-        await loadContents();
-        const newReadyCount = state.contents.filter(i => i.ingestStatus === 'ready').length;
-        if (newReadyCount !== prevReadyCount) {
-          await loadProjects();
-          await loadSuggestions();
+        if (document.hidden) return;
+        if (isInFlightPollActive) return;
+        isInFlightPollActive = true;
+        try {
+          const prevReadyCount = state.contents.filter(i => i.ingestStatus === 'ready').length;
+          await loadContents();
+          const newReadyCount = state.contents.filter(i => i.ingestStatus === 'ready').length;
+          if (newReadyCount !== prevReadyCount) {
+            await loadProjects();
+            await loadSuggestions();
+          }
+        } finally {
+          isInFlightPollActive = false;
         }
       }, 3000);
     }

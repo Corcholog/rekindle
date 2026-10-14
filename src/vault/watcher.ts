@@ -36,7 +36,7 @@ export async function stopVaultWatcher(): Promise<void> {
   }
 }
 
-export async function startVaultWatcher(vaultPath: string): Promise<void> {
+export async function startVaultWatcher(vaultPath: string, runInitialReconcile = true): Promise<void> {
   const resolved = path.resolve(vaultPath.trim());
 
   // Stop any previously running watcher
@@ -44,10 +44,13 @@ export async function startVaultWatcher(vaultPath: string): Promise<void> {
     await stopVaultWatcher();
   }
 
-  console.log(`[Watcher] Starting initial boot reconciliation for vault: ${resolved}`);
-  await bootReconcile(resolved);
-
-  console.log(`[Watcher] Boot reconciliation finished. Starting live file watcher...`);
+  if (runInitialReconcile) {
+    console.log(`[Watcher] Starting initial boot reconciliation for vault: ${resolved}`);
+    await bootReconcile(resolved);
+    console.log(`[Watcher] Boot reconciliation finished. Starting live file watcher...`);
+  } else {
+    console.log(`[Watcher] Skipping boot reconciliation as requested. Starting live file watcher...`);
+  }
 
   const watchPaths = [
     path.join(resolved, 'Projects'),
@@ -133,7 +136,7 @@ export async function startVaultWatcher(vaultPath: string): Promise<void> {
   console.log(`[Watcher] Listening for changes in Projects/ and Proyectos/ at ${resolved}`);
 }
 
-export async function restartVaultWatcher(vaultPath: string): Promise<void> {
+export async function restartVaultWatcher(vaultPath: string, runInitialReconcile = true): Promise<void> {
   await stopVaultWatcher();
-  await startVaultWatcher(vaultPath);
+  await startVaultWatcher(vaultPath, runInitialReconcile);
 }

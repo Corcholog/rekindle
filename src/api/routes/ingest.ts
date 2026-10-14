@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { boss } from '../../queue';
 import { canonicalizeUrl } from '../../workers/ingestionWorker';
+import { sql } from 'drizzle-orm';
 
 const IngestRequestSchema = z.object({
   url: z.string().url().refine((val) => {
@@ -58,6 +59,7 @@ export default async function (server: FastifyInstance) {
             consumedAt: new Date(),
             ingestStatus: 'pending',
             ingestStatusReason: null,
+            consumptionSeq: sql`${contents.consumptionSeq} + 1`,
           },
         })
         .returning({ id: contents.id, createdAt: contents.createdAt, consumedAt: contents.consumedAt });
@@ -66,8 +68,8 @@ export default async function (server: FastifyInstance) {
       // Consider new if created within the last 1000ms and matching consumedAt
       const isNew = Math.abs(record.consumedAt.getTime() - record.createdAt.getTime()) < 1000;
 
-      // Enqueue job with singletonKey to prevent duplicate in-flight processing for the same content
-      await boss.send('ingest_url', { contentId, url }, { singletonKey: contentId });
+      // Enqueue job with singletonKey and retryLimit to prevent duplicate runs and infinite loops
+      await boss.send('ingest_url', { contentId, url }, { singletonKey: contentId, retryLimit: 2 });
 
       const statusCode = isNew ? 202 : 200;
       return reply.status(statusCode).send({

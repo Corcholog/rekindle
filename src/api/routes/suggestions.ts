@@ -64,106 +64,16 @@ export default async function (server: FastifyInstance) {
   }, async (request, reply) => {
     const { projectId, status, limit, offset } = request.query as z.infer<typeof ListSuggestionsQuerySchema>;
 
-    // Helper: query tentative evaluations
-    const getTentativeItems = async () => {
-      const conds = [eq(evaluations.verdict, 'tentative')];
-      if (projectId) conds.push(eq(projectSnapshots.projectId, projectId));
-      const where = and(...conds);
-
-      const rows = await db.select({
-        id: evaluations.id,
-        projectId: projectSnapshots.projectId,
-        projectTitle: projects.title,
-        contentId: contents.id,
-        contentTitle: contents.title,
-        contentUri: contents.uri,
-        observation: sql<string>`'Evaluación tentativa: relación temática o exploratoria'`,
-        suggestedAction: evaluations.triageReasoning,
-        confidenceScore: evaluations.confidenceScore,
-        triageReasoning: evaluations.triageReasoning,
-        createdAt: evaluations.evaluatedAt,
-      })
-      .from(evaluations)
-      .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-      .innerJoin(projects, eq(projectSnapshots.projectId, projects.id))
-      .innerJoin(contents, eq(evaluations.contentId, contents.id))
-      .where(where)
-      .orderBy(desc(evaluations.evaluatedAt));
-
-      return rows.map(r => ({
-        id: r.id,
-        projectId: r.projectId,
-        projectTitle: r.projectTitle,
-        contentId: r.contentId,
-        contentTitle: r.contentTitle,
-        contentUri: r.contentUri,
-        actionType: 'other' as const,
-        targetFile: 'tentative',
-        observation: r.observation,
-        suggestedAction: r.suggestedAction || 'Aporte exploratorio sin acción concreta definida.',
-        status: 'tentative' as const,
-        userFeedback: null,
-        writtenToVault: false,
-        resolvedAt: null,
-        createdAt: r.createdAt.toISOString(),
-        confidenceScore: r.confidenceScore,
-        triageReasoning: r.triageReasoning,
-      }));
-    };
-
-    // Helper: query irrelevant (LLM-discarded) evaluations
-    const getIrrelevantItems = async () => {
-      const conds = [eq(evaluations.verdict, 'irrelevant')];
-      if (projectId) conds.push(eq(projectSnapshots.projectId, projectId));
-      const where = and(...conds);
-
-      const rows = await db.select({
-        id: evaluations.id,
-        projectId: projectSnapshots.projectId,
-        projectTitle: projects.title,
-        contentId: contents.id,
-        contentTitle: contents.title,
-        contentUri: contents.uri,
-        observation: sql<string>`'Descarte por modelo: no aporta evidencia ni argumentos a la tesis'`,
-        suggestedAction: evaluations.triageReasoning,
-        confidenceScore: evaluations.confidenceScore,
-        triageReasoning: evaluations.triageReasoning,
-        createdAt: evaluations.evaluatedAt,
-      })
-      .from(evaluations)
-      .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-      .innerJoin(projects, eq(projectSnapshots.projectId, projects.id))
-      .innerJoin(contents, eq(evaluations.contentId, contents.id))
-      .where(where)
-      .orderBy(desc(evaluations.evaluatedAt));
-
-      return rows.map(r => ({
-        id: r.id,
-        projectId: r.projectId,
-        projectTitle: r.projectTitle,
-        contentId: r.contentId,
-        contentTitle: r.contentTitle,
-        contentUri: r.contentUri,
-        actionType: 'other' as const,
-        targetFile: 'discarded',
-        observation: r.observation,
-        suggestedAction: r.suggestedAction || 'Descartado por el modelo LLM',
-        status: 'discarded' as const,
-        userFeedback: null,
-        writtenToVault: false,
-        resolvedAt: null,
-        createdAt: r.createdAt.toISOString(),
-        confidenceScore: r.confidenceScore,
-        triageReasoning: r.triageReasoning,
-      }));
-    };
-
-    // Helper: query action_suggestions
-    const getSuggestionsItems = async (sugStatus?: 'pending' | 'accepted' | 'discarded') => {
+    if (status === 'pending' || status === 'accepted') {
       const conds = [];
       if (projectId) conds.push(eq(actionSuggestions.projectId, projectId));
-      if (sugStatus) conds.push(eq(actionSuggestions.status, sugStatus));
-      const where = conds.length > 0 ? and(...conds) : undefined;
+      conds.push(eq(actionSuggestions.status, status));
+      const where = and(...conds);
+
+      const [totalRow] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(actionSuggestions)
+        .where(where);
+      const total = totalRow?.count ?? 0;
 
       const rows = await db.select({
         id: actionSuggestions.id,
@@ -189,45 +99,187 @@ export default async function (server: FastifyInstance) {
       .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
       .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
       .where(where)
-      .orderBy(desc(actionSuggestions.createdAt));
+      .orderBy(desc(actionSuggestions.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-      return rows.map(r => ({
+      const paged = rows.map(r => ({
         ...r,
         resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
         createdAt: r.createdAt.toISOString(),
       }));
-    };
+
+      return reply.send({ items: paged, total, limit, offset });
+    }
 
     if (status === 'tentative') {
-      const items = await getTentativeItems();
-      const paged = items.slice(offset, offset + limit);
-      return reply.send({ items: paged, total: items.length, limit, offset });
+      const conds = [eq(evaluations.verdict, 'tentative')];
+      if (projectId) conds.push(eq(projectSnapshots.projectId, projectId));
+      const where = and(...conds);
+
+      const [totalRow] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(evaluations)
+        .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
+        .where(where);
+      const total = totalRow?.count ?? 0;
+
+      const rows = await db.select({
+        id: evaluations.id,
+        projectId: projectSnapshots.projectId,
+        projectTitle: projects.title,
+        contentId: contents.id,
+        contentTitle: contents.title,
+        contentUri: contents.uri,
+        observation: sql<string>`'Evaluación tentativa: relación temática o exploratoria'`,
+        suggestedAction: evaluations.triageReasoning,
+        confidenceScore: evaluations.confidenceScore,
+        triageReasoning: evaluations.triageReasoning,
+        createdAt: evaluations.evaluatedAt,
+      })
+      .from(evaluations)
+      .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
+      .innerJoin(projects, eq(projectSnapshots.projectId, projects.id))
+      .innerJoin(contents, eq(evaluations.contentId, contents.id))
+      .where(where)
+      .orderBy(desc(evaluations.evaluatedAt))
+      .limit(limit)
+      .offset(offset);
+
+      const paged = rows.map(r => ({
+        id: r.id,
+        projectId: r.projectId,
+        projectTitle: r.projectTitle,
+        contentId: r.contentId,
+        contentTitle: r.contentTitle,
+        contentUri: r.contentUri,
+        actionType: 'other' as const,
+        targetFile: 'tentative',
+        observation: r.observation,
+        suggestedAction: r.suggestedAction || 'Aporte exploratorio sin acción concreta definida.',
+        status: 'tentative' as const,
+        userFeedback: null,
+        writtenToVault: false,
+        resolvedAt: null,
+        createdAt: r.createdAt.toISOString(),
+        confidenceScore: r.confidenceScore,
+        triageReasoning: r.triageReasoning,
+      }));
+
+      return reply.send({ items: paged, total, limit, offset });
     }
 
-    if (status === 'discarded') {
-      const userDiscarded = await getSuggestionsItems('discarded');
-      const llmDiscarded = await getIrrelevantItems();
-      const allDiscarded = [...userDiscarded, ...llmDiscarded].sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      const paged = allDiscarded.slice(offset, offset + limit);
-      return reply.send({ items: paged, total: allDiscarded.length, limit, offset });
-    }
+    // Combined queries for 'active' (pending + tentative) or 'discarded' (user discarded + LLM irrelevant)
+    const isDiscarded = status === 'discarded';
+    const sugStatus = isDiscarded ? 'discarded' : 'pending';
+    const evalVerdict = isDiscarded ? 'irrelevant' : 'tentative';
+    const evalTarget = isDiscarded ? 'discarded' : 'tentative';
+    const evalObs = isDiscarded 
+      ? 'Descarte por modelo: no aporta evidencia ni argumentos a la tesis' 
+      : 'Evaluación tentativa: relación temática o exploratoria';
+    const evalDefaultAction = isDiscarded 
+      ? 'Descartado por el modelo LLM' 
+      : 'Aporte exploratorio sin acción concreta definida.';
+    const finalEvalStatus = isDiscarded ? 'discarded' : 'tentative';
 
-    if (status === 'pending' || status === 'accepted') {
-      const items = await getSuggestionsItems(status);
-      const paged = items.slice(offset, offset + limit);
-      return reply.send({ items: paged, total: items.length, limit, offset });
-    }
+    const projectFilterA = projectId ? sql`AND a.project_id = ${projectId}` : sql``;
+    const projectFilterE = projectId ? sql`AND ps.project_id = ${projectId}` : sql``;
 
-    // Default: 'active' (All non-discarded items: pending actionable + tentative)
-    const pendingItems = await getSuggestionsItems('pending');
-    const tentativeItems = await getTentativeItems();
-    const allActive = [...pendingItems, ...tentativeItems].sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    const paged = allActive.slice(offset, offset + limit);
-    return reply.send({ items: paged, total: allActive.length, limit, offset });
+    const countRes = await db.execute<{ count: number }>(sql`
+      WITH combined AS (
+        SELECT a.id
+        FROM action_suggestions a
+        WHERE a.status = ${sugStatus} ${projectFilterA}
+        UNION ALL
+        SELECT e.id
+        FROM evaluations e
+        JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
+        WHERE e.verdict = ${evalVerdict} ${projectFilterE}
+      )
+      SELECT count(*)::int AS count FROM combined
+    `);
+    const total = countRes.rows[0]?.count ?? 0;
+
+    const dataRes = await db.execute<{
+      id: string;
+      projectId: string;
+      projectTitle: string;
+      contentId: string;
+      contentTitle: string;
+      contentUri: string;
+      actionType: any;
+      targetFile: string;
+      observation: string;
+      suggestedAction: string;
+      status: any;
+      userFeedback: string | null;
+      writtenToVault: boolean;
+      resolvedAt: Date | string | null;
+      createdAt: Date | string;
+      confidenceScore: number | null;
+      triageReasoning: string | null;
+    }>(sql`
+      WITH combined AS (
+        SELECT
+          a.id,
+          a.project_id AS "projectId",
+          p.title AS "projectTitle",
+          a.content_id AS "contentId",
+          c.title AS "contentTitle",
+          c.uri AS "contentUri",
+          a.action_type AS "actionType",
+          a.target_file AS "targetFile",
+          a.observation,
+          a.suggested_action AS "suggestedAction",
+          a.status,
+          a.user_feedback AS "userFeedback",
+          a.written_to_vault AS "writtenToVault",
+          a.resolved_at AS "resolvedAt",
+          a.created_at AS "createdAt",
+          e.confidence_score AS "confidenceScore",
+          e.triage_reasoning AS "triageReasoning"
+        FROM action_suggestions a
+        JOIN projects p ON a.project_id = p.id
+        JOIN contents c ON a.content_id = c.id
+        LEFT JOIN evaluations e ON a.evaluation_id = e.id
+        WHERE a.status = ${sugStatus} ${projectFilterA}
+        UNION ALL
+        SELECT
+          e.id,
+          ps.project_id AS "projectId",
+          p.title AS "projectTitle",
+          c.id AS "contentId",
+          c.title AS "contentTitle",
+          c.uri AS "contentUri",
+          'other'::varchar AS "actionType",
+          ${evalTarget}::varchar AS "targetFile",
+          ${evalObs} AS observation,
+          COALESCE(e.triage_reasoning, ${evalDefaultAction}) AS "suggestedAction",
+          ${finalEvalStatus}::varchar AS status,
+          NULL::text AS "userFeedback",
+          false AS "writtenToVault",
+          NULL::timestamp AS "resolvedAt",
+          e.evaluated_at AS "createdAt",
+          e.confidence_score AS "confidenceScore",
+          e.triage_reasoning AS "triageReasoning"
+        FROM evaluations e
+        JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
+        JOIN projects p ON ps.project_id = p.id
+        JOIN contents c ON e.content_id = c.id
+        WHERE e.verdict = ${evalVerdict} ${projectFilterE}
+      )
+      SELECT * FROM combined
+      ORDER BY "createdAt" DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `);
+
+    const paged = dataRes.rows.map(r => ({
+      ...r,
+      resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
+      createdAt: new Date(r.createdAt).toISOString(),
+    }));
+
+    return reply.send({ items: paged, total, limit, offset });
   });
 
   // 2. Get Single Suggestion Detail
@@ -520,8 +572,8 @@ export default async function (server: FastifyInstance) {
         try {
           await writeAcceptedSuggestionToVault(id, vaultPath);
         } catch (vaultError) {
-          server.log.error(vaultError, `Failed writing accepted suggestion ${id} to vault; queued for retry`);
-          await boss.send('sync_suggestions', { projectId: existing.projectId }).catch(() => {});
+          server.log.error({ err: vaultError }, `Failed writing accepted suggestion ${id} to vault; queued for retry`);
+          await boss.send('sync_suggestions', { projectId: existing.projectId }, { singletonKey: `sync:${existing.projectId}`, retryLimit: 2 }).catch(() => {});
         }
       } else {
         server.log.warn(`VAULT_PATH not set; accepted suggestion ${id} not written to vault`);

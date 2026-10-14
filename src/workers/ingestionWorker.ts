@@ -203,7 +203,7 @@ export const setupIngestionWorker = async () => {
         console.log(`Successfully ingested and vectorised: ${url}`);
         
         // 6. Trigger Evaluation Pipeline
-        await boss.send('evaluate_content', { contentId });
+        await boss.send('evaluate_content', { contentId }, { singletonKey: `eval:${contentId}`, retryLimit: 2 });
         console.log(`Enqueued evaluation job for content ${contentId}`);
       } catch (error: any) {
         console.error(`Error in ingestion worker for ${url}:`, error);
@@ -214,8 +214,14 @@ export const setupIngestionWorker = async () => {
             ingestStatusReason: error.message || 'Unknown error'
           })
           .where(eq(contents.id, contentId));
-          
-        throw error; // Let pg-boss handle retries if configured
+
+        // For permanent / non-retryable errors (e.g. 404, bad URL, unsupported format, no transcripts),
+        // do not rethrow to pg-boss so it doesn't wastefully retry.
+        const errMsg = error.message || '';
+        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed/i.test(errMsg);
+        if (!isNonRetryable) {
+          throw error;
+        }
       }
     }
   });

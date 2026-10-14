@@ -9,11 +9,12 @@ import settingsRoute from './routes/settings';
 import systemRoute from './routes/system';
 import fastifyStatic from '@fastify/static';
 import * as path from 'path';
-import { startQueue } from '../queue';
+import { startQueue, boss } from '../queue';
+import { pool } from '../db';
 import { setupIngestionWorker } from '../workers/ingestionWorker';
 import { setupEvaluationWorker } from '../workers/evaluationWorker';
 import { setupVaultWorker } from '../workers/vaultWorker';
-import { startVaultWatcher } from '../vault';
+import { startVaultWatcher, stopVaultWatcher } from '../vault/watcher';
 
 export const server = Fastify({
   logger: process.env.NODE_ENV === 'test' ? false : { level: process.env.LOG_LEVEL || 'warn' }
@@ -35,10 +36,10 @@ server.setErrorHandler((error: any, request, reply) => {
   }
   
   const statusCode = error.statusCode || 500;
-  server.log.error(error);
+  server.log.error({ err: error });
   reply.status(statusCode).send({
     error: statusCode === 500 ? 'Internal Server Error' : error.name || 'Error',
-    message: error.message || 'An unexpected error occurred',
+    message: statusCode === 500 ? 'An internal server error occurred' : error.message || 'An unexpected error occurred',
   });
 });
 
@@ -102,9 +103,35 @@ export const startServer = async () => {
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     await server.listen({ port, host });
     console.log(`Server listening on http://${host}:${port}`);
+
+    // Graceful shutdown handlers
+    let isShuttingDown = false;
+    const handleShutdown = async (signal: string) => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
+      console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+      await stopServer();
+      process.exit(0);
+    };
+
+    process.once('SIGINT', () => handleShutdown('SIGINT'));
+    process.once('SIGTERM', () => handleShutdown('SIGTERM'));
   } catch (err) {
     server.log.error({ err });
     process.exit(1);
+  }
+};
+
+export const stopServer = async () => {
+  try {
+    server.log.info('Shutting down server gracefully...');
+    await stopVaultWatcher();
+    try { await boss.stop(); } catch {}
+    try { await server.close(); } catch {}
+    try { await pool.end(); } catch {}
+    server.log.info('Server shutdown complete');
+  } catch (err) {
+    server.log.error({ err }, 'Error during shutdown');
   }
 };
 

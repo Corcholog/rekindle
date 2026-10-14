@@ -66,6 +66,14 @@ export default async function (server: FastifyInstance) {
     const watcherActive = isVaultWatcherActive();
 
     const allProjects = await db.select().from(projects).orderBy(projects.title);
+    const countRows = await db.select({
+      projectId: actionSuggestions.projectId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(actionSuggestions)
+    .groupBy(actionSuggestions.projectId);
+
+    const countMap = new Map<string, number>(countRows.map(r => [r.projectId, r.count]));
     const projectDetails = [];
 
     for (const proj of allProjects) {
@@ -79,19 +87,13 @@ export default async function (server: FastifyInstance) {
         }
       }
 
-      const [countResult] = await db.select({
-        count: sql<number>`count(*)::int`,
-      })
-      .from(actionSuggestions)
-      .where(eq(actionSuggestions.projectId, proj.id));
-
       projectDetails.push({
         id: proj.id,
         title: proj.title,
         folderPath: proj.folderPath,
         isActive: proj.isActive,
         existsOnDisk,
-        suggestionsCount: countResult?.count || 0,
+        suggestionsCount: countMap.get(proj.id) ?? 0,
       });
     }
 
@@ -126,8 +128,8 @@ export default async function (server: FastifyInstance) {
     // Persist new path in process.env and .env file
     const persistedPath = await persistVaultPath(validation.vaultPath);
 
-    // Restart the watcher with the new path
-    await restartVaultWatcher(persistedPath);
+    // Restart the watcher with the new path without duplicating initial reconcile
+    await restartVaultWatcher(persistedPath, false);
 
     // Reconcile all projects with the new vault location
     const syncStatuses = await reconcileAllProjects(persistedPath);
@@ -145,7 +147,7 @@ export default async function (server: FastifyInstance) {
       vaultPath: persistedPath,
       hasProjectsDir: validation.hasProjectsDir,
       projectsDirName: validation.projectsDirName,
-      watcherActive: true,
+      watcherActive: isVaultWatcherActive(),
       projects: syncStatuses,
       summary: {
         activeProjects: activeCount,

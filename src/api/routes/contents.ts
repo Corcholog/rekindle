@@ -75,12 +75,16 @@ async function checkPgbossJobTable(): Promise<boolean> {
 }
 
 const hasSpatialAffinitySql = sql<boolean>`EXISTS (
-  SELECT 1 FROM project_snapshots ps
-  JOIN projects p ON ps.project_id = p.id
-  WHERE p.is_active = true 
-    AND ps.embedding IS NOT NULL 
-    AND contents.embedding IS NOT NULL
-    AND ps.embedding <=> contents.embedding < 0.6
+  SELECT 1 FROM (
+    SELECT DISTINCT ON (ps.project_id) ps.embedding
+    FROM project_snapshots ps
+    JOIN projects p ON ps.project_id = p.id
+    WHERE p.is_active = true 
+      AND ps.embedding IS NOT NULL 
+    ORDER BY ps.project_id, ps.captured_at DESC
+  ) latest_ps
+  WHERE contents.embedding IS NOT NULL
+    AND latest_ps.embedding <=> contents.embedding < 0.6
 )`;
 
 const evaluationsListSql = sql<any>`coalesce((
