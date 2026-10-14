@@ -71,6 +71,8 @@ const ProjectSynergySchema = z.object({
   projectDistance: z.number().nullable().optional(),
   bestNoteDistance: z.number().nullable().optional(),
   rationale: z.string(),
+  hasExistingBridge: z.boolean().optional(),
+  bridgeFilePath: z.string().nullable().optional(),
   closestNotes: z.array(SynergyNoteSchema),
 });
 
@@ -87,6 +89,63 @@ function computeCosineDistance(a: number[] | null | undefined, b: number[] | nul
   if (normA === 0 || normB === 0) return 1.0;
   const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
   return Math.max(0, 1 - sim);
+}
+
+function getSynergyFileNames(titleA: string, titleB: string): [string, string] {
+  const cleanA = titleA.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
+  const cleanB = titleB.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
+  return [`synergy_${cleanA}_${cleanB}.md`, `synergy_${cleanB}_${cleanA}.md`];
+}
+
+function parseExistingBridgeFile(fileName: string, content: string) {
+  const titleMatch = content.match(/^title:\s*"([^"]+)"/m) || content.match(/^#\s+(.+)$/m);
+  const bridgeTitle = titleMatch ? titleMatch[1].trim() : path.basename(fileName, '.md');
+
+  let overview = '';
+  const abstractMatch = content.match(/>\s*\[!abstract\][^\n]*\n((?:>\s*[^\n]*\n?)+)/i);
+  if (abstractMatch) {
+    overview = abstractMatch[1]
+      .split('\n')
+      .map(line => line.replace(/^>\s?/, '').trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  const sharedProblems: string[] = [];
+  const problemsMatch = content.match(/## Preguntas y Problemas Compartidos\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
+  if (problemsMatch) {
+    const lines = problemsMatch[1].split('\n');
+    for (const l of lines) {
+      const trimmed = l.replace(/^[-*]\s*(\[[ xX]\]\s*)?/, '').trim();
+      if (trimmed) sharedProblems.push(trimmed);
+    }
+  }
+
+  const mutualBenefits: string[] = [];
+  const benefitsMatch = content.match(/## Beneficios Mutuos y Transferencia\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
+  if (benefitsMatch) {
+    const lines = benefitsMatch[1].split('\n');
+    for (const l of lines) {
+      const trimmed = l.replace(/^[-*]\s*(\[[ xX]\]\s*)?/, '').trim();
+      if (trimmed) mutualBenefits.push(trimmed);
+    }
+  }
+
+  let markdownContent = '';
+  const afterBenefitsMatch = content.match(/## Beneficios Mutuos y Transferencia[\s\S]*?\n\n([\s\S]*?)(?=\n---\n\*Generado|$)/i);
+  if (afterBenefitsMatch) {
+    markdownContent = afterBenefitsMatch[1].trim();
+  } else {
+    markdownContent = content.replace(/^---[\s\S]*?---\n*/, '').trim();
+  }
+
+  return {
+    bridgeTitle,
+    overview: overview || 'Sinergia temática existente en el Vault.',
+    sharedProblems: sharedProblems.length > 0 ? sharedProblems : ['Integración conceptual y metodológica'],
+    mutualBenefits: mutualBenefits.length > 0 ? mutualBenefits : ['Complementariedad de notas e investigación'],
+    markdownContent,
+  };
 }
 
 export default async function (server: FastifyInstance) {
@@ -327,6 +386,21 @@ export default async function (server: FastifyInstance) {
           rationale = `Resonancia temática detectada entre ${pA.title} y ${pB.title}.`;
         }
 
+        const [f1, f2] = getSynergyFileNames(pA.title, pB.title);
+        let existingBridgeFile: string | null = null;
+        const vaultPath = getCurrentVaultPath();
+        if (vaultPath) {
+          try {
+            const p1 = path.join(vaultPath, 'Projects', f1);
+            const p2 = path.join(vaultPath, 'Projects', f2);
+            if (await fs.access(p1).then(() => true).catch(() => false)) {
+              existingBridgeFile = f1;
+            } else if (await fs.access(p2).then(() => true).catch(() => false)) {
+              existingBridgeFile = f2;
+            }
+          } catch {}
+        }
+
         synergies.push({
           id: `${pA.id}_${pB.id}`,
           projectA: {
@@ -345,6 +419,8 @@ export default async function (server: FastifyInstance) {
           projectDistance: projectDist !== null ? Math.round(projectDist * 1000) / 1000 : null,
           bestNoteDistance: closestNotes.length > 0 ? closestNotes[0].distance : null,
           rationale,
+          hasExistingBridge: Boolean(existingBridgeFile),
+          bridgeFilePath: existingBridgeFile,
           closestNotes,
         });
       }
@@ -366,6 +442,7 @@ export default async function (server: FastifyInstance) {
         projectAId: z.string().uuid(),
         projectBId: z.string().uuid(),
         saveToVault: z.boolean().optional().default(true),
+        forceRegenerate: z.boolean().optional().default(false),
       }),
       response: {
         200: z.object({
@@ -377,13 +454,14 @@ export default async function (server: FastifyInstance) {
           markdownContent: z.string(),
           filePath: z.string().nullable().optional(),
           writtenToVault: z.boolean(),
+          isCached: z.boolean().optional(),
         }),
         404: z.object({ error: z.string(), message: z.string() }),
         500: z.object({ error: z.string(), message: z.string() }),
       },
     },
   }, async (request, reply) => {
-    const { projectAId, projectBId, saveToVault = true } = request.body as any;
+    const { projectAId, projectBId, saveToVault = true, forceRegenerate = false } = request.body as any;
 
     const [projA] = await db.select().from(projects).where(eq(projects.id, projectAId)).limit(1);
     const [projB] = await db.select().from(projects).where(eq(projects.id, projectBId)).limit(1);
@@ -393,6 +471,46 @@ export default async function (server: FastifyInstance) {
         error: 'Not Found',
         message: 'Uno o ambos proyectos no fueron encontrados.',
       });
+    }
+
+    const vaultPath = getCurrentVaultPath();
+    const [fileA, fileB] = getSynergyFileNames(projA.title, projB.title);
+
+    // If not forcing regeneration, check if bridge already exists on disk in Obsidian Vault
+    if (!forceRegenerate && vaultPath) {
+      try {
+        const pathA = path.join(vaultPath, 'Projects', fileA);
+        const pathB = path.join(vaultPath, 'Projects', fileB);
+
+        let existingPath: string | null = null;
+        let existingFileName: string | null = null;
+
+        if (await fs.access(pathA).then(() => true).catch(() => false)) {
+          existingPath = pathA;
+          existingFileName = fileA;
+        } else if (await fs.access(pathB).then(() => true).catch(() => false)) {
+          existingPath = pathB;
+          existingFileName = fileB;
+        }
+
+        if (existingPath && existingFileName) {
+          const rawContent = await fs.readFile(existingPath, 'utf-8');
+          const parsed = parseExistingBridgeFile(existingFileName, rawContent);
+          return reply.send({
+            success: true,
+            bridgeTitle: parsed.bridgeTitle,
+            overview: parsed.overview,
+            sharedProblems: parsed.sharedProblems,
+            mutualBenefits: parsed.mutualBenefits,
+            markdownContent: parsed.markdownContent,
+            filePath: existingFileName,
+            writtenToVault: true,
+            isCached: true,
+          });
+        }
+      } catch (err) {
+        server.log.warn({ err }, 'Could not read existing synergy file, proceeding to generate');
+      }
     }
 
     const [snapA] = await db.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projA.id)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
@@ -446,7 +564,6 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
 
     let writtenToVault = false;
     let fileName: string | null = null;
-    const vaultPath = getCurrentVaultPath();
 
     if (saveToVault && vaultPath) {
       try {
@@ -502,6 +619,7 @@ ${result.markdownContent}
       markdownContent: result.markdownContent,
       filePath: fileName,
       writtenToVault,
+      isCached: false,
     });
   });
 

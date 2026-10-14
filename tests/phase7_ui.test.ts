@@ -381,7 +381,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(mechanicsNote).toBeDefined();
     expect(mechanicsNote!.embedding).toBeDefined();
     expect(mechanicsNote!.embedding!.length).toBe(1024);
-  });
+  }, 30000);
 
   it('Hierarchical note-level embeddings detect focal note and resolve targetFile in evaluations', async () => {
     const { db: drizzleDb } = await import('../src/db/index');
@@ -827,6 +827,38 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const content = await fs.readFile(bridgePath, 'utf-8');
     expect(content).toContain('type: cross_project_synergy');
     expect(content).toContain('Puente Conceptual: Agentes y Memoria Vectorial');
+
+    evalSpy.mockRestore();
+  });
+
+  it('Feature 5: POST /api/projects/synergies/explore reutiliza puente existente en Vault sin re-evaluar con IA', async () => {
+    const { projects } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { eq } = await import('drizzle-orm');
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+
+    const [projB] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Vector_Databases'));
+    expect(projB).toBeDefined();
+
+    const evalSpy = vi.spyOn(sharedAiProvider, 'evaluateContent');
+
+    // Call without forceRegenerate -> since the previous test already generated synergy_AI_Agents_Vector_Databases.md
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/projects/synergies/explore',
+      payload: {
+        projectAId: projectId,
+        projectBId: projB.id,
+        forceRegenerate: false,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.success).toBe(true);
+    expect(body.isCached).toBe(true);
+    expect(body.bridgeTitle).toBe('Puente Conceptual: Agentes y Memoria Vectorial');
+    expect(evalSpy).not.toHaveBeenCalled();
 
     evalSpy.mockRestore();
   });

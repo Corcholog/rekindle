@@ -1492,6 +1492,12 @@ function renderSynergies() {
       `
       : '';
 
+    const hasBridge = Boolean(s.hasExistingBridge);
+    const bridgeBadge = hasBridge
+      ? `<span class="synergy-cached-badge" title="Este puente ya fue generado y está guardado en tu Vault">✦ En Vault</span>`
+      : '';
+    const btnText = hasBridge ? '✦ Ver Puente Guardado' : '✦ Explorar Puente';
+
     return `
       <div class="synergy-card">
         <div class="synergy-card-header">
@@ -1500,7 +1506,10 @@ function renderSynergies() {
             <span class="synergy-arrow">⇄</span>
             <span class="synergy-proj-name" title="${escapeHtml(s.projectB.title)}">${escapeHtml(s.projectB.title)}</span>
           </div>
-          <span class="synergy-score-chip">${s.similarityScore}% Afinidad</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+            ${bridgeBadge}
+            <span class="synergy-score-chip">${s.similarityScore}% Afinidad</span>
+          </div>
         </div>
 
         <p class="synergy-rationale">${escapeHtml(s.rationale)}</p>
@@ -1514,7 +1523,7 @@ function renderSynergies() {
             data-title-a="${escapeHtml(s.projectA.title)}"
             data-title-b="${escapeHtml(s.projectB.title)}"
           >
-            <span>✦ Explorar Puente</span>
+            <span>${btnText}</span>
           </button>
         </div>
       </div>
@@ -1528,19 +1537,21 @@ function renderSynergies() {
       const pB = target.dataset.projB;
       const tA = target.dataset.titleA;
       const tB = target.dataset.titleB;
-      exploreSynergyBridge(pA, pB, tA, tB);
+      exploreSynergyBridge(pA, pB, tA, tB, false);
     });
   });
 }
 
-async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
+async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forceRegenerate = false) {
   if (!elements.synergyBridgeModal) return;
 
   elements.synergyModalTitle.textContent = `Puente: ${titleA} ⇄ ${titleB}`;
   elements.synergyModalBody.innerHTML = `
     <div style="text-align: center; padding: 3rem 1.5rem;">
       <span class="spinner large"></span>
-      <p style="color: var(--text-secondary); margin-top: 1rem;">Sintetizando conexiones temáticas y metodológicas entre ambos proyectos...</p>
+      <p style="color: var(--text-secondary); margin-top: 1rem;">
+        ${forceRegenerate ? 'Regenerando conexiones temáticas y metodológicas con el modelo de IA...' : 'Consultando puente de investigación...'}
+      </p>
     </div>
   `;
   elements.synergyBridgeModal.showModal();
@@ -1549,7 +1560,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
     const res = await fetch('/api/projects/synergies/explore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectAId, projectBId, saveToVault: true }),
+      body: JSON.stringify({ projectAId, projectBId, saveToVault: true, forceRegenerate }),
     });
 
     const data = await res.json();
@@ -1560,18 +1571,25 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
     elements.synergyModalTitle.textContent = data.bridgeTitle;
 
     const vaultBadge = data.writtenToVault && data.filePath
-      ? `<span class="chip chip-actionable">Guardado en Vault: ${escapeHtml(data.filePath)}</span>`
+      ? `<span class="chip chip-actionable">Vault: ${escapeHtml(data.filePath)}</span>`
       : '';
+
+    const cacheIndicator = data.isCached
+      ? `<span class="synergy-cached-badge" title="Cargado directamente desde el archivo existente en tu Vault">✦ Existente en Vault</span>`
+      : `<span class="synergy-cached-badge" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-primary-hover); border-color: var(--border-highlight);">✦ Generado ahora</span>`;
 
     elements.synergyModalBody.innerHTML = `
       <div class="synthesis-content-view">
         <div class="synthesis-meta-bar">
-          <div class="synergy-proj-bridge">
-            <strong>[[${escapeHtml(titleA)}]]</strong>
+          <div class="synergy-modal-bridge-titles">
+            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleA)}">[[${escapeHtml(titleA)}]]</span>
             <span class="synergy-arrow">⇄</span>
-            <strong>[[${escapeHtml(titleB)}]]</strong>
+            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleB)}">[[${escapeHtml(titleB)}]]</span>
           </div>
-          ${vaultBadge}
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            ${cacheIndicator}
+            ${vaultBadge}
+          </div>
         </div>
 
         <div class="synthesis-section">
@@ -1584,7 +1602,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
           <ul class="synthesis-steps-list">
             ${(data.sharedProblems || []).map(p => `
               <li class="synthesis-step-item">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 <span>${escapeHtml(p)}</span>
               </li>
             `).join('')}
@@ -1603,7 +1621,18 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
           </ul>
         </div>
 
+        ${data.markdownContent ? `
+        <div class="synthesis-section">
+          <span class="synthesis-section-title">Propuesta de Integración Markdown</span>
+          <pre class="synthesis-markdown-preview"><code>${escapeHtml(data.markdownContent)}</code></pre>
+        </div>
+        ` : ''}
+
         <div class="synthesis-actions-bar">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-regenerate-synergy" title="Volver a solicitar al modelo de lenguaje una síntesis fresca">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            <span>Regenerar con IA</span>
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar Nota</button>
           <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Listo</button>
         </div>
@@ -1612,6 +1641,10 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
 
     document.getElementById('btn-close-synergy-view')?.addEventListener('click', () => {
       elements.synergyBridgeModal.close();
+    });
+
+    document.getElementById('btn-regenerate-synergy')?.addEventListener('click', () => {
+      exploreSynergyBridge(projectAId, projectBId, titleA, titleB, true);
     });
 
     document.getElementById('btn-copy-synergy-note')?.addEventListener('click', async () => {
@@ -1623,9 +1656,14 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB) {
       }
     });
 
-    if (data.writtenToVault && data.filePath) {
+    if (data.isCached) {
+      showToast(`Puente cargado desde el Vault: ${data.filePath}`, 'info');
+    } else if (data.writtenToVault && data.filePath) {
       showToast(`Puente de investigación guardado en Obsidian: ${data.filePath}`, 'success');
     }
+
+    // Refresh synergies list in background so the badge updates
+    loadSynergies();
   } catch (err) {
     console.error('Synergy exploration error:', err);
     elements.synergyModalBody.innerHTML = `
