@@ -1,0 +1,1 @@
+ALTER TABLE "project_snapshots" ADD COLUMN IF NOT EXISTS "notes_content" text;

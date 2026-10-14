@@ -1,0 +1,20 @@
+[
+  {
+    "project_name": "Project Alpha: AI Agents",
+    "project_thesis": "AI Agents will revolutionize software engineering.",
+    "content_uri": "https://example.com/ai-agents-2026",
+    "content_title": "The State of AI Agents in 2026",
+    "expected_relevance": true,
+    "user_label_actionable": null, 
+    "user_label_rationale": "RELLENAR: ¿Por qué es útil o inútil para el proyecto?"
+  },
+  {
+    "project_name": "Project Alpha: AI Agents",
+    "project_thesis": "AI Agents will revolutionize software engineering.",
+    "content_uri": "https://example.com/best-pasta-recipes",
+    "content_title": "10 Best Pasta Recipes",
+    "expected_relevance": false,
+    "user_label_actionable": null,
+    "user_label_rationale": "RELLENAR"
+  }
+]

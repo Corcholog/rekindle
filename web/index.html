@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loom — Asistente de Escritura Contextual</title>
+  <meta name="description" content="Panel de control para ingesta de contenidos y triaje de sugerencias inteligentes conectadas a tu Vault de Obsidian.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧵</text></svg>">
+</head>
+<body>
+  <div class="app-background"></div>
+
+  <!-- Header -->
+  <header class="app-header" id="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">Loom</h1>
+          <span class="brand-subtitle">Asistente de Escritura Contextual</span>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Navegación principal">
+        <button type="button" class="nav-tab active" id="tab-inbox" data-view="inbox">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+          </svg>
+          <span>Consumo</span>
+          <span class="badge badge-subtle" id="inbox-active-count" style="display: none;">0</span>
+        </button>
+
+        <button type="button" class="nav-tab" id="tab-triage" data-view="triage">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>Sugerencias</span>
+          <span class="badge badge-accent" id="triage-pending-badge">0</span>
+        </button>
+
+        <button type="button" class="nav-tab" id="tab-settings" data-view="settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Configuración</span>
+        </button>
+      </nav>
+
+      <div class="header-status">
+        <span class="status-indicator live" id="live-indicator" title="Conexión en vivo activa"></span>
+        <span class="status-text" id="live-text">Conectado</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content" id="main-content">
+    
+    <!-- Global Vault Warning Banner (Shown if Vault path is invalid or missing) -->
+    <div class="vault-warning-banner" id="vault-warning-banner" style="display: none;" role="alert">
+      <div class="banner-content">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        <span id="vault-banner-text">El Vault de Obsidian no está configurado o no se encuentra en el disco.</span>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-banner-go-settings">Configurar Vault</button>
+    </div>
+
+    <!-- VIEW A: CONSUMO -->
+    <section class="view-section active" id="view-inbox" aria-label="Consumo">
+      <div class="content-wrapper">
+        
+        <!-- URL Processing Card -->
+        <div class="card glass-card ingest-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Procesar Enlace</h2>
+              <p class="card-description">Pega la URL de un artículo, blog técnico o video de YouTube para analizarlo contra tus proyectos de Obsidian.</p>
+            </div>
+          </div>
+
+          <form id="ingest-form" class="ingest-form">
+            <div class="input-group">
+              <label for="url-input" class="visually-hidden">URL del enlace a procesar</label>
+              <div class="input-wrapper">
+                <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                <input 
+                  type="url" 
+                  id="url-input" 
+                  name="url" 
+                  class="text-input" 
+                  placeholder="https://ejemplo.com/articulo o enlace de YouTube..." 
+                  required 
+                  autocomplete="off"
+                  enterkeyhint="go"
+                >
+              </div>
+              <button type="submit" id="btn-submit-url" class="btn btn-primary">
+                <span class="btn-text">Procesar</span>
+                <span class="spinner" id="ingest-spinner" style="display: none;"></span>
+              </button>
+            </div>
+            <div id="ingest-form-error" class="form-error" style="display: none;"></div>
+          </form>
+        </div>
+
+        <!-- Contents History List -->
+        <div class="feed-section">
+          <div class="feed-header">
+            <div class="feed-title-wrapper">
+              <h3 class="feed-title">Historial de Contenidos</h3>
+              <span class="feed-count" id="feed-count">0 contenidos</span>
+            </div>
+            <div class="feed-filters">
+              <label for="filter-status" class="visually-hidden">Filtrar por estado</label>
+              <select id="filter-status" class="select-input">
+                <option value="">Todos los estados</option>
+                <option value="ready">Listos</option>
+                <option value="extracting">Extrayendo</option>
+                <option value="summarizing">Resumiendo</option>
+                <option value="embedding">Indexando</option>
+                <option value="failed">Fallidos</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-icon" id="btn-refresh-feed" title="Actualizar lista">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div id="contents-list" class="items-list">
+            <div class="empty-state" id="contents-loading">
+              <span class="spinner large"></span>
+              <p>Cargando contenidos...</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW B: SUGGESTIONS BOARD -->
+    <section class="view-section" id="view-triage" aria-label="Sugerencias">
+      <div class="triage-layout">
+        
+        <!-- Sidebar Projects -->
+        <aside class="triage-sidebar">
+          <div class="sidebar-header">
+            <h2 class="sidebar-title">Proyectos Activos</h2>
+            <span class="sidebar-badge" id="projects-count">0</span>
+          </div>
+
+          <div class="projects-list" id="projects-list">
+            <!-- Rendered dynamically -->
+          </div>
+        </aside>
+
+        <!-- Main Triage Feed -->
+        <div class="triage-main">
+          
+          <!-- Selected Project Info Bar -->
+          <div class="project-hero" id="project-hero">
+            <div class="project-hero-content">
+              <span class="hero-label">PROYECTO SELECCIONADO</span>
+              <h3 class="hero-title" id="selected-project-title">Todos los Proyectos</h3>
+              <p class="hero-thesis" id="selected-project-thesis">Revisando sugerencias cruzadas entre todos tus proyectos de investigación.</p>
+            </div>
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="triage-tabs-bar">
+            <div class="triage-tabs" role="tablist">
+              <button type="button" class="triage-tab active" id="tab-status-active" data-status="active" role="tab" aria-selected="true">
+                <span>No Descartadas</span>
+                <span class="pill-badge" id="badge-active">0</span>
+              </button>
+              <button type="button" class="triage-tab" id="tab-status-pending" data-status="pending" role="tab" aria-selected="false">
+                <span>Accionables</span>
+                <span class="pill-badge" id="badge-pending">0</span>
+              </button>
+              <button type="button" class="triage-tab" id="tab-status-tentative" data-status="tentative" role="tab" aria-selected="false">
+                <span>Tentativas</span>
+                <span class="pill-badge" id="badge-tentative">0</span>
+              </button>
+              <button type="button" class="triage-tab" id="tab-status-accepted" data-status="accepted" role="tab" aria-selected="false">
+                <span>Aceptadas</span>
+                <span class="pill-badge" id="badge-accepted">0</span>
+              </button>
+              <button type="button" class="triage-tab" id="tab-status-discarded" data-status="discarded" role="tab" aria-selected="false">
+                <span>Descartadas</span>
+                <span class="pill-badge" id="badge-discarded">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Suggestions List -->
+          <div id="suggestions-list" class="suggestions-container">
+            <div class="empty-state">
+              <p>Cargando sugerencias de acción...</p>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW C: SETTINGS -->
+    <section class="view-section" id="view-settings" aria-label="Configuración">
+      <div class="content-wrapper settings-wrapper">
+        
+        <!-- Settings Header & Hero -->
+        <div class="card glass-card settings-hero-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Configuración del Vault de Obsidian</h2>
+              <p class="card-description">Administra la ubicación de tus notas y sincroniza en tiempo real tus proyectos.</p>
+            </div>
+            <div id="settings-status-pill" class="status-pill checking">
+              <span class="status-dot"></span>
+              <span id="settings-status-label">Verificando...</span>
+            </div>
+          </div>
+
+          <!-- Vault Path Form -->
+          <form id="vault-settings-form" class="vault-form" novalidate>
+            <div class="form-group">
+              <label for="vault-path-input" class="form-label">
+                Ruta Absoluta del Vault
+                <span class="required-indicator" aria-hidden="true">*</span>
+              </label>
+              <div class="input-with-button">
+                <input 
+                  type="text" 
+                  id="vault-path-input" 
+                  name="vaultPath" 
+                  class="text-input" 
+                  placeholder="Ej: C:\Usuarios\tunombre\Documentos\Obsidian\MiVault" 
+                  required
+                  autocomplete="off"
+                  spellcheck="false"
+                >
+                <button type="submit" class="btn btn-primary" id="btn-save-vault">
+                  <span class="btn-text">Guardar y Sincronizar</span>
+                  <span class="spinner" id="vault-save-spinner" style="display: none;"></span>
+                </button>
+              </div>
+              <p class="form-help-text">
+                Loom buscará y observará automáticamente las carpetas <code>Projects/</code> o <code>Proyectos/</code> dentro de esta ruta.
+              </p>
+              <div class="form-feedback" id="vault-form-feedback" style="display: none;"></div>
+            </div>
+          </form>
+
+          <!-- Current Vault Info Bar -->
+          <div class="vault-info-bar" id="vault-info-bar">
+            <div class="info-item">
+              <span class="info-label">Ruta Activa:</span>
+              <code class="info-value" id="info-active-path">No configurado</code>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Observador en Vivo:</span>
+              <span class="info-value" id="info-watcher-status">Inactivo</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Carpeta Proyectos:</span>
+              <span class="info-value" id="info-projects-folder">No detectada</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-rescan-vault" title="Re-escanear directorio de proyectos">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>Re-escanear</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scenarios & Diagnostics Card -->
+        <div class="card glass-card settings-diagnostics-card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Proyectos Detectados y Comportamiento</h3>
+              <p class="card-description">Estado de las notas de proyectos según la ubicación configurada.</p>
+            </div>
+            <span class="badge badge-accent" id="settings-projects-count">0 Proyectos</span>
+          </div>
+
+          <!-- Scenario Explanation Box -->
+          <div class="scenario-guide-box">
+            <h4 class="guide-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              ¿Cómo se comportan tus proyectos al cambiar o mover la ruta?
+            </h4>
+            <div class="guide-grid">
+              <div class="guide-item">
+                <strong>1. Traslado del Vault:</strong>
+                <p>Si trasladaste tu carpeta de Vault a otro disco o ruta, la estructura relativa se mantiene. Todas tus sugerencias y evaluaciones existentes continúan enlazadas sin pérdida.</p>
+              </div>
+              <div class="guide-item">
+                <strong>2. Proyectos ausentes en la nueva ruta:</strong>
+                <p>Los proyectos que no existan en la nueva ruta se marcarán como <em>inactivos</em>. No se borrará nada histórico; si vuelves a apuntar al Vault anterior, se reactivarán automáticamente.</p>
+              </div>
+              <div class="guide-item">
+                <strong>3. Nuevos proyectos detectados:</strong>
+                <p>Cualquier proyecto nuevo en <code>Projects/</code> o <code>Proyectos/</code> es indexado al instante: se genera su tesis y se vectoriza para comenzar a recibir triajes.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings Projects List Table / Cards -->
+          <div class="settings-projects-table-wrapper" id="settings-projects-wrapper">
+            <div class="empty-state">
+              <p>Cargando información de proyectos...</p>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Detail Modal -->
+  <dialog class="modal-dialog" id="content-detail-modal">
+    <div class="modal-wrapper">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-content-title">Detalle de Contenido</h3>
+        <button type="button" class="btn-close" id="btn-close-modal" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-content-body">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
