@@ -22,28 +22,43 @@ export async function getFileHash(filePath: string): Promise<string> {
  * Incorporates file names so renaming a file triggers reconciliation.
  */
 export async function getDirectoryHash(dirPath: string): Promise<string> {
-  let entries;
-  try {
-    entries = await fsp.readdir(dirPath, { withFileTypes: true });
-  } catch {
-    return ''; // Directory doesn't exist or isn't accessible
+  const mdFiles: { fullPath: string; relPath: string }[] = [];
+
+  async function walk(currentDir: string) {
+    let entries;
+    try {
+      entries = await fsp.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // Skip hidden dirs like .obsidian, .git
+      const full = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        const lower = entry.name.toLowerCase();
+        if (lower.endsWith('.md') && lower !== 'suggestions.md') {
+          const rel = path.relative(dirPath, full).replace(/\\/g, '/');
+          mdFiles.push({ fullPath: full, relPath: rel });
+        }
+      }
+    }
   }
 
-  // Filter to only .md files that the reconciler actually consumes
-  const mdFiles = entries
-    .filter(e => e.isFile() && e.name.endsWith('.md') && e.name !== 'suggestions.md')
-    .sort((a, b) => a.name.localeCompare(b.name));
+  await walk(dirPath);
 
   if (mdFiles.length === 0) return '';
+
+  mdFiles.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   const finalHash = crypto.createHash('sha256');
 
   for (const file of mdFiles) {
-    const fullPath = path.join(dirPath, file.name);
-    // Include file name to reflect title/content renaming
-    finalHash.update(`filename:${file.name}:`);
+    finalHash.update(`filename:${file.relPath}:`);
     try {
-      const fileHash = await getFileHash(fullPath);
+      const fileHash = await getFileHash(file.fullPath);
       finalHash.update(fileHash);
     } catch {
       // If a file cannot be read, continue

@@ -23,7 +23,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
     vaultA = path.join(__dirname, 'DummyVault_Settings_A');
     await fs.mkdir(path.join(vaultA, 'Projects', 'AI_Agents'), { recursive: true });
     await fs.writeFile(
-      path.join(vaultA, 'Projects', 'AI_Agents', 'project.md'),
+      path.join(vaultA, 'Projects', 'AI_Agents', 'ideas.md'),
       '# Agentes Autónomos\n#project\n\nTesis sobre agentes distribuidos.',
       'utf-8'
     );
@@ -32,7 +32,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
     vaultB = path.join(__dirname, 'DummyVault_Settings_B');
     await fs.mkdir(path.join(vaultB, 'Projects', 'Data_Pipelines'), { recursive: true });
     await fs.writeFile(
-      path.join(vaultB, 'Projects', 'Data_Pipelines', 'project.md'),
+      path.join(vaultB, 'Projects', 'Data_Pipelines', 'pipeline.md'),
       '# Data Pipelines\n#project\n\nTesis sobre procesamiento streaming.',
       'utf-8'
     );
@@ -86,7 +86,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
       actionType: 'evidence_citation',
       observation: 'Observación test',
       suggestedAction: 'Acción test',
-      targetFile: 'project.md',
+      targetFile: 'ideas.md',
       status: 'pending',
     });
 

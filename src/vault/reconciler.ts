@@ -13,6 +13,36 @@ const ollama = sharedAiProvider;
 const activeProjectReconciliations = new Set<string>();
 const pendingProjectReconciliations = new Set<string>();
 
+async function getProjectMarkdownFiles(projectPath: string): Promise<{ fullPath: string; relPath: string; name: string }[]> {
+  const result: { fullPath: string; relPath: string; name: string }[] = [];
+
+  async function walk(currentDir: string) {
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // Ignore hidden directories like .obsidian, .git
+      const full = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        const lower = entry.name.toLowerCase();
+        if (lower.endsWith('.md') && lower !== 'suggestions.md') {
+          const rel = path.relative(projectPath, full).replace(/\\/g, '/');
+          result.push({ fullPath: full, relPath: rel, name: entry.name });
+        }
+      }
+    }
+  }
+
+  await walk(projectPath);
+  return result.sort((a, b) => a.relPath.localeCompare(b.relPath));
+}
+
 export async function reconcileProject(projectPath: string, vaultPath: string, force = false): Promise<void> {
   const normalizedPath = path.resolve(projectPath);
   if (activeProjectReconciliations.has(normalizedPath)) {
@@ -53,44 +83,30 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       }
     }
 
-    // Parse all markdown files in the project directory
+
+    // Parse all markdown files in the project directory (including subfolders)
     let thesisText = '';
     let notesContent = '';
     let title = path.basename(projectPath);
     const noteTitles: string[] = [];
-    let foundProjectMd = false;
     let foundTaggedThesis = '';
+    let taggedNoteTitle = '';
     
     try {
-      const entries = await fs.readdir(projectPath, { withFileTypes: true });
-      // Prioritize project.md for project title and core thesis resolution
-      entries.sort((a, b) => {
-        if (a.name.toLowerCase() === 'project.md') return -1;
-        if (b.name.toLowerCase() === 'project.md') return 1;
-        return a.name.localeCompare(b.name);
-      });
+      const mdFiles = await getProjectMarkdownFiles(projectPath);
 
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'suggestions.md') {
-          const fullPath = path.join(projectPath, entry.name);
-          const parsed = await parseMarkdownFile(fullPath);
-          
-          if (parsed) {
-            noteTitles.push(parsed.title);
-            const isProjectMd = entry.name.toLowerCase() === 'project.md';
+      for (const file of mdFiles) {
+        const parsed = await parseMarkdownFile(file.fullPath);
+        if (parsed) {
+          noteTitles.push(parsed.title);
 
-            if (isProjectMd) {
-              title = parsed.title;
-              thesisText = parsed.thesis;
-              foundProjectMd = true;
-            } else if (parsed.hasProjectTag && !foundProjectMd) {
-              title = parsed.title;
-              foundTaggedThesis = parsed.thesis;
-            }
+          if (parsed.hasProjectTag && !foundTaggedThesis) {
+            foundTaggedThesis = parsed.thesis;
+            taggedNoteTitle = parsed.title;
+          }
 
-            if (parsed.thesis && !isProjectMd) {
-              notesContent += `### Nota: ${parsed.title}\n${parsed.thesis}\n\n`;
-            }
+          if (parsed.thesis) {
+            notesContent += `### Nota: ${parsed.title}\n${parsed.thesis}\n\n`;
           }
         }
       }
@@ -99,19 +115,21 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       return;
     }
 
-    // If no project.md found, use tagged note thesis, or first note as fallback
-    if (!thesisText) {
-      if (foundTaggedThesis) {
-        thesisText = foundTaggedThesis;
-      } else if (notesContent) {
-        thesisText = notesContent.substring(0, 500).trim();
-      } else {
-        thesisText = 'Proyecto sin contenido. Agrega notas markdown dentro de la carpeta.';
+    // Determine project title & core focus:
+    // If a note has explicit #project tag, use its thesis as core focus and optionally its title
+    if (foundTaggedThesis) {
+      thesisText = foundTaggedThesis;
+      if (taggedNoteTitle && taggedNoteTitle !== 'Untitled Note') {
+        title = taggedNoteTitle;
       }
+    } else if (notesContent) {
+      thesisText = notesContent.substring(0, 800).trim();
+    } else {
+      thesisText = 'Proyecto sin contenido. Agrega notas markdown dentro de la carpeta.';
     }
 
-    // Generar Embedding combinando la tesis central y las notas del proyecto
-    const fullTextForEmbedding = `${thesisText}\n\n${notesContent}`.substring(0, 6000);
+    // Generar Embedding combinando el título del proyecto y las notas recopiladas
+    const fullTextForEmbedding = `Proyecto: ${title}\n\n${notesContent || thesisText}`.substring(0, 6000);
     let embedding: number[] = [];
     try {
       embedding = await ollama.getEmbedding(fullTextForEmbedding);

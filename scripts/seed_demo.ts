@@ -11,7 +11,7 @@ async function seedDemo() {
   const projectDir = path.join(vaultPath, 'Projects', 'Agentes_Autonomos');
   await fs.mkdir(projectDir, { recursive: true });
   await fs.writeFile(
-    path.join(projectDir, 'project.md'),
+    path.join(projectDir, 'ideas.md'),
     `---
 tags:
   - project
@@ -52,7 +52,7 @@ Investigación y desarrollo de agentes autónomos guiados por LLMs y arquitectur
     projectId: proj1.id,
     treeHash: 'tree_1',
     thesisText: 'Explorar sistemas multi-agente descentralizados con comunicación pub/sub reactiva.',
-    noteTitles: ['project.md', 'arquitectura.md'],
+    noteTitles: ['ideas.md', 'arquitectura.md'],
   }).returning();
 
   // 3. Content 1: Ready content

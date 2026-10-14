@@ -91,7 +91,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
 
     console.log(`[Evaluator] [Step 2 Synthesizing] Evaluating against Project Snapshot ${snapshotId}...`);
 
-    const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a la TESIS Y BORRADORES DEL PROYECTO.
+    const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a los BORRADORES Y NOTAS DEL PROYECTO.
 Debes responder SIEMPRE en ESPAÑOL.
 
 REGLAS DE EVALUACIÓN:
@@ -106,11 +106,8 @@ REGLAS DE EVALUACIÓN:
     const cappedSummary = (content.summary || '').substring(0, 10000);
 
     const userMessage = `<PROJECT_CONTEXT>
-TESIS DEL PROYECTO:
-${thesisText}
-
-NOTAS Y BORRADORES ASOCIADOS:
-${cappedProjectNotes}
+NOTAS Y BORRADORES DEL PROYECTO:
+${cappedProjectNotes || thesisText || 'Proyecto sin notas adicionales.'}
 </PROJECT_CONTEXT>
 
 <ARTICLE_SUMMARY>

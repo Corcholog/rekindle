@@ -331,4 +331,41 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const body = JSON.parse(res.payload);
     expect(body.error).toBe('Forbidden');
   });
+
+  it('Reconcilia proyectos sin project.md con notas libres y en subcarpetas', async () => {
+    const { reconcileProject } = await import('../src/vault/reconciler');
+    const { projects, projectSnapshots } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { eq } = await import('drizzle-orm');
+
+    // 1. Create a project folder with multiple arbitrary notes and a subfolder, NO project.md
+    const customProjPath = path.join(vaultPath, 'Projects', 'Brainstorming_Project');
+    await fs.mkdir(path.join(customProjPath, 'research'), { recursive: true });
+
+    await fs.writeFile(
+      path.join(customProjPath, 'ideas.md'),
+      '# Ideas Principales\nLluvia de ideas inicial sobre diseño de videojuegos.',
+      'utf-8'
+    );
+    await fs.writeFile(
+      path.join(customProjPath, 'research', 'mechanics.md'),
+      '# Mecánicas de Juego\nAnálisis de mecánicas de decisión y consecuencias.',
+      'utf-8'
+    );
+
+    // 2. Reconcile project
+    await reconcileProject(customProjPath, vaultPath, true);
+
+    // 3. Verify in DB
+    const [p] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Brainstorming_Project'));
+    expect(p).toBeDefined();
+    expect(p.isActive).toBe(true);
+
+    const snapshots = await drizzleDb.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, p.id));
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(snapshots[0].noteTitles).toContain('Ideas Principales');
+    expect(snapshots[0].noteTitles).toContain('Mecánicas de Juego');
+    expect(snapshots[0].notesContent).toContain('Lluvia de ideas');
+    expect(snapshots[0].notesContent).toContain('mecánicas de decisión');
+  });
 });

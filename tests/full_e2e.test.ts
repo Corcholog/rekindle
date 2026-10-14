@@ -33,7 +33,7 @@ tags:
 # Proyecto: AI Agents
 Este proyecto busca construir un ecosistema de agentes autónomos que se comuniquen mediante eventos (Pub/Sub) para resolver tareas complejas de programación.
 `;
-    await fs.writeFile(path.join(vaultPath, 'Projects', 'AI_Agents', 'project.md'), projectMd);
+    await fs.writeFile(path.join(vaultPath, 'Projects', 'AI_Agents', 'ideas.md'), projectMd);
     vi.stubEnv('VAULT_PATH', vaultPath);
 
     // 3. Init DB schema

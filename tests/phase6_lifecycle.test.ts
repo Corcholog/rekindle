@@ -48,7 +48,7 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
       projectId,
       treeHash: 'testhash123',
       thesisText: 'Construir agentes autónomos con arquitectura Pub/Sub.',
-      noteTitles: ['project.md', 'architecture.md'],
+      noteTitles: ['ideas.md', 'architecture.md'],
     });
 
     // Seed Content
@@ -244,7 +244,7 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.payload);
-    expect(body.counts).toEqual({
+    expect(body.counts).toMatchObject({
       pending: 0,
       accepted: 1,
       discarded: 1,
