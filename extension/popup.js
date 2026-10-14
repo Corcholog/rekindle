@@ -1,4 +1,5 @@
-// Loom Web Clipper - Popup Script
+// Loom Web Clipper - Popup Script (Manifest V3)
+// Supports immediate saving and offline queueing with auto-sync
 
 const SERVER_URL = 'http://localhost:3000';
 
@@ -12,28 +13,103 @@ document.addEventListener('DOMContentLoaded', async () => {
   const submitBtn = document.getElementById('btn-submit');
   const btnText = document.getElementById('btn-text');
   const feedback = document.getElementById('feedback');
+  const queueBanner = document.getElementById('queue-banner');
+  const queueMsg = document.getElementById('queue-msg');
+  const btnSyncQueue = document.getElementById('btn-sync-queue');
+  const offlineHint = document.getElementById('offline-hint');
 
-  // 1. Check Loom server connection
+  let isOnline = false;
+
+  // --- Queue State Management ---
+
+  async function getLocalQueue() {
+    try {
+      const data = await chrome.storage.local.get({ offline_queue: [] });
+      return Array.isArray(data.offline_queue) ? data.offline_queue : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function refreshQueueUI() {
+    const queue = await getLocalQueue();
+    if (queue.length > 0) {
+      queueBanner.style.display = 'flex';
+      if (isOnline) {
+        queueMsg.textContent = `${queue.length} recorte(s) pendientes en cola`;
+        btnSyncQueue.style.display = 'inline-block';
+        btnSyncQueue.textContent = 'Sincronizar';
+      } else {
+        queueMsg.textContent = `${queue.length} en cola (esperando a Loom)`;
+        btnSyncQueue.style.display = 'none';
+      }
+    } else {
+      queueBanner.style.display = 'none';
+    }
+  }
+
+  // --- Connectivity Check ---
+
   async function checkServer() {
     try {
       const res = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
+        isOnline = true;
         statusDot.className = 'status-dot online';
         statusText.textContent = 'Loom Listo';
-        submitBtn.disabled = false;
+        btnText.textContent = 'Guardar en Loom';
+        offlineHint.classList.remove('visible');
+        await refreshQueueUI();
         return true;
       }
     } catch {
       // offline
     }
+
+    isOnline = false;
     statusDot.className = 'status-dot offline';
-    statusText.textContent = 'Desconectado';
+    statusText.textContent = 'Modo Offline';
+    btnText.textContent = 'Guardar en Cola';
+    submitBtn.disabled = false;
+    offlineHint.classList.add('visible');
+    await refreshQueueUI();
     return false;
   }
 
+  // Listen for sync notifications from service worker
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'QUEUE_SYNC_COMPLETE') {
+      refreshQueueUI();
+    }
+  });
+
+  // Manual sync button
+  btnSyncQueue.addEventListener('click', async () => {
+    btnSyncQueue.disabled = true;
+    btnSyncQueue.textContent = 'Enviando...';
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' });
+      if (res && res.success) {
+        queueMsg.textContent = `✓ ${res.flushed} enviado(s) a Loom`;
+        setTimeout(async () => {
+          await refreshQueueUI();
+        }, 1500);
+      } else {
+        await refreshQueueUI();
+      }
+    } catch (err) {
+      console.warn('Sync trigger error:', err);
+      await refreshQueueUI();
+    } finally {
+      btnSyncQueue.disabled = false;
+    }
+  });
+
+  // Initial connectivity check
   await checkServer();
 
-  // 2. Query active tab details
+  // --- Query Active Tab Data ---
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
@@ -60,7 +136,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Could not query active tab:', err);
   }
 
-  // 3. Form Submission
+  // --- Form Submission Handler ---
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -71,41 +148,71 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!url) return;
 
     submitBtn.disabled = true;
-    btnText.textContent = 'Enviando...';
+    btnText.textContent = isOnline ? 'Enviando...' : 'Guardando...';
     feedback.className = 'feedback';
     feedback.textContent = '';
 
+    const payload = { url, title, selection };
+
+    if (isOnline) {
+      // 1. Online Path: Attempt direct send
+      try {
+        const res = await fetch(`${SERVER_URL}/api/ingest`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(4000)
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.message || data.error || `Server HTTP ${res.status}`);
+        }
+
+        feedback.className = 'feedback success';
+        feedback.textContent = '✦ ¡Guardado en Loom! Analizando contra tus notas de Obsidian...';
+        btnText.textContent = '✓ Guardado';
+
+        // Also trigger sync for any existing queue
+        chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }).catch(() => {});
+
+        setTimeout(() => {
+          window.close();
+        }, 1600);
+        return;
+
+      } catch (err) {
+        console.warn('Online send failed, falling back to offline queue:', err);
+        // Fall through to offline queueing below
+      }
+    }
+
+    // 2. Offline Path / Fallback Queueing
     try {
-      const res = await fetch(`${SERVER_URL}/api/ingest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url,
-          title,
-          selection,
-        }),
+      await chrome.runtime.sendMessage({
+        type: 'ENQUEUE_ITEM',
+        payload
       });
 
-      const data = await res.json();
+      feedback.className = 'feedback warning';
+      feedback.textContent = isOnline 
+        ? '✦ Loom no respondió. Guardado en cola local: se enviará automáticamente.'
+        : '✦ Guardado en cola local. Se enviará a Loom automáticamente cuando inicie la aplicación.';
+      btnText.textContent = '✓ En cola';
 
-      if (!res.ok) {
-        throw new Error(data.message || data.error || 'Error al conectar con Loom');
-      }
-
-      feedback.className = 'feedback success';
-      feedback.textContent = '✦ ¡Guardado en Loom! Analizando contra tus notas de Obsidian...';
-      btnText.textContent = '✓ Guardado';
+      await refreshQueueUI();
 
       setTimeout(() => {
         window.close();
-      }, 1600);
+      }, 1800);
 
     } catch (err) {
-      console.error('Clipper submission error:', err);
+      console.error('Failed to enqueue item:', err);
       feedback.className = 'feedback error';
-      feedback.textContent = `Error: ${err.message || 'No se pudo enviar a Loom'}`;
+      feedback.textContent = `Error al encolar: ${err.message || 'Error desconocido'}`;
       submitBtn.disabled = false;
       btnText.textContent = 'Reintentar';
     }

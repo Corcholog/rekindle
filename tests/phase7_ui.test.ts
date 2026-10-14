@@ -518,6 +518,34 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     }
   });
 
+  it('Feature 2: Extensión Web Clipper soporta almacenamiento offline y cola de sincronización automática', async () => {
+    const extensionDir = path.resolve(__dirname, '../extension');
+    const manifest = JSON.parse(await fs.readFile(path.join(extensionDir, 'manifest.json'), 'utf-8'));
+
+    // 1. Permissions contain storage and alarms
+    expect(manifest.permissions).toContain('storage');
+    expect(manifest.permissions).toContain('alarms');
+
+    // 2. Background worker contains queue and sync mechanisms
+    const bgJs = await fs.readFile(path.join(extensionDir, 'background.js'), 'utf-8');
+    expect(bgJs).toContain('offline_queue');
+    expect(bgJs).toContain('loom-offline-sync');
+    expect(bgJs).toContain('tryFlushQueue');
+    expect(bgJs).toContain('enqueueItem');
+    expect(bgJs).toContain('chrome.alarms.onAlarm');
+
+    // 3. Popup UI contains offline queue banners and handlers
+    const popupHtml = await fs.readFile(path.join(extensionDir, 'popup.html'), 'utf-8');
+    expect(popupHtml).toContain('id="queue-banner"');
+    expect(popupHtml).toContain('id="btn-sync-queue"');
+    expect(popupHtml).toContain('id="offline-hint"');
+
+    const popupJs = await fs.readFile(path.join(extensionDir, 'popup.js'), 'utf-8');
+    expect(popupJs).toContain('ENQUEUE_ITEM');
+    expect(popupJs).toContain('TRIGGER_SYNC');
+    expect(popupJs).toContain('Modo Offline');
+  });
+
   it('Feature 2: Frontend sirve markup del Bookmarklet arrastrable y modal de instalación', async () => {
     const res = await server.inject({
       method: 'GET',

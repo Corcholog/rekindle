@@ -26,7 +26,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       padding-bottom: 10px;
       border-bottom: 1px solid #1f1f23;
     }
@@ -78,7 +78,46 @@
     }
 
     .status-dot.offline {
-      background: #ef4444;
+      background: #f59e0b;
+      box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+    }
+
+    .queue-card {
+      margin-bottom: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .queue-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .queue-sync-btn {
+      background: #f59e0b;
+      color: #09090b;
+      border: none;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s ease;
+    }
+
+    .queue-sync-btn:hover {
+      background: #fbbf24;
     }
 
     .form-group {
@@ -164,6 +203,18 @@
       color: #fff;
     }
 
+    .offline-hint {
+      font-size: 11px;
+      color: #a1a1aa;
+      margin-top: 6px;
+      line-height: 1.35;
+      display: none;
+    }
+
+    .offline-hint.visible {
+      display: block;
+    }
+
     .feedback {
       margin-top: 10px;
       padding: 8px 10px;
@@ -177,6 +228,13 @@
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid #10b981;
       color: #34d399;
+    }
+
+    .feedback.warning {
+      display: block;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid #f59e0b;
+      color: #fbbf24;
     }
 
     .feedback.error {
@@ -197,6 +255,14 @@
       <span class="status-dot" id="status-dot"></span>
       <span id="status-text">Comprobando...</span>
     </div>
+  </div>
+
+  <div id="queue-banner" class="queue-card" style="display: none;">
+    <div class="queue-info">
+      <span>⏳</span>
+      <span id="queue-msg">0 recortes en cola</span>
+    </div>
+    <button type="button" id="btn-sync-queue" class="queue-sync-btn" style="display: none;">Sincronizar</button>
   </div>
 
   <form id="clip-form">
@@ -221,6 +287,10 @@
       </button>
       <a href="http://localhost:3000" target="_blank" class="btn btn-secondary" title="Abrir taller de Loom">Abrir</a>
     </div>
+
+    <p class="offline-hint" id="offline-hint">
+      ✦ Loom está desconectado. Tu recorte se guardará en tu cola local y se enviará automáticamente tan pronto como Loom inicie.
+    </p>
 
     <div class="feedback" id="feedback"></div>
   </form>

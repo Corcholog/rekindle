@@ -1,7 +1,223 @@
 // Loom Web Clipper - Background Service Worker (Manifest V3)
+// Provides offline queueing with auto-sync when Loom server reconnects
+
+const SERVER_URL = 'http://localhost:3000';
+const SYNC_ALARM_NAME = 'loom-offline-sync';
+const STORAGE_QUEUE_KEY = 'offline_queue';
+
+// --- Queue & Badge Helpers ---
+
+async function getOfflineQueue() {
+  const result = await chrome.storage.local.get({ [STORAGE_QUEUE_KEY]: [] });
+  return Array.isArray(result[STORAGE_QUEUE_KEY]) ? result[STORAGE_QUEUE_KEY] : [];
+}
+
+async function setOfflineQueue(queue) {
+  await chrome.storage.local.set({ [STORAGE_QUEUE_KEY]: queue });
+  await updateBadge(queue.length);
+}
+
+async function updateBadge(queueLength) {
+  try {
+    if (queueLength > 0) {
+      await chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' }); // Amber warning/offline
+      await chrome.action.setBadgeText({ text: String(queueLength) });
+      await chrome.action.setTitle({
+        title: `Loom Clipper: ${queueLength} recorte(s) en cola offline (esperando conexión)`
+      });
+    } else {
+      await chrome.action.setBadgeText({ text: '' });
+      await chrome.action.setTitle({ title: 'Loom Web Clipper' });
+    }
+  } catch (err) {
+    console.warn('[Loom Clipper SW] Badge update error:', err);
+  }
+}
+
+async function enqueueItem(item) {
+  const queue = await getOfflineQueue();
+  
+  // Avoid duplicate clicks within short time frame
+  const isDuplicate = queue.some(
+    q => q.url === item.url && q.selection === (item.selection || '') && (Date.now() - q.timestamp < 30000)
+  );
+
+  if (isDuplicate) {
+    console.log('[Loom Clipper SW] Skipping duplicate enqueue for:', item.url);
+    return queue.length;
+  }
+
+  const newItem = {
+    id: typeof crypto.randomUUID === 'function' 
+      ? crypto.randomUUID() 
+      : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    url: item.url,
+    title: item.title || '',
+    selection: item.selection || '',
+    timestamp: Date.now(),
+    retries: 0
+  };
+
+  queue.push(newItem);
+  await setOfflineQueue(queue);
+
+  // Ensure periodic background sync alarm is active
+  await chrome.alarms.create(SYNC_ALARM_NAME, { periodInMinutes: 1 });
+
+  // Attempt immediate flush in case server is ready
+  tryFlushQueue().catch(() => {});
+
+  return queue.length;
+}
+
+// --- Queue Flush / Sync Engine ---
+
+async function tryFlushQueue() {
+  const queue = await getOfflineQueue();
+  if (queue.length === 0) {
+    await updateBadge(0);
+    await chrome.alarms.clear(SYNC_ALARM_NAME);
+    return { success: true, count: 0, flushed: 0 };
+  }
+
+  // 1. Check Loom server connectivity
+  let isOnline = false;
+  try {
+    const healthRes = await fetch(`${SERVER_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2500)
+    });
+    isOnline = healthRes.ok;
+  } catch {
+    isOnline = false;
+  }
+
+  if (!isOnline) {
+    // Loom is still down; keep queue and notify badge
+    await updateBadge(queue.length);
+    return { success: false, reason: 'offline', remaining: queue.length };
+  }
+
+  // 2. Loom is reachable: process queue items sequentially
+  const remaining = [];
+  let flushedCount = 0;
+
+  for (const item of queue) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/ingest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: item.url,
+          title: item.title,
+          selection: item.selection
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (res.ok) {
+        flushedCount++;
+      } else if (res.status >= 400 && res.status < 500) {
+        // Bad request / invalid input: increment retry or discard if corrupted
+        if ((item.retries || 0) < 3) {
+          remaining.push({ ...item, retries: (item.retries || 0) + 1 });
+        } else {
+          console.warn('[Loom Clipper SW] Dropping permanently failed item:', item.url);
+        }
+      } else {
+        // Server 5xx or temporary failure: retain item and stop current batch
+        remaining.push(item);
+        break;
+      }
+    } catch (err) {
+      console.warn('[Loom Clipper SW] Network error sending queued item:', err);
+      remaining.push(item);
+      break;
+    }
+  }
+
+  await setOfflineQueue(remaining);
+
+  if (remaining.length === 0) {
+    // All items synced! Show temporary green badge
+    await chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
+    await chrome.action.setBadgeText({ text: '✓' });
+    await chrome.alarms.clear(SYNC_ALARM_NAME);
+
+    // Clear after 3.5s
+    setTimeout(async () => {
+      try {
+        const latest = await getOfflineQueue();
+        if (latest.length === 0) {
+          await chrome.action.setBadgeText({ text: '' });
+        }
+      } catch {
+        // SW may have terminated
+      }
+    }, 3500);
+  } else {
+    await updateBadge(remaining.length);
+  }
+
+  // Notify any active popup of sync progress
+  try {
+    chrome.runtime.sendMessage({
+      type: 'QUEUE_SYNC_COMPLETE',
+      flushed: flushedCount,
+      remaining: remaining.length
+    }).catch(() => {});
+  } catch {
+    // No popup listener active
+  }
+
+  return { success: true, flushed: flushedCount, remaining: remaining.length };
+}
+
+// --- Context Menu Send or Queue ---
+
+async function sendOrQueue(payload) {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/ingest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(3000)
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    // Direct success feedback
+    await chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
+    await chrome.action.setBadgeText({ text: '✓' });
+
+    setTimeout(async () => {
+      try {
+        const queue = await getOfflineQueue();
+        if (queue.length > 0) {
+          await updateBadge(queue.length);
+        } else {
+          await chrome.action.setBadgeText({ text: '' });
+        }
+      } catch {}
+    }, 3000);
+
+  } catch (err) {
+    console.warn('[Loom Clipper SW] Loom server offline, enqueueing locally:', err.message);
+    const count = await enqueueItem(payload);
+    console.log(`[Loom Clipper SW] Item queued for future sync. Total in queue: ${count}`);
+  }
+}
+
+// --- Top-Level Lifecycle & Event Listeners ---
 
 chrome.runtime.onInstalled.addListener(async () => {
-  // Remove existing context menus before recreating to avoid duplicate ID errors
+  // Re-create context menus
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'loom-clip-page',
@@ -21,6 +237,36 @@ chrome.runtime.onInstalled.addListener(async () => {
       contexts: ['link']
     });
   });
+
+  const queue = await getOfflineQueue();
+  await updateBadge(queue.length);
+  if (queue.length > 0) {
+    await chrome.alarms.create(SYNC_ALARM_NAME, { periodInMinutes: 1 });
+    await tryFlushQueue();
+  }
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  const queue = await getOfflineQueue();
+  await updateBadge(queue.length);
+  if (queue.length > 0) {
+    await chrome.alarms.create(SYNC_ALARM_NAME, { periodInMinutes: 1 });
+    await tryFlushQueue();
+  }
+});
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === SYNC_ALARM_NAME) {
+    await tryFlushQueue();
+  }
+});
+
+// Auto-sync attempt on user tab switch/navigation if queue is waiting
+chrome.tabs.onActivated.addListener(async () => {
+  const queue = await getOfflineQueue();
+  if (queue.length > 0) {
+    await tryFlushQueue();
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -37,53 +283,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   if (!targetUrl) return;
 
-  await sendToLoom({
+  await sendOrQueue({
     url: targetUrl,
     title: targetTitle,
     selection
   });
 });
 
-async function sendToLoom(payload) {
-  const SERVER_URL = 'http://localhost:3000';
-  
-  try {
-    const res = await fetch(`${SERVER_URL}/api/ingest`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      throw new Error(`Server returned HTTP ${res.status}`);
+// Communication with popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    if (message.type === 'GET_QUEUE_STATE') {
+      const queue = await getOfflineQueue();
+      sendResponse({ queue, count: queue.length });
+    } else if (message.type === 'ENQUEUE_ITEM') {
+      const count = await enqueueItem(message.payload);
+      sendResponse({ success: true, count });
+    } else if (message.type === 'TRIGGER_SYNC') {
+      const result = await tryFlushQueue();
+      sendResponse(result);
     }
-
-    // Success badge feedback
-    await chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
-    await chrome.action.setBadgeText({ text: '✓' });
-    
-    // Clear badge after 3 seconds
-    setTimeout(async () => {
-      try {
-        await chrome.action.setBadgeText({ text: '' });
-      } catch {
-        // SW may have gone to sleep
-      }
-    }, 3000);
-
-  } catch (err) {
-    console.error('[Loom Clipper SW] Failed sending to Loom:', err);
-    await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
-    await chrome.action.setBadgeText({ text: '!' });
-
-    setTimeout(async () => {
-      try {
-        await chrome.action.setBadgeText({ text: '' });
-      } catch {
-        // SW may have gone to sleep
-      }
-    }, 4000);
-  }
-}
+  })();
+  return true; // Keep message port open for async response
+});
