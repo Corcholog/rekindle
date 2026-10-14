@@ -614,6 +614,95 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.payload).toContain('id="btn-mode-ask"');
     expect(res.payload).toContain('id="library-results-box"');
   });
+
+  it('Feature 4: POST /api/projects/:id/synthesize retorna 404 para proyecto inexistente', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/projects/00000000-0000-0000-0000-000000000000/synthesize',
+    });
+
+    expect(res.statusCode).toBe(404);
+    const body = JSON.parse(res.payload);
+    expect(body.error).toBe('Not Found');
+  });
+
+  it('Feature 4: POST /api/projects/:id/synthesize retorna 400 si el proyecto no tiene sugerencias aceptadas', async () => {
+    const { projects } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+
+    const [emptyProj] = await drizzleDb.insert(projects).values({
+      folderPath: 'Projects/Empty_Research',
+      title: 'Proyecto Vacío',
+    }).returning({ id: projects.id });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/projects/${emptyProj.id}/synthesize`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.payload);
+    expect(body.error).toBe('Bad Request');
+    expect(body.message).toContain('No hay sugerencias aceptadas');
+  });
+
+  it('Feature 4: POST /api/projects/:id/synthesize compila research_brief.md cuando existen sugerencias aceptadas', async () => {
+    const { actionSuggestions } = await import('../src/db/schema');
+    const { db: drizzleDb } = await import('../src/db/index');
+    const { eq } = await import('drizzle-orm');
+    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+
+    // Accept suggestion
+    await drizzleDb.update(actionSuggestions)
+      .set({ status: 'accepted', resolvedAt: new Date() })
+      .where(eq(actionSuggestions.id, suggestionId));
+
+    const evalSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
+      data: {
+        title: 'Síntesis de Investigación: AI Agents',
+        executiveSummary: 'Compilación estructurada de arquitecturas orientadas a eventos para coordinar agentes autónomos.',
+        markdownContent: '## Arquitectura Base\nSe recomienda desacoplamiento mediante colas de mensajería asíncronas [[AI_Agents]].',
+        suggestedNextSteps: ['Evaluar throughput de eventos', 'Diseñar contratos protobuf'],
+      },
+      model: 'mock-llm',
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/projects/${projectId}/synthesize`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.success).toBe(true);
+    expect(body.filePath).toBe('research_brief.md');
+    expect(body.title).toBe('Síntesis de Investigación: AI Agents');
+    expect(body.executiveSummary).toContain('Compilación estructurada');
+    expect(body.acceptedCount).toBeGreaterThanOrEqual(1);
+    expect(body.writtenToVault).toBe(true);
+
+    // Verify file on disk in Vault
+    const briefDiskPath = path.join(vaultPath, 'Projects', 'AI_Agents', 'research_brief.md');
+    const fileExists = await fs.access(briefDiskPath).then(() => true).catch(() => false);
+    expect(fileExists).toBe(true);
+    const fileContent = await fs.readFile(briefDiskPath, 'utf-8');
+    expect(fileContent).toContain('type: research_brief');
+    expect(fileContent).toContain('# Síntesis de Investigación: AI Agents');
+
+    evalSpy.mockRestore();
+  });
+
+  it('Feature 4: Frontend sirve botón de síntesis y modal en index.html', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/index.html',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain('id="btn-synthesize-project"');
+    expect(res.payload).toContain('id="synthesis-result-modal"');
+    expect(res.payload).toContain('id="synthesis-modal-title"');
+  });
 });
 
 

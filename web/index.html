@@ -263,6 +263,15 @@
               <h3 class="hero-title" id="selected-project-title">Todos los Proyectos</h3>
               <p class="hero-thesis" id="selected-project-thesis">Revisando sugerencias cruzadas entre todos tus proyectos de investigación.</p>
             </div>
+            <div class="project-hero-actions" id="project-hero-actions" style="display: none;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-synthesize-project" title="Sintetizar sugerencias aceptadas en un Research Brief">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                <span id="btn-synthesize-text">✦ Sintetizar Backlog</span>
+                <span class="spinner" id="synthesize-spinner" style="display: none;"></span>
+              </button>
+            </div>
           </div>
 
           <!-- Status Tabs -->
@@ -486,6 +495,22 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Synthesis Result Modal (Feature 4) -->
+  <dialog class="modal-dialog" id="synthesis-result-modal">
+    <div class="modal-wrapper modal-lg">
+      <div class="modal-header">
+        <div>
+          <span class="card-kicker">Compilación de Investigación</span>
+          <h3 class="modal-title" id="synthesis-modal-title">Research Brief Generado</h3>
+        </div>
+        <button type="button" class="btn-close" id="btn-close-synthesis-modal" aria-label="Cerrar ventana">&times;</button>
+      </div>
+      <div class="modal-body" id="synthesis-modal-body">
+        <!-- Injected via JS -->
       </div>
     </div>
   </dialog>

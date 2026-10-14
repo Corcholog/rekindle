@@ -99,6 +99,18 @@ const elements = {
   settingsProjectsCount: document.getElementById('settings-projects-count'),
   settingsProjectsWrapper: document.getElementById('settings-projects-wrapper'),
 
+  // Project Hero Actions & Synthesis (Feature 4)
+  projectHeroActions: document.getElementById('project-hero-actions'),
+  btnSynthesizeProject: document.getElementById('btn-synthesize-project'),
+  btnSynthesizeText: document.getElementById('btn-synthesize-text'),
+  synthesizeSpinner: document.getElementById('synthesize-spinner'),
+
+  // Synthesis Result Modal (Feature 4)
+  synthesisResultModal: document.getElementById('synthesis-result-modal'),
+  synthesisModalTitle: document.getElementById('synthesis-modal-title'),
+  synthesisModalBody: document.getElementById('synthesis-modal-body'),
+  btnCloseSynthesisModal: document.getElementById('btn-close-synthesis-modal'),
+
   // Modal & Toast
   contentDetailModal: document.getElementById('content-detail-modal'),
   modalContentTitle: document.getElementById('modal-content-title'),
@@ -119,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTriageStatusTabs();
   setupSettingsView();
   setupModalEvents();
+  setupSynthesisAction();
   setupSystemStatusPoller();
 
   // Initial Data Load
@@ -844,12 +857,14 @@ function selectProject(projectId) {
   if (projectId === null) {
     elements.selectedProjectTitle.textContent = 'Todos los Proyectos';
     elements.selectedProjectThesis.textContent = 'Revisando sugerencias cruzadas entre todos tus proyectos de investigación.';
+    if (elements.projectHeroActions) elements.projectHeroActions.style.display = 'none';
   } else {
     const proj = state.projects.find(p => p.id === projectId);
     if (proj) {
       elements.selectedProjectTitle.textContent = proj.title;
       elements.selectedProjectThesis.textContent = proj.thesisText || 'Sin tesis definida.';
     }
+    if (elements.projectHeroActions) elements.projectHeroActions.style.display = 'flex';
   }
 
   updateAllCountsAndBadges();
@@ -1258,6 +1273,134 @@ function setupModalEvents() {
       elements.contentDetailModal.close();
     }
   });
+}
+
+// ==========================================================================
+// Feature 4: Synthesize Project Backlog
+// ==========================================================================
+
+function setupSynthesisAction() {
+  if (elements.btnCloseSynthesisModal && elements.synthesisResultModal) {
+    elements.btnCloseSynthesisModal.addEventListener('click', () => {
+      elements.synthesisResultModal.close();
+    });
+    elements.synthesisResultModal.addEventListener('click', (e) => {
+      if (e.target === elements.synthesisResultModal) {
+        elements.synthesisResultModal.close();
+      }
+    });
+  }
+
+  if (elements.btnSynthesizeProject) {
+    elements.btnSynthesizeProject.addEventListener('click', handleSynthesizeProject);
+  }
+}
+
+async function handleSynthesizeProject() {
+  if (!state.selectedProjectId) {
+    showToast('Selecciona un proyecto específico para sintetizar su backlog.', 'warning');
+    return;
+  }
+
+  const proj = state.projects.find(p => p.id === state.selectedProjectId);
+  const acceptedCount = proj?.counts?.accepted ?? 0;
+
+  if (acceptedCount === 0) {
+    showToast('No hay sugerencias aceptadas en este proyecto para sintetizar. Acepta al menos una sugerencia antes de compilar el Research Brief.', 'warning');
+    return;
+  }
+
+  // Set loading state
+  elements.btnSynthesizeProject.disabled = true;
+  elements.btnSynthesizeText.textContent = 'Sintetizando...';
+  elements.synthesizeSpinner.style.display = 'inline-block';
+
+  try {
+    const res = await fetch(`/api/projects/${state.selectedProjectId}/synthesize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Error al generar la síntesis del proyecto.');
+    }
+
+    // Open Synthesis Result Modal
+    openSynthesisResultModal(data, proj?.title || 'Proyecto');
+    showToast(`Research Brief generado y guardado en Obsidian: ${data.filePath}`, 'success');
+
+    // Reload projects to update notes and snapshots
+    loadProjects();
+  } catch (err) {
+    console.error('Synthesis error:', err);
+    showToast(err.message || 'Error al compilar la síntesis.', 'error');
+  } finally {
+    elements.btnSynthesizeProject.disabled = false;
+    elements.btnSynthesizeText.textContent = '✦ Sintetizar Backlog';
+    elements.synthesizeSpinner.style.display = 'none';
+  }
+}
+
+function openSynthesisResultModal(data, projectTitle) {
+  if (!elements.synthesisResultModal) return;
+
+  elements.synthesisModalTitle.textContent = data.title || `Research Brief — ${projectTitle}`;
+
+  const nextStepsHtml = (data.suggestedNextSteps || []).length > 0
+    ? `
+      <div class="synthesis-section">
+        <span class="synthesis-section-title">Próximos Pasos Recomendados</span>
+        <ul class="synthesis-steps-list">
+          ${(data.suggestedNextSteps || []).map(step => `
+            <li class="synthesis-step-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span>${escapeHtml(step)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `
+    : '';
+
+  elements.synthesisModalBody.innerHTML = `
+    <div class="synthesis-content-view">
+      <div class="synthesis-meta-bar">
+        <div class="synthesis-meta-path">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Vault: <code>${escapeHtml(data.filePath)}</code></span>
+        </div>
+        <span class="chip chip-actionable">${data.acceptedCount} sugerencias integradas</span>
+      </div>
+
+      <div class="synthesis-section">
+        <span class="synthesis-section-title">Resumen Ejecutivo</span>
+        <div class="synthesis-summary-text">${escapeHtml(data.executiveSummary).replace(/\n/g, '<br>')}</div>
+      </div>
+
+      ${nextStepsHtml}
+
+      <div class="synthesis-actions-bar">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">Copiar Resumen</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">Listo</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('btn-confirm-synthesis-modal')?.addEventListener('click', () => {
+    elements.synthesisResultModal.close();
+  });
+
+  document.getElementById('btn-copy-synthesis-summary')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(`${data.title}\n\n${data.executiveSummary}`);
+      showToast('Resumen copiado al portapapeles', 'info');
+    } catch {
+      showToast('No se pudo copiar automáticamente', 'warning');
+    }
+  });
+
+  elements.synthesisResultModal.showModal();
 }
 
 async function openContentDetailModal(contentId) {
