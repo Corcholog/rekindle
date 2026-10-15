@@ -22,4 +22,7 @@ export type ProjectDirName = typeof PROJECT_DIR_NAMES[number];
 
 export const VECTOR_DISTANCE_THRESHOLD = 0.6;
 export const TOP_K_PROJECTS_LIMIT = 10;
+export const STALE_DRIFT_THRESHOLD = 0.04;
+export const PROMOTION_DELTA_THRESHOLD = 0.08;
+export const NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50;
 

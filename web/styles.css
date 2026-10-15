@@ -1283,6 +1283,39 @@ body {
   color: var(--text-secondary);
 }
 
+.triage-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-batch-reevaluate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-batch-reevaluate:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #fbbf24;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+.btn-batch-reevaluate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Suggestion Card & Obsidian Callout Preview */
 .suggestions-container {
   display: flex;
@@ -1557,6 +1590,54 @@ body {
   background: var(--accent-primary);
   color: #090d15;
   font-weight: 700;
+}
+
+.badge-stale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.15);
+  animation: staleBadgePulse 3s ease-in-out infinite;
+}
+
+@keyframes staleBadgePulse {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+  }
+}
+
+.btn-reevaluate {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-reevaluate:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #fbbf24;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+
+.btn-reevaluate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ==========================================================================

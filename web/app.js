@@ -84,6 +84,9 @@ const elements = {
   badgeTentative: document.getElementById('badge-tentative'),
   badgeDiscarded: document.getElementById('badge-discarded'),
   suggestionsList: document.getElementById('suggestions-list'),
+  btnBatchReevaluate: document.getElementById('btn-batch-reevaluate'),
+  batchReevaluateText: document.getElementById('batch-reevaluate-text'),
+  batchReevaluateSpinner: document.getElementById('batch-reevaluate-spinner'),
 
   // Settings
   vaultSettingsForm: document.getElementById('vault-settings-form'),
@@ -143,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSettingsView();
   setupModalEvents();
   setupSynthesisAction();
+  setupBatchReevaluateAction();
   setupSynergies();
   setupSystemStatusPoller();
 
@@ -946,12 +950,23 @@ async function loadSuggestions() {
 }
 
 function renderSuggestionsList(items) {
-  const currentSignature = `${state.selectedProjectId || 'all'}:${state.selectedSuggestionStatus}:${items.map(s => `${s.id}-${s.status}-${s.writtenToVault}`).join(',')}`;
+  const currentSignature = `${state.selectedProjectId || 'all'}:${state.selectedSuggestionStatus}:${items.map(s => `${s.id}-${s.status}-${s.writtenToVault}-${Boolean(s.isStale)}`).join(',')}`;
   if (currentSignature === state.renderedSuggestionsSignature) {
     // Structure and items haven't changed: do not rebuild DOM to keep disclosure widgets open and inputs focused
     return;
   }
   state.renderedSuggestionsSignature = currentSignature;
+
+  // Update batch re-evaluate button in toolbar
+  const stalePendingCount = items.filter(s => s.isStale && s.status === 'pending').length;
+  if (elements.btnBatchReevaluate && elements.batchReevaluateText) {
+    if (stalePendingCount > 0 && state.selectedSuggestionStatus !== 'accepted' && state.selectedSuggestionStatus !== 'discarded') {
+      elements.btnBatchReevaluate.style.display = 'inline-flex';
+      elements.batchReevaluateText.textContent = `↻ Re-evaluar obsoletas (${stalePendingCount})`;
+    } else {
+      elements.btnBatchReevaluate.style.display = 'none';
+    }
+  }
 
   if (items.length === 0) {
     const statusText = state.selectedSuggestionStatus === 'active'
@@ -1046,9 +1061,12 @@ function renderSuggestionsList(items) {
     return `
       <div class="glass-card suggestion-card" id="sug-card-${sug.id}" data-id="${sug.id}">
         <div class="suggestion-header">
-          <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
             <span class="action-chip ${chipClass}" style="${chipStyle}">${actionLabel}</span>
             <span class="suggestion-project-tag">${escapeHtml(sug.projectTitle || 'Proyecto')}</span>
+            ${(sug.isStale && isPending) ? `
+              <span class="badge badge-stale" title="El proyecto evolucionó significativamente desde esta sugerencia (deriva semántica: ${Math.round((sug.driftScore || 0) * 100)}%).">✦ Proyecto modificado</span>
+            ` : ''}
           </div>
           <span style="font-size: 0.75rem; color: var(--text-tertiary);">${dateFormatted}</span>
         </div>
@@ -1112,6 +1130,11 @@ function renderSuggestionsList(items) {
               >
             </div>
             <div class="suggestion-actions">
+              ${(sug.isStale && isPending) ? `
+                <button type="button" class="btn btn-outline btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="Re-evaluar esta sugerencia con la versión actual de tus notas">
+                  ↻ Re-evaluar
+                </button>
+              ` : ''}
               <button type="button" class="btn btn-danger btn-discard" id="btn-discard-${sug.id}" data-id="${sug.id}">
                 Descartar
               </button>
@@ -1156,6 +1179,43 @@ function renderSuggestionsList(items) {
         }
       });
     }
+  });
+
+  // Re-evaluate button handler
+  elements.suggestionsList.querySelectorAll('.btn-reevaluate').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const targetBtn = e.currentTarget;
+      targetBtn.disabled = true;
+      targetBtn.innerHTML = '↻ Re-evaluando...';
+
+      try {
+        const res = await fetch(`/api/suggestions/${id}/reevaluate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Error al re-evaluar la sugerencia');
+
+        if (data.resolution === 'keep_or_refine') {
+          showToast('Sugerencia re-evaluada y actualizada.', 'success');
+        } else if (data.resolution === 'already_addressed') {
+          showToast('Sugerencia marcada como ya abordada en el borrador.', 'info');
+        } else if (data.resolution === 'obsolete') {
+          showToast('Sugerencia marcada como obsoleta tras cambios en el proyecto.', 'info');
+        }
+
+        // Force re-render and reload authoritative state
+        state.renderedSuggestionsSignature = '';
+        await loadProjects();
+        await loadSuggestions();
+      } catch (err) {
+        showToast(err.message, 'error');
+        targetBtn.disabled = false;
+        targetBtn.innerHTML = '↻ Re-evaluar';
+      }
+    });
   });
 
   // Accept and Discard buttons
@@ -1415,6 +1475,69 @@ function openSynthesisResultModal(data, projectTitle) {
   });
 
   elements.synthesisResultModal.showModal();
+}
+
+// ==========================================================================
+// Staleness & Batch Re-evaluation (Option C)
+// ==========================================================================
+
+function setupBatchReevaluateAction() {
+  if (elements.btnBatchReevaluate) {
+    elements.btnBatchReevaluate.addEventListener('click', handleBatchReevaluate);
+  }
+}
+
+async function handleBatchReevaluate() {
+  const staleItems = state.suggestions.filter(s => s.isStale && s.status === 'pending');
+  if (staleItems.length === 0) {
+    showToast('No hay sugerencias desactualizadas en este momento.', 'info');
+    return;
+  }
+
+  if (elements.btnBatchReevaluate) {
+    elements.btnBatchReevaluate.disabled = true;
+    if (elements.batchReevaluateSpinner) elements.batchReevaluateSpinner.style.display = 'inline-block';
+    if (elements.batchReevaluateText) elements.batchReevaluateText.textContent = '↻ Re-evaluando...';
+  }
+
+  try {
+    let reevaluatedCount = 0;
+    if (state.selectedProjectId) {
+      const res = await fetch(`/api/projects/${state.selectedProjectId}/reevaluate-stale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Error en la re-evaluación por lotes');
+      reevaluatedCount = data.reevaluatedCount || 0;
+    } else {
+      // All projects: find distinct project IDs with stale items
+      const projectIds = [...new Set(staleItems.map(s => s.projectId))];
+      for (const pid of projectIds) {
+        const res = await fetch(`/api/projects/${pid}/reevaluate-stale`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          reevaluatedCount += (data.reevaluatedCount || 0);
+        }
+      }
+    }
+
+    showToast(`Se re-evaluaron ${reevaluatedCount} sugerencias desactualizadas.`, 'success');
+    state.renderedSuggestionsSignature = '';
+    await loadProjects();
+    await loadSuggestions();
+  } catch (err) {
+    console.error('Batch re-evaluate error:', err);
+    showToast(err.message || 'Error al re-evaluar sugerencias.', 'error');
+  } finally {
+    if (elements.btnBatchReevaluate) {
+      elements.btnBatchReevaluate.disabled = false;
+      if (elements.batchReevaluateSpinner) elements.batchReevaluateSpinner.style.display = 'none';
+    }
+  }
 }
 
 // ==========================================================================

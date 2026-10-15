@@ -4,7 +4,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
-import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT } from '../config';
+import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD } from '../config';
 
 const ollama = sharedAiProvider;
 
@@ -259,29 +259,83 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
 
   const projectVector = latestSnapshot.embedding ? `[${latestSnapshot.embedding.join(',')}]` : null;
 
-  const result = await db.execute(sql`
-    SELECT c.id
-    FROM ${contents} c
-    WHERE c.ingest_status = 'ready'
-      AND c.embedding IS NOT NULL
-      AND (
-        ${projectVector ? sql`(c.embedding <=> ${projectVector}::vector < ${VECTOR_DISTANCE_THRESHOLD}) OR ` : sql``}
-        EXISTS (
-          SELECT 1 
-          FROM ${projectNoteSnapshots} pns
-          WHERE pns.project_snapshot_id = ${latestSnapshot.id}
-            AND pns.embedding IS NOT NULL
-            AND (c.embedding <=> pns.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
+  const result = await db.execute<{ id: string }>(sql`
+    WITH latest_snap AS (
+      SELECT ${latestSnapshot.id}::uuid AS id, ${projectVector}::vector AS embedding
+    ),
+    latest_project_evals AS (
+      SELECT DISTINCT ON (e.content_id)
+        e.id, e.content_id, e.verdict, e.project_snapshot_id
+      FROM ${evaluations} e
+      JOIN ${projectSnapshots} ps ON e.project_snapshot_id = ps.id
+      WHERE ps.project_id = ${projectId}
+      ORDER BY e.content_id, e.evaluated_at DESC
+    ),
+    unevaluated_matches AS (
+      SELECT c.id, c.consumed_at
+      FROM ${contents} c, latest_snap ls
+      WHERE c.ingest_status = 'ready'
+        AND c.embedding IS NOT NULL
+        AND (
+          ${projectVector ? sql`(c.embedding <=> ls.embedding < ${VECTOR_DISTANCE_THRESHOLD}) OR ` : sql``}
+          EXISTS (
+            SELECT 1 
+            FROM ${projectNoteSnapshots} pns
+            WHERE pns.project_snapshot_id = ls.id
+              AND pns.embedding IS NOT NULL
+              AND (c.embedding <=> pns.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
+          )
         )
-      )
-      AND NOT EXISTS (
-        SELECT 1 
-        FROM ${evaluations} e
-        JOIN ${projectSnapshots} ps ON e.project_snapshot_id = ps.id
-        WHERE e.content_id = c.id
-          AND ps.project_id = ${projectId}
-      )
-    ORDER BY c.consumed_at DESC
+        AND NOT EXISTS (
+          SELECT 1 
+          FROM ${evaluations} e
+          JOIN ${projectSnapshots} ps ON e.project_snapshot_id = ps.id
+          WHERE e.content_id = c.id
+            AND ps.project_id = ${projectId}
+        )
+    ),
+    tentative_promotions AS (
+      SELECT c.id, c.consumed_at
+      FROM ${contents} c
+      JOIN latest_project_evals lpe ON lpe.content_id = c.id
+      JOIN ${projectSnapshots} eval_ps ON lpe.project_snapshot_id = eval_ps.id
+      JOIN latest_snap ls ON true
+      WHERE lpe.verdict = 'tentative'
+        AND eval_ps.id != ls.id
+        AND c.embedding IS NOT NULL
+        AND eval_ps.embedding IS NOT NULL
+        AND ls.embedding IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM ${actionSuggestions} a 
+          WHERE a.content_id = c.id AND a.project_id = ${projectId}
+        )
+        AND (
+          -- Project moved closer to content by at least PROMOTION_DELTA_THRESHOLD (0.08)
+          (ls.embedding <=> c.embedding) <= (eval_ps.embedding <=> c.embedding) - ${PROMOTION_DELTA_THRESHOLD}
+          OR
+          -- A new or significantly updated note in latest_snap has strong affinity (< 0.50)
+          EXISTS (
+            SELECT 1 FROM ${projectNoteSnapshots} pns_new
+            LEFT JOIN ${projectNoteSnapshots} pns_old
+              ON pns_old.project_snapshot_id = eval_ps.id
+              AND pns_old.note_path = pns_new.note_path
+            WHERE pns_new.project_snapshot_id = ls.id
+              AND pns_new.embedding IS NOT NULL
+              AND (pns_new.embedding <=> c.embedding) < ${NOTE_PROMOTION_DISTANCE_THRESHOLD}
+              AND (
+                pns_old.id IS NULL
+                OR pns_old.embedding IS NULL
+                OR (pns_new.embedding <=> c.embedding) <= (pns_old.embedding <=> c.embedding) - 0.04
+              )
+          )
+        )
+    )
+    SELECT id FROM (
+      SELECT id, consumed_at FROM unevaluated_matches
+      UNION
+      SELECT id, consumed_at FROM tentative_promotions
+    ) combined_candidates
+    ORDER BY consumed_at DESC
     LIMIT ${limit}
   `);
 

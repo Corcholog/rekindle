@@ -211,25 +211,46 @@ export default async function (server: FastifyInstance) {
       sugCounts.set(`${c.projectId}:${c.status}`, c.count);
     }
 
-    // 3. Count evaluations (tentative and irrelevant)
-    const evalRows = await db.select({
-      projectId: projectSnapshots.projectId,
-      verdict: evaluations.verdict,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(evaluations)
-    .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-    .where(and(
-      inArray(projectSnapshots.projectId, projectIds),
-      inArray(evaluations.verdict, ['tentative', 'irrelevant']),
-      sql`(evaluations.verdict = 'irrelevant' OR NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = ${evaluations.id}))`
-    ))
-    .groupBy(projectSnapshots.projectId, evaluations.verdict);
+    // 3. Count evaluations (tentative and irrelevant) with strict deduplication
+    const evalCountRes = await db.execute<{
+      project_id: string;
+      verdict: string;
+      count: number;
+    }>(sql`
+      WITH latest_project_evals AS (
+        SELECT DISTINCT ON (e.content_id, ps.project_id)
+          e.id,
+          e.content_id,
+          ps.project_id,
+          e.verdict
+        FROM ${evaluations} e
+        JOIN ${projectSnapshots} ps ON e.project_snapshot_id = ps.id
+        WHERE ps.project_id IN (${sql.join(projectIds.map(id => sql`${id}`), sql`, `)})
+        ORDER BY e.content_id, ps.project_id, e.evaluated_at DESC
+      )
+      SELECT 
+        project_id,
+        verdict,
+        count(*)::int AS count
+      FROM latest_project_evals lpe
+      WHERE (
+        (lpe.verdict = 'tentative' AND NOT EXISTS (
+          SELECT 1 FROM ${actionSuggestions} a 
+          WHERE a.evaluation_id = lpe.id
+        ))
+        OR
+        (lpe.verdict = 'irrelevant' AND NOT EXISTS (
+          SELECT 1 FROM ${actionSuggestions} a 
+          WHERE a.evaluation_id = lpe.id
+        ))
+      )
+      GROUP BY project_id, verdict
+    `);
 
     const evalCounts = new Map<string, number>();
-    for (const e of evalRows) {
+    for (const e of evalCountRes.rows) {
       if (e.verdict) {
-        evalCounts.set(`${e.projectId}:${e.verdict}`, e.count);
+        evalCounts.set(`${e.project_id}:${e.verdict}`, e.count);
       }
     }
 
@@ -398,7 +419,9 @@ export default async function (server: FastifyInstance) {
             } else if (await fs.access(p2).then(() => true).catch(() => false)) {
               existingBridgeFile = f2;
             }
-          } catch {}
+          } catch (accessErr) {
+            server.log.debug({ err: accessErr }, 'Bridge file access check failed');
+          }
         }
 
         synergies.push({

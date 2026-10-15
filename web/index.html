@@ -321,6 +321,15 @@
                 <span class="pill-badge" id="badge-discarded">0</span>
               </button>
             </div>
+            <div class="triage-tabs-actions" id="triage-tabs-actions">
+              <button type="button" class="btn btn-sm btn-batch-reevaluate" id="btn-batch-reevaluate" style="display: none;" title="Re-evaluar con IA todas las sugerencias desactualizadas tras cambios en el proyecto">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                <span id="batch-reevaluate-text">↻ Re-evaluar obsoletas (0)</span>
+                <span class="spinner" id="batch-reevaluate-spinner" style="display: none;"></span>
+              </button>
+            </div>
           </div>
 
           <!-- Suggestions List -->
