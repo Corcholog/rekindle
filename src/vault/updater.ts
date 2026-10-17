@@ -56,7 +56,14 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
   if (sug.userFeedback) {
     callout += prefixLines('Feedback', sug.userFeedback);
   }
+  // Hidden Obsidian comment used to detect an already-written callout after a crash
+  callout += `> ${calloutMarker(sug.id)}\n`;
   return callout;
+}
+
+/** Sanitized model text cannot contain "%%", so it cannot forge another suggestion's marker. */
+export function calloutMarker(suggestionId: string): string {
+  return `%% loom:${suggestionId} %%`;
 }
 
 const writableSelection = {
@@ -69,51 +76,95 @@ const writableSelection = {
   sourceTitle: contents.title,
 };
 
-async function appendToProjectFile(folderPath: string, vaultPath: string, markdown: string): Promise<string> {
-  const suggestionsFilePath = path.join(vaultPath, folderPath, 'suggestions.md');
-  await fs.mkdir(path.dirname(suggestionsFilePath), { recursive: true });
-  await fs.appendFile(suggestionsFilePath, markdown, 'utf-8');
-  return suggestionsFilePath;
+async function resolveSuggestionsFile(vaultPath: string, folderPath: string): Promise<string> {
+  const root = path.resolve(vaultPath);
+  const projectDir = path.resolve(root, folderPath);
+  const rel = path.relative(root, projectDir);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`La carpeta del proyecto está fuera del Vault: ${folderPath}`);
+  }
+  // Never create project folders: after a vault switch the project may simply not be here
+  const stat = await fs.stat(projectDir).catch(() => null);
+  if (!stat?.isDirectory()) {
+    throw new Error(`La carpeta del proyecto no existe en el Vault: ${folderPath}`);
+  }
+  return path.join(projectDir, 'suggestions.md');
+}
+
+async function readIfExists(filePath: string): Promise<string> {
+  try {
+    return await fs.readFile(filePath, 'utf-8');
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return '';
+    throw err;
+  }
 }
 
 /**
  * Escribe una sugerencia aceptada en el Vault como Callout (> [!tip]) de Obsidian.
- * Idempotente: reclama la sugerencia atómicamente antes de escribir.
- * @returns true si se escribió en este llamado.
+ * Idempotent across crashes and concurrent calls: the row is locked for the duration of the
+ * write, and each callout carries a hidden marker. If the process died after appending but
+ * before setting written_to_vault, the marker is found and the callout is not appended again.
+ * @returns true if the callout was appended by this call.
  */
 export async function writeAcceptedSuggestionToVault(suggestionId: string, vaultPath: string): Promise<boolean> {
-  // Claim the row first to prevent concurrent duplicate writebacks
-  const [claimed] = await db.update(actionSuggestions)
-    .set({ writtenToVault: true })
-    .where(and(
-      eq(actionSuggestions.id, suggestionId),
-      eq(actionSuggestions.status, 'accepted'),
-      eq(actionSuggestions.writtenToVault, false),
-    ))
-    .returning({ id: actionSuggestions.id });
+  return db.transaction(async (tx) => {
+    const [locked] = await tx.select({ id: actionSuggestions.id })
+      .from(actionSuggestions)
+      .where(and(
+        eq(actionSuggestions.id, suggestionId),
+        eq(actionSuggestions.status, 'accepted'),
+        eq(actionSuggestions.writtenToVault, false),
+      ))
+      .for('update');
+    if (!locked) return false;
 
-  if (!claimed) return false;
+    const [sug] = await tx.select({ ...writableSelection, folderPath: projects.folderPath })
+      .from(actionSuggestions)
+      .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
+      .leftJoin(contents, eq(actionSuggestions.contentId, contents.id))
+      .where(eq(actionSuggestions.id, suggestionId))
+      .limit(1);
+    if (!sug) return false;
 
-  const [sug] = await db.select({ ...writableSelection, folderPath: projects.folderPath })
-    .from(actionSuggestions)
-    .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
-    .leftJoin(contents, eq(actionSuggestions.contentId, contents.id))
-    .where(eq(actionSuggestions.id, suggestionId))
-    .limit(1);
+    const filePath = await resolveSuggestionsFile(vaultPath, sug.folderPath);
+    const alreadyWritten = (await readIfExists(filePath)).includes(calloutMarker(suggestionId));
+    if (!alreadyWritten) {
+      await fs.appendFile(filePath, formatAcceptedCallout(sug), 'utf-8');
+      console.log(`[VaultUpdater] Accepted suggestion ${suggestionId} written to ${filePath}`);
+    }
 
-  if (!sug) return false;
-
-  try {
-    const filePath = await appendToProjectFile(sug.folderPath, vaultPath, formatAcceptedCallout(sug));
-    console.log(`[VaultUpdater] Accepted suggestion ${suggestionId} written to ${filePath}`);
-    return true;
-  } catch (err) {
-    // Revert claim if disk write failed
-    await db.update(actionSuggestions)
-      .set({ writtenToVault: false })
+    await tx.update(actionSuggestions)
+      .set({ writtenToVault: true })
       .where(eq(actionSuggestions.id, suggestionId));
-    throw err;
+    return !alreadyWritten;
+  });
+}
+
+async function writePending(rows: { id: string }[], vaultPath: string): Promise<{ written: number; failed: number }> {
+  let written = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      if (await writeAcceptedSuggestionToVault(row.id, vaultPath)) written++;
+    } catch (err) {
+      failed++;
+      console.warn(`[VaultUpdater] Writeback for suggestion ${row.id} still pending:`, (err as Error).message);
+    }
   }
+  return { written, failed };
+}
+
+/** Boot-time recovery: retries every accepted suggestion that has not reached the vault. */
+export async function syncAllPendingWritebacks(vaultPath: string): Promise<number> {
+  const pending = await db.select({ id: actionSuggestions.id })
+    .from(actionSuggestions)
+    .where(and(eq(actionSuggestions.status, 'accepted'), eq(actionSuggestions.writtenToVault, false)));
+  if (pending.length === 0) return 0;
+
+  const { written } = await writePending(pending, vaultPath);
+  console.log(`[VaultUpdater] Recovery: ${written} of ${pending.length} pending writebacks completed`);
+  return written;
 }
 
 /**
@@ -137,10 +188,10 @@ export async function syncProjectSuggestions(projectId: string, vaultPath: strin
     return 0;
   }
 
-  let writtenCount = 0;
-  for (const sug of unwritten) {
-    const success = await writeAcceptedSuggestionToVault(sug.id, vaultPath);
-    if (success) writtenCount++;
+  const { written: writtenCount, failed } = await writePending(unwritten, vaultPath);
+  if (failed > 0) {
+    // Let pg-boss retry the sync job
+    throw new Error(`${failed} writeback(s) failed for project ${projectId}`);
   }
 
   console.log(`[VaultUpdater] Recovered ${writtenCount} accepted suggestions for project ${projectId}`);

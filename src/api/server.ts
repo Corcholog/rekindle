@@ -15,6 +15,7 @@ import { setupIngestionWorker } from '../workers/ingestionWorker';
 import { setupEvaluationWorker } from '../workers/evaluationWorker';
 import { setupVaultWorker } from '../workers/vaultWorker';
 import { startVaultWatcher, stopVaultWatcher } from '../vault/watcher';
+import { syncAllPendingWritebacks } from '../vault/updater';
 import { env } from '../config';
 import { registerRequestGuard } from './requestGuard';
 
@@ -85,6 +86,10 @@ export const startServer = async () => {
     if (vaultPath) {
       startVaultWatcher(vaultPath).catch(err => {
         server.log.error({ err }, 'Vault Watcher Error:');
+      });
+      // Finish any writeback interrupted by a crash or a failed disk write
+      syncAllPendingWritebacks(vaultPath).catch(err => {
+        server.log.error({ err }, 'Writeback recovery error');
       });
     } else {
       server.log.warn('VAULT_PATH is not set. Skipping Obsidian Sync Watcher.');
