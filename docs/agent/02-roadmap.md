@@ -5,7 +5,7 @@ Work one phase per session, only when the owner names it. For every phase: plan 
 Order rationale: less code first (cleanup) makes every later step cheaper; security and integrity fixes come before anything is published; the eval harness comes before any retrieval or prompt tuning so that every change has a before/after number.
 
 - [x] **Phase 0 — Audit** (`docs/agent/01-audit.md`). Gate: owner reviews `docs/audit/AUDIT_REPORT.md` and decides what proceeds.
-- [ ] **Phase 1 — Cleanup: dead code and legacy**
+- [x] **Phase 1 — Cleanup: dead code and legacy**
 - [ ] **Phase 2 — Fix Critical and High findings**
 - [ ] **Phase 3 — Evaluation harness**
 - [ ] **Phase 4 — AI observability**
