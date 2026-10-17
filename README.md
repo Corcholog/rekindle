@@ -1,6 +1,6 @@
 # Loom
 
-Loom is a **local-first** assistant that connects what you read with what you write. You keep your projects as Markdown notes in an Obsidian vault; you paste web articles or YouTube videos into Loom; Loom summarises them, compares them semantically against your active projects, and proposes concrete actions ("cite this in Act 2", "counter-argument for this thesis"). Only the suggestions **you accept** are written back to your vault.
+Loom is a **local-first** assistant that connects what you read with what you write. You keep your writing projects as Markdown notes in an Obsidian vault; you clip web articles or YouTube videos into Loom; Loom summarises them, compares them semantically against your active projects and individual notes, and proposes concrete actions ("cite this in Act 2", "counter-argument for combat mechanics"). Only the suggestions **you accept** are written back to your vault.
 
 > The product UI, AI prompts and generated text are in **Spanish**. Code and developer documentation are in English.
 
@@ -11,20 +11,27 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 ## How it works
 
 ```
- URL ──► ingest ──► summarise (Gemini or Ollama) ──► embed (Ollama bge-m3) ──► PostgreSQL + pgvector
-                                                                                    │
- Obsidian vault ──► watcher ──► reconcile project ──► snapshot + embedding ─────────┤
-                                                                                    ▼
-                                           cosine distance < 0.6 ──► LLM evaluation per project
-                                                                                    │
-                                    pending suggestion ──► you accept ──► callout in <project>/suggestions.md
+ URL (Web / Extension) ──► ingest ──► summarise (Gemini or Ollama) ──► embed (Ollama bge-m3) ──► PostgreSQL + pgvector
+                                                                                                      │
+ Obsidian vault ──► watcher ──► reconcile notes ──► hierarchical snapshots + embeddings ──────────────┤
+                                                                                                      ▼
+                                              cosine distance < 0.6 ──► LLM evaluation per project & note
+                                                                                                      │
+                                       pending suggestion ──► you accept ──► callout in <project>/suggestions.md
 ```
 
-- **Ingestion**: web pages (Readability) and YouTube (shorts/embed/live/youtu.be are canonicalised; transcripts via `youtube-transcript`). Tracking params and fragments are stripped from URLs. Fetches have a 15 s timeout, a 5 MB cap and a content-type check; only `http(s)` URLs are accepted.
-- **Evaluation**: step 1 is a pgvector pre-filter against the *latest snapshot* of each active project; step 2 is one structured-output LLM call per matching project (`actionable` / `tentative` / `irrelevant`). Gemini is used when `GEMINI_API_KEY` is set; on any Gemini error it falls back to local Ollama.
-- **Vault sync**: a watcher (3 s debounce) re-reads a project when its top-level `.md` files change, stores an immutable snapshot with a new embedding and re-evaluates past content that now matches.
-- **Writeback**: accepting a suggestion appends a `> [!tip]` callout to `<project>/suggestions.md`. Pending and discarded suggestions never touch the vault.
-- **Web UI**: Inbox (ingest + feed), Triage (per project, tabs for active/pending/tentative/accepted/discarded) and Settings (vault path, rescan).
+- **Ingestion & Web Clipper**: Ingest links directly from the Web UI or via the **Manifest V3 Web Clipper extension** (`extension/`). The clipper supports offline queueing in `chrome.storage.local` with background auto-sync when Loom reconnects. Web pages (Readability) and YouTube (shorts/embed/live/youtu.be transcripts) are canonicalised, stripped of tracking params, and capped safely.
+- **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Gemini is used when `GEMINI_API_KEY` is set; on any Gemini error it seamlessly falls back to local Ollama (`qwen2.5:7b-instruct`).
+- **Living Vault Sync & Staleness**: A watcher (3 s debounce) re-reads project notes recursively, updates immutable snapshots, and computes vector drift (`STALE_DRIFT_THRESHOLD = 0.04`). Stale suggestions are flagged with badges and can be re-evaluated context-aware against updated drafts.
+- **Synergies & Consultor**:
+  - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and synthesizes bridge notes.
+  - **Archive & Vault Research Partner ("Consultor")**: Answers natural language research questions by reasoning across your entire saved library and all active Obsidian project notes simultaneously, generating verified inline citations (`[C1]`, `[N1]`).
+- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault.
+- **Web UI**: 4 focused views:
+  1. **Consumo**: Ingestion input card and chronological reading history feed.
+  2. **Sugerencias**: Project-scoped triage with staleness pills, backlog synthesis, and accept/discard/reevaluate actions.
+  3. **Consultor**: Full-catalog research consultant with interactive prompt chips.
+  4. **Configuración**: Vault directory configuration, disk mount status, and forced rescan.
 
 ### Vault layout
 
@@ -32,12 +39,14 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 <vault>/
   Projects/            (or Proyectos/)
     My_Project/
-      project.md       ← thesis source (or any note tagged #project / tags: [project])
-      other-notes.md   ← every .md directly inside the folder is included
+      ideas.md         ← note tagged #project (or frontmatter tags: [project])
+      chapter1.md      ← any markdown note
+      research/
+        sources.md     ← recursive subdirectories are fully indexed
       suggestions.md   ← written by Loom, ignored when reading
 ```
 
-Only `.md` files directly inside a project folder are read; sub-folders and attachments are ignored.
+Notes inside project folders are indexed recursively. No mandatory `project.md` file is required. Attachments and `.obsidian` configurations are safely ignored.
 
 ---
 
@@ -48,10 +57,10 @@ Only `.md` files directly inside a project folder are read; sub-folders and atta
 - **PostgreSQL 16 with `pgvector`** — `docker compose up -d postgres` provides it
 - **Ollama** running locally with:
   ```bash
-  ollama pull bge-m3              # embeddings (required)
+  ollama pull bge-m3              # embeddings (required, 1024-d)
   ollama pull qwen2.5:7b-instruct # local LLM (used when no Gemini key, or as fallback)
   ```
-- **Gemini API key** *(optional)* — faster/better structured output. See the privacy note below.
+- **Gemini API key** *(optional)* — faster structured output. See the privacy note below.
 
 ---
 
@@ -87,12 +96,21 @@ pnpm run db:migrate        # enables pgvector and applies Drizzle migrations
 ### 3. Run
 
 ```bash
-pnpm run dev               # watch mode
-pnpm start                 # plain start
-start.bat                  # Windows: also starts Docker/Ollama checks, migrates and opens the browser
+# On Linux / macOS:
+./start.sh                 # or pnpm run dev / pnpm start
+
+# On Windows:
+start.bat                  # checks Docker/Ollama, migrates, opens browser and launches dev
 ```
 
 Open <http://127.0.0.1:3000>. Without `VAULT_PATH` the demo vault in [`demo_vault/`](demo_vault) is used.
+
+### 4. Browser Extension (Optional)
+
+1. Open Chrome/Brave/Edge and navigate to `chrome://extensions`.
+2. Enable **Developer mode** (toggle in upper right).
+3. Click **Load unpacked** and select the [`extension/`](extension) folder from this repository.
+4. Pin the **Loom Web Clipper** icon for 1-click clipping from any webpage.
 
 ---
 
@@ -103,7 +121,7 @@ Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the followin
 - the article text (up to 50,000 characters) for summarisation;
 - for each evaluation, the project **thesis and up to 15,000 characters of your project notes**, plus the article summary.
 
-Remove the key to keep everything local (Ollama only).
+Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
 
 ---
 
@@ -113,30 +131,37 @@ Remove the key to keep everything local (Ollama only).
 |---|---|
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint (`@typescript-eslint`) |
-| `pnpm test` | Vitest. Integration tests need **Docker** (Testcontainers) and some need a live **Ollama**. |
+| `pnpm test` | Vitest. Offline unit tests run instantly; integration tests use Docker / Ollama. |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts tests/dummy.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:seed` | Insert a single sample project row |
-| `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.bat` wraps it) |
+| `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |
 | `tsx scripts/seed_demo.ts` | ⚠️ Deletes all rows and rebuilds demo data + `demo_vault` project |
 | `tsx scripts/reconcile_and_reevaluate.ts` | ⚠️ Deletes all evaluations and pending suggestions, rescans the vault and re-evaluates every ready content |
 
 ---
 
-## HTTP API (summary)
+## HTTP API Summary
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/ingest` | Queue a URL (`202` new, `200` re-queued) |
-| `GET /api/contents`, `GET /api/contents/:id` | Inbox feed and detail |
-| `GET /api/projects`, `GET /api/projects/:id` | Projects with thesis and counters (`?isActive=true|false`) |
-| `GET /api/suggestions`, `GET /api/suggestions/:id` | Triage feed (`status=active|pending|tentative|accepted|discarded`) |
-| `PATCH /api/suggestions/:id` | Accept / discard (`409` if already resolved differently) |
-| `GET/POST /api/settings/vault`, `POST /api/settings/vault/rescan` | Vault configuration and forced rescan |
-| `GET /api/system/status`, `GET /health` | Activity and liveness |
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/ingest` | `POST` | Queue a URL (`202` new, `200` re-queued) |
+| `/api/contents`, `/api/contents/:id` | `GET` | Reading feed, status indicators, and content details |
+| `/api/library/consult` | `POST` | Full-catalog Archive & Obsidian Vault Research Partner |
+| `/api/library/search`, `/api/library/ask` | `GET` / `POST` | Semantic vector search and RAG Q&A with citations |
+| `/api/projects`, `/api/projects/:id` | `GET` | Projects list with counters and note metadata |
+| `/api/projects/synergies` | `GET` | Cross-project thematic synergies via HNSW note distance |
+| `/api/projects/synergies/explore` | `POST` | AI synergy exploration and Obsidian bridge note generation |
+| `/api/projects/:id/synthesize` | `POST` | Synthesize project backlog into research brief |
+| `/api/suggestions`, `/api/suggestions/:id` | `GET` | Triage feed with staleness scores (`status=active\|pending\|tentative\|accepted\|discarded`) |
+| `/api/suggestions/:id` | `PATCH` | Accept / discard suggestion (`409` on conflict) |
+| `/api/suggestions/:id/reevaluate` | `POST` | Context-aware re-evaluation of suggestion against current notes |
+| `/api/projects/:id/reevaluate-stale` | `POST` | Batch re-evaluation of all stale suggestions for a project |
+| `/api/settings/vault`, `.../rescan` | `GET` / `POST` | Vault path configuration, drive validation, and forced rescan |
+| `/api/system/status`, `/health` | `GET` | Real-time queue activity indicator and liveness check |
 
-Full contracts and semantics are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#11-http-api).
+Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#12-complete-http-api-reference).
 
 ---
 
@@ -144,21 +169,17 @@ Full contracts and semantics are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#
 
 | Document | Content |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, data model, pipelines, API, configuration, known issues |
-| [docs/code-review.md](docs/code-review.md) | Code review findings and their current status |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **In-depth technical reference**: Architecture, data model, pipelines, API, configuration, and design |
+| [docs/code-review.md](docs/code-review.md) | Code review findings and historical status |
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
-| [docs/fase-0-report.md … fase-7-report.md](docs) | Historical phase reports (Spanish), each with a post-review addendum |
+| [docs/fase-0-report.md … fase-7-report.md](docs) | Historical phase reports (Spanish) |
 
 ---
 
-## Known limitations
-
-See [section 14 of ARCHITECTURE.md](docs/ARCHITECTURE.md#14-known-issues-and-open-questions). Highlights: no authentication (localhost-only by default), accepting a *tentative* item leaves its evaluation listed as tentative, a reconcile triggered while another one for the same project is running is skipped, and most automated tests require Docker/Ollama.
-
 ## Troubleshooting
 
-- **Project never matches anything**: check Ollama is running with `bge-m3` (a failed embedding is retried on the next change/boot/rescan, nothing is stored meanwhile). Use *Settings → Rescan*.
+- **Project never matches anything**: check Ollama is running with `bge-m3` (a failed embedding is retried on the next change/boot/rescan, nothing is stored meanwhile). Use *Configuración → Rescan*.
 - **`ECONNREFUSED 127.0.0.1:11434`**: start Ollama (`ollama serve`).
-- **Ingestion fails with "Unsupported content type"**: only HTML/text pages are supported (no PDFs).
-- **Nothing happens when notes change**: only top-level `.md` files in `Projects/<name>/` (or `Proyectos/`) are watched; `suggestions.md` and dot-folders are ignored.
-- **Slow first request**: Ollama loads both models on first use (30–40 s).
+- **Ingestion fails with "Unsupported content type"**: only HTML/text pages are supported (no binary PDFs).
+- **Secondary Linux drive not detected**: if your vault is on an NTFS/removable partition (`/run/media`), Loom attempts auto-mounting via `udisksctl`. Ensure your user has mount permissions.
+- **Slow first request**: Ollama loads models on first invocation (30–40 s cold start).
