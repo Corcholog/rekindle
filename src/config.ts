@@ -3,9 +3,15 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// The API has no authentication, so it must only listen on loopback.
+const LOOPBACK_BIND_HOSTS = ['127.0.0.1', 'localhost', '::1'];
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  HOST: z.string().default('127.0.0.1'),
+  HOST: z.string().default('127.0.0.1').refine(
+    (host) => LOOPBACK_BIND_HOSTS.includes(host),
+    { message: 'HOST must be a loopback address (127.0.0.1, localhost or ::1): the API has no authentication' },
+  ),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().default('postgres://loom:loompassword@localhost:5432/loomdb'),
   OLLAMA_URL: z.string().default('http://127.0.0.1:11434'),
@@ -15,7 +21,11 @@ const EnvSchema = z.object({
   VAULT_PATH: z.string().optional(),
 });
 
-export const env = EnvSchema.parse(process.env);
+export function parseEnv(raw: NodeJS.ProcessEnv | Record<string, string | undefined>) {
+  return EnvSchema.parse(raw);
+}
+
+export const env = parseEnv(process.env);
 
 export const PROJECT_DIR_NAMES = ['Projects', 'Proyectos'] as const;
 

@@ -16,6 +16,7 @@ import { setupEvaluationWorker } from '../workers/evaluationWorker';
 import { setupVaultWorker } from '../workers/vaultWorker';
 import { startVaultWatcher, stopVaultWatcher } from '../vault/watcher';
 import { env } from '../config';
+import { registerRequestGuard } from './requestGuard';
 
 export const server = Fastify({
   logger: env.NODE_ENV === 'test' ? false : { level: process.env.LOG_LEVEL || 'warn' }
@@ -24,6 +25,8 @@ export const server = Fastify({
 // Add Zod validation compilers
 server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
+
+registerRequestGuard(server, env.PORT);
 
 // Custom error handler
 server.setErrorHandler((error: any, request, reply) => {
