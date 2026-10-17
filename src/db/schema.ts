@@ -42,7 +42,6 @@ export const contents = pgTable('contents', {
   uri: text('uri').notNull().unique(), // Canonicalizada
   title: text('title'),
   channelOrDomain: text('channel_or_domain'),
-  sourceType: text('source_type'),
   rawText: text('raw_text'),
   summary: text('summary'),
   embedding: vector('embedding'),
@@ -51,7 +50,6 @@ export const contents = pgTable('contents', {
   consumptionSeq: integer('consumption_seq').default(1).notNull(),
   ingestStatus: ingestStatusEnum('ingest_status').default('pending').notNull(),
   ingestStatusReason: text('ingest_status_reason'),
-  isRawPurged: boolean('is_raw_purged').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('contents_consumed_at_idx').on(table.consumedAt),
@@ -121,12 +119,9 @@ export const actionSuggestions = pgTable('action_suggestions', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   contentId: uuid('content_id').references(() => contents.id, { onDelete: 'cascade' }).notNull(),
   actionType: actionTypeEnum('action_type').notNull(),
-  customTypeLabel: text('custom_type_label'),
   targetFile: text('target_file').notNull(),
-  targetSection: text('target_section'),
   observation: text('observation').notNull(),
   suggestedAction: text('suggested_action').notNull(),
-  sourceReference: text('source_reference'),
   status: suggestionStatusEnum('status').default('pending').notNull(),
   userFeedback: text('user_feedback'),
   writtenToVault: boolean('written_to_vault').default(false).notNull(),

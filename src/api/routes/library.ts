@@ -42,7 +42,6 @@ export default async function (server: FastifyInstance) {
             title: z.string().nullable(),
             uri: z.string(),
             channelOrDomain: z.string().nullable(),
-            sourceType: z.string().nullable(),
             summary: z.string().nullable(),
             consumedAt: z.date(),
             whyItConnects: z.string(),
@@ -78,7 +77,6 @@ export default async function (server: FastifyInstance) {
         c.uri,
         c.title,
         c.channel_or_domain,
-        c.source_type,
         c.summary,
         SUBSTRING(c.raw_text FROM 1 FOR 800) AS raw_preview,
         c.consumed_at
@@ -93,7 +91,6 @@ export default async function (server: FastifyInstance) {
       uri: row.uri as string,
       title: (row.title as string) || null,
       channelOrDomain: (row.channel_or_domain as string) || null,
-      sourceType: (row.source_type as string) || null,
       summary: (row.summary as string) || null,
       rawPreview: (row.raw_preview as string) || '',
       consumedAt: new Date(row.consumed_at),
@@ -181,7 +178,7 @@ export default async function (server: FastifyInstance) {
           const bodyText = item.summary
             ? `Resumen: ${item.summary}`
             : `Extracto: ${item.rawPreview}`;
-          return `[${item.refId}] Título: "${item.title || 'Sin título'}" | Fuente: ${item.channelOrDomain || item.uri} (${item.sourceType || 'web'})\n${bodyText}`;
+          return `[${item.refId}] Título: "${item.title || 'Sin título'}" | Fuente: ${item.channelOrDomain || item.uri}\n${bodyText}`;
         }).join('\n\n---\n\n')
       : 'No hay contenidos guardados en la biblioteca.';
 
@@ -240,7 +237,6 @@ ${query}
             title: item.title,
             uri: item.uri,
             channelOrDomain: item.channelOrDomain,
-            sourceType: item.sourceType,
             summary: item.summary,
             consumedAt: item.consumedAt,
             whyItConnects: mc.whyItConnects,

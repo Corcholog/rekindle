@@ -456,7 +456,7 @@ function setupLibrarySearchAndAsk() {
         ? `
           <div class="consultant-matches-list">
             ${matchedContents.map(item => {
-              const isYoutube = (item.sourceType === 'youtube') || /youtube\.com|youtu\.be/i.test(item.uri || '');
+              const isYoutube = /youtube\.com|youtu\.be/i.test(item.uri || '');
               const typeLabel = isYoutube ? 'Video' : 'Artículo';
               return `
                 <article class="consultant-match-card content-match" id="consult-ref-${escapeHtml(item.refId)}">
