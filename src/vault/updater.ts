@@ -3,6 +3,7 @@ import * as path from 'path';
 import { db } from '../db';
 import { actionSuggestions, projects, contents } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
+import { sanitizeForVault } from './sanitize';
 
 /**
  * Writeback policy: ONLY suggestions explicitly accepted by the user are written to the vault.
@@ -32,15 +33,16 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
 
   // Escape bracket characters in link text and parentheses in URL to prevent breaking markdown link syntax
   let link = 'Fuente desconocida';
-  if (sug.sourceUri) {
-    const safeTitle = (sug.sourceTitle || 'Fuente').replace(/[[\]]/g, '\\$&');
-    const safeUri = sug.sourceUri.replace(/\(/g, '%28').replace(/\)/g, '%29');
+  if (sug.sourceUri && /^https?:\/\//i.test(sug.sourceUri)) {
+    const safeTitle = sanitizeForVault(sug.sourceTitle || 'Fuente', 300).replace(/\n/g, ' ').replace(/[[\]]/g, '\\$&');
+    const safeUri = sug.sourceUri.replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\s/g, '%20');
     link = `[${safeTitle}](${safeUri})`;
   }
 
-  // Prefix every line with "> " so markdown callout structure remains unbroken
+  // Prefix every line with "> " so markdown callout structure remains unbroken.
+  // Model text comes from untrusted pages, so it is sanitized first.
   const prefixLines = (label: string, text: string) => {
-    const lines = text.trim().split(/\r?\n/);
+    const lines = sanitizeForVault(text).trim().split('\n');
     if (lines.length === 0) return `> **${label}:**\n`;
     const firstLine = `> **${label}:** ${lines[0]}\n`;
     const remainingLines = lines.slice(1).map(l => `> ${l}\n`).join('');
