@@ -54,6 +54,19 @@ echo [ADVERTENCIA] No se encontro .env ni .env.example. Usando valores por defec
 echo.
 
 REM --------------------------------------------------------------------
+REM 3 & 4. Verificacion de Base de Datos
+REM --------------------------------------------------------------------
+set "IS_REMOTE_DB="
+findstr /i /r "^DATABASE_URL=.*supabase.* ^DATABASE_URL=.*aws-.*" .env >nul 2>&1
+if %ERRORLEVEL% equ 0 set "IS_REMOTE_DB=1"
+
+if defined IS_REMOTE_DB (
+    echo [3/6] Base de datos remota detectada en .env.
+    echo [4/6] Omitiendo Docker local (conectando directamente a la nube).
+    goto PG_READY
+)
+
+REM --------------------------------------------------------------------
 REM 3. Verificacion y Arranque de Docker
 REM --------------------------------------------------------------------
 echo [3/6] Verificando estado de Docker Engine...
