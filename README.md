@@ -135,10 +135,7 @@ Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts tests/dummy.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
-| `pnpm run db:seed` | Insert a single sample project row |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |
-| `tsx scripts/seed_demo.ts` | ⚠️ Deletes all rows and rebuilds demo data + `demo_vault` project |
-| `tsx scripts/reconcile_and_reevaluate.ts` | ⚠️ Deletes all evaluations and pending suggestions, rescans the vault and re-evaluates every ready content |
 
 ---
 
