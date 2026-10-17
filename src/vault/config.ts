@@ -19,6 +19,31 @@ export function getCurrentVaultPath(): string | null {
 }
 
 /**
+ * Automatically mounts secondary NTFS/removable partitions on Linux via udisksctl
+ * if the vault path resides on an unmounted /run/media drive.
+ */
+async function ensureDriveMountedIfLinuxMedia(candidatePath: string): Promise<void> {
+  if (process.platform !== 'linux') return;
+  const match = candidatePath.match(/\/run\/media\/[^/]+\/([0-9A-Fa-f]+)/);
+  if (!match) return;
+
+  try {
+    const stat = await fs.stat(candidatePath);
+    if (stat.isDirectory()) return;
+  } catch {
+    const uuid = match[1];
+    try {
+      const { execFile } = await import('child_process');
+      await new Promise((resolve) => {
+        execFile('udisksctl', ['mount', '-b', `/dev/disk/by-uuid/${uuid}`], () => resolve(null));
+      });
+    } catch {
+      // Best-effort auto-mount
+    }
+  }
+}
+
+/**
  * Validates a potential vault path on the filesystem.
  */
 export async function validateVaultPath(candidatePath: string): Promise<VaultPathStatus> {
@@ -33,6 +58,7 @@ export async function validateVaultPath(candidatePath: string): Promise<VaultPat
   }
 
   const resolved = path.resolve(candidatePath.trim());
+  await ensureDriveMountedIfLinuxMedia(resolved);
 
   try {
     const stat = await fs.stat(resolved);

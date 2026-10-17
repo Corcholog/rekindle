@@ -2,6 +2,7 @@ import chokidar from 'chokidar';
 import * as path from 'path';
 import { reconcileProject, bootReconcile } from './reconciler';
 import { PROJECT_DIR_NAMES } from '../config';
+import { validateVaultPath } from './config';
 
 // Manage timeouts for debouncing
 const debounceTimers = new Map<string, NodeJS.Timeout>();
@@ -43,6 +44,13 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
   // Stop any previously running watcher
   if (activeWatcher) {
     await stopVaultWatcher();
+  }
+
+  // Ensure path is accessible (and automatically mounts drive if needed on Linux)
+  const validation = await validateVaultPath(resolved);
+  if (!validation.isValid) {
+    console.warn(`[Watcher] Vault path "${resolved}" is not accessible. Skipping live watcher.`);
+    return;
   }
 
   if (runInitialReconcile) {
