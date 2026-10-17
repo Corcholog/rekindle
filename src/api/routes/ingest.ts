@@ -4,7 +4,7 @@ import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { boss } from '../../queue';
 import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
-import { sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 const IngestRequestSchema = z.object({
   url: z.string().url().refine((val) => {
@@ -49,51 +49,65 @@ export default async function (server: FastifyInstance) {
     const url = canonicalizeUrl(rawUrl);
 
     try {
-      // Atomic upsert avoids race condition between concurrent requests
-      const insertValues: any = {
-        uri: url,
-        ingestStatus: 'pending',
-        consumedAt: new Date(),
-      };
-      if (passedTitle) {
-        insertValues.title = passedTitle;
-      }
-      if (selection) {
-        insertValues.rawText = selection;
-      }
-
-      const [record] = await db.insert(contents)
-        .values(insertValues)
-        .onConflictDoUpdate({
-          target: contents.uri,
-          set: {
-            consumedAt: new Date(),
-            ingestStatus: 'pending',
-            ingestStatusReason: null,
-            consumptionSeq: sql`${contents.consumptionSeq} + 1`,
-            ...(passedTitle ? { title: passedTitle } : {}),
-            ...(selection ? { rawText: selection } : {}),
-          },
-        })
-        .returning({ id: contents.id, createdAt: contents.createdAt, consumedAt: contents.consumedAt });
-
-      const contentId = record.id;
-      // Consider new if created within the last 1000ms and matching consumedAt
-      const isNew = Math.abs(record.consumedAt.getTime() - record.createdAt.getTime()) < 1000;
-
-      // Enqueue job with singletonKey and retryLimit to prevent duplicate runs and infinite loops
-      await boss.send('ingest_url', { 
-        contentId, 
+      const enqueue = (contentId: string) => boss.send('ingest_url', {
+        contentId,
         url,
         initialTitle: passedTitle,
         selection,
       }, { singletonKey: contentId, retryLimit: 2 });
 
-      const statusCode = isNew ? 202 : 200;
-      return reply.status(statusCode).send({
-        message: isNew ? 'URL accepted for processing' : 'URL re-queued for processing',
-        contentId,
-        status: 'pending'
+      // New URL: the insert wins atomically, even with concurrent requests
+      const [created] = await db.insert(contents)
+        .values({
+          uri: url,
+          ingestStatus: 'pending',
+          consumedAt: new Date(),
+          ...(passedTitle ? { title: passedTitle } : {}),
+          ...(selection ? { rawText: selection } : {}),
+        })
+        .onConflictDoNothing({ target: contents.uri })
+        .returning({ id: contents.id });
+
+      if (created) {
+        await enqueue(created.id);
+        return reply.status(202).send({
+          message: 'URL aceptada para procesar',
+          contentId: created.id,
+          status: 'pending',
+        });
+      }
+
+      // Known URL (invariant I6): never re-evaluate. Only an ingest that failed is retried;
+      // otherwise just record that it was clipped again.
+      const [retried] = await db.update(contents)
+        .set({
+          ingestStatus: 'pending',
+          ingestStatusReason: null,
+          consumedAt: new Date(),
+          ...(passedTitle ? { title: passedTitle } : {}),
+          ...(selection ? { rawText: selection } : {}),
+        })
+        .where(and(eq(contents.uri, url), eq(contents.ingestStatus, 'failed')))
+        .returning({ id: contents.id });
+
+      if (retried) {
+        await enqueue(retried.id);
+        return reply.status(200).send({
+          message: 'Reintentando la ingesta de una URL que había fallado',
+          contentId: retried.id,
+          status: 'pending',
+        });
+      }
+
+      const [existing] = await db.update(contents)
+        .set({ consumedAt: new Date() })
+        .where(eq(contents.uri, url))
+        .returning({ id: contents.id, ingestStatus: contents.ingestStatus });
+
+      return reply.status(200).send({
+        message: 'La URL ya está en tu biblioteca',
+        contentId: existing.id,
+        status: existing.ingestStatus,
       });
 
     } catch (error) {

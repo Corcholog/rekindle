@@ -340,7 +340,12 @@ function setupIngestionForm() {
       }
 
       elements.urlInput.value = '';
-      showToast('Enlace enviado para análisis y extracción.', 'success');
+      // 202 = new URL queued; 200 = already in the library (or a failed one retried)
+      if (res.status === 202) {
+        showToast('Enlace enviado para análisis y extracción.', 'success');
+      } else {
+        showToast(data.message, 'info');
+      }
       loadContents();
       loadProjects();
     } catch (err) {
