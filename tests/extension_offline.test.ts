@@ -19,7 +19,7 @@ describe('Loom Web Clipper Extension: Offline Queue & Sync Suite', () => {
     expect(manifest.action.default_popup).toBe('popup.html');
 
     // Verify all icon files exist
-    for (const [size, iconRelPath] of Object.entries(manifest.icons)) {
+    for (const iconRelPath of Object.values(manifest.icons)) {
       const iconPath = path.join(extensionDir, iconRelPath as string);
       const stat = await fs.stat(iconPath);
       expect(stat.size).toBeGreaterThan(0);

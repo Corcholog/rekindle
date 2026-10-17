@@ -132,7 +132,7 @@ Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint (`@typescript-eslint`) |
 | `pnpm test` | Vitest. Offline unit tests run instantly; integration tests use Docker / Ollama. |
-| `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts tests/dummy.test.ts` | Offline unit tests only |
+| `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |

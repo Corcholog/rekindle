@@ -510,7 +510,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(manifest.background.service_worker).toBe('background.js');
 
     // Verify icons exist and have valid size
-    for (const [sizeStr, iconPath] of Object.entries(manifest.icons)) {
+    for (const iconPath of Object.values(manifest.icons)) {
       const fullIconPath = path.join(extensionDir, iconPath as string);
       const stat = await fs.stat(fullIconPath);
       expect(stat.size).toBeGreaterThan(0);
