@@ -106,11 +106,50 @@ export async function validateVaultPath(candidatePath: string): Promise<VaultPat
   }
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/** A newline or other control character in a value would inject extra .env variables. */
+export function isSafeEnvValue(value: string): boolean {
+  return !CONTROL_CHARS.test(value);
+}
+
+/** Returns .env content with KEY set to value, replacing an existing line or appending one. */
+export function upsertEnvLine(content: string, key: string, value: string): string {
+  if (!isSafeEnvValue(value)) {
+    throw new Error(`Invalid value for ${key}: control characters are not allowed`);
+  }
+  const line = `${key}=${value}`;
+  const existing = new RegExp(`^${key}=.*$`, 'm');
+  if (existing.test(content)) {
+    // A replacer function keeps "$&", "$'" etc. in the value literal
+    return content.replace(existing, () => line);
+  }
+  return content.trim() ? `${content.trimEnd()}\n${line}\n` : `${line}\n`;
+}
+
+/** Atomically rewrites one key in a .env file (temp file + rename), readable by the owner only. */
+export async function writeEnvValue(envPath: string, key: string, value: string): Promise<void> {
+  let content = '';
+  try {
+    content = await fs.readFile(envPath, 'utf-8');
+  } catch (err: any) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const next = upsertEnvLine(content, key, value);
+  const tmpPath = `${envPath}.${process.pid}.tmp`;
+  await fs.writeFile(tmpPath, next, { encoding: 'utf-8', mode: 0o600 });
+  await fs.rename(tmpPath, envPath);
+}
+
 /**
  * Updates and persists the vault path in memory and in the .env file.
  */
 export async function persistVaultPath(newVaultPath: string): Promise<string> {
   const resolved = path.resolve(newVaultPath.trim());
+  if (!isSafeEnvValue(resolved)) {
+    throw new Error('La ruta del vault contiene caracteres de control');
+  }
   process.env.VAULT_PATH = resolved;
 
   // Never overwrite the real root .env file during automated test runs
@@ -118,22 +157,7 @@ export async function persistVaultPath(newVaultPath: string): Promise<string> {
     return resolved;
   }
 
-  const envPath = path.resolve(process.cwd(), '.env');
-  let envContent = '';
-
-  try {
-    envContent = await fs.readFile(envPath, 'utf-8');
-  } catch {
-    envContent = '';
-  }
-
-  const vaultLineRegex = /^VAULT_PATH=.*$/m;
-  if (vaultLineRegex.test(envContent)) {
-    envContent = envContent.replace(vaultLineRegex, `VAULT_PATH=${resolved}`);
-  } else {
-    envContent = envContent.trim() ? `${envContent.trim()}\nVAULT_PATH=${resolved}\n` : `VAULT_PATH=${resolved}\n`;
-  }
-
-  await fs.writeFile(envPath, envContent, 'utf-8');
+  // Same location dotenv reads from
+  await writeEnvValue(path.resolve(process.cwd(), '.env'), 'VAULT_PATH', resolved);
   return resolved;
 }

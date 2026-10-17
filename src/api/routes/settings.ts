@@ -9,6 +9,7 @@ import {
   getCurrentVaultPath,
   validateVaultPath,
   persistVaultPath,
+  isSafeEnvValue,
 } from '../../vault/config';
 import {
   isVaultWatcherActive,
@@ -36,7 +37,9 @@ const GetVaultSettingsResponseSchema = z.object({
 });
 
 const UpdateVaultBodySchema = z.object({
-  vaultPath: z.string().min(1, 'La ruta del vault es obligatoria'),
+  vaultPath: z.string()
+    .min(1, 'La ruta del vault es obligatoria')
+    .refine(isSafeEnvValue, 'La ruta del vault no puede contener saltos de línea ni caracteres de control'),
 });
 
 export default async function (server: FastifyInstance) {
