@@ -49,6 +49,16 @@
           <span class="badge badge-accent" id="triage-pending-badge">0</span>
         </button>
 
+        <button type="button" class="nav-tab" id="tab-consultant" data-view="consultant">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+          <span>Consultor</span>
+        </button>
+
         <button type="button" class="nav-tab" id="tab-settings" data-view="settings">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
@@ -85,13 +95,12 @@
     <section class="view-section active" id="view-inbox" aria-label="Consumo">
       <div class="content-wrapper">
         
-        <!-- URL Processing Card -->
+        <!-- URL Processing Block -->
         <div class="card glass-card ingest-card">
           <div class="card-header">
             <div>
-              <span class="card-kicker">Recepción y Extracción</span>
-              <h2 class="card-title">Entretejer Nuevo Contenido</h2>
-              <p class="card-description">Introduce un artículo técnico, ensayo web o enlace de YouTube para cotejarlo semánticamente con las notas de tu Vault.</p>
+              <h2 class="card-title">Guardar en la biblioteca</h2>
+              <p class="card-description">Añade un artículo, ensayo o video de YouTube para extraer su texto, resumirlo y cruzarlo con las notas de tu Vault.</p>
             </div>
           </div>
 
@@ -99,7 +108,7 @@
             <div class="input-group">
               <label for="url-input" class="visually-hidden">URL del enlace a procesar</label>
               <div class="input-wrapper">
-                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="input-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                 </svg>
@@ -108,41 +117,30 @@
                   id="url-input" 
                   name="url" 
                   class="text-input" 
-                  placeholder="https://ejemplo.com/articulo o enlace de YouTube..." 
+                  placeholder="https://ejemplo.com/ensayo o enlace de YouTube..." 
                   required 
                   autocomplete="off"
                   enterkeyhint="go"
                 >
               </div>
               <button type="submit" id="btn-submit-url" class="btn btn-primary">
-                <span class="btn-text">Procesar y Analizar</span>
+                <span class="btn-text">Guardar y analizar</span>
                 <span class="spinner" id="ingest-spinner" style="display: none;"></span>
               </button>
             </div>
-            <div class="input-hints-bar">
-              <span class="hint-item"><span class="hint-bullet">✦</span> Artículos web con extracción limpia (Readability)</span>
-              <span class="hint-item"><span class="hint-bullet">✦</span> Videos, shorts y directos de YouTube con transcripción</span>
-            </div>
 
-            <!-- Browser Clipper & Bookmarklet Bar -->
+            <!-- Quiet Clipper Utility Strip -->
             <div class="clipper-tools-banner">
-              <div class="clipper-banner-info">
-                <span class="clipper-banner-badge">✦ Clipper & Marcador</span>
-                <p class="clipper-banner-text">Captura artículos y videos con 1 clic sin salir de tu lectura.</p>
-              </div>
+              <span class="clipper-banner-text">Captura desde el navegador: arrastra el marcador o instala la extensión local.</span>
               <div class="clipper-banner-actions">
                 <a href="#" id="bookmarklet-btn" class="btn btn-secondary btn-sm bookmarklet-draggable" title="Arrastra este botón a la barra de marcadores de tu navegador">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  <span>✦ Loom Clip</span>
-                  <span class="drag-hint">Arrastrar</span>
+                  <span>Enviar a Loom</span>
                 </a>
                 <button type="button" id="btn-copy-bookmarklet" class="btn btn-secondary btn-sm" title="Copiar código JavaScript del bookmarklet">
-                  Copiar Código
+                  Copiar marcador
                 </button>
                 <button type="button" id="btn-show-extension-guide" class="btn btn-secondary btn-sm" title="Ver guía de instalación de la Extensión Chrome">
-                  Extensión Web
+                  Extensión Chrome
                 </button>
               </div>
             </div>
@@ -151,58 +149,11 @@
           </form>
         </div>
 
-        <!-- Library Semantic Search & Ask Bar (Feature 3) -->
-        <div class="card glass-card library-search-card">
-          <div class="library-search-header">
-            <div class="library-search-title-group">
-              <span class="card-kicker">Búsqueda Semántica & RAG</span>
-              <h2 class="card-title">Pregunta a tu Biblioteca</h2>
-              <p class="card-description">Consulta tus lecturas con lenguaje natural o sintetiza respuestas estructuradas con citas directas.</p>
-            </div>
-            <div class="library-mode-switch">
-              <button type="button" class="mode-btn active" id="btn-mode-search" data-mode="search">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <span>Buscar Artículos</span>
-              </button>
-              <button type="button" class="mode-btn" id="btn-mode-ask" data-mode="ask">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span>Preguntar (Sintetizar)</span>
-              </button>
-            </div>
-          </div>
-
-          <form id="library-query-form" class="library-query-form">
-            <div class="input-group">
-              <div class="input-wrapper">
-                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input 
-                  type="text" 
-                  id="library-query-input" 
-                  class="text-input" 
-                  placeholder="¿Qué métodos de diseño de agentes o argumentos tenemos?... " 
-                  autocomplete="off"
-                  required
-                >
-              </div>
-              <button type="submit" id="btn-submit-library-query" class="btn btn-primary">
-                <span id="library-btn-text">Buscar en Biblioteca</span>
-                <span class="spinner" id="library-spinner" style="display: none;"></span>
-              </button>
-            </div>
-          </form>
-
-          <!-- Search / Ask Response Box -->
-          <div id="library-results-box" class="library-results-box" style="display: none;"></div>
-        </div>
-
         <!-- Contents History List -->
         <div class="feed-section">
           <div class="feed-header">
             <div class="feed-title-wrapper">
-              <h3 class="feed-title">Historial de Lecturas</h3>
+              <h3 class="feed-title">Archivo de lecturas y videos</h3>
               <span class="feed-count" id="feed-count">0 contenidos</span>
             </div>
             <div class="feed-filters">
@@ -216,7 +167,7 @@
                 <option value="failed">Fallidos</option>
               </select>
               <button type="button" class="btn btn-secondary btn-icon" id="btn-refresh-feed" title="Actualizar lista">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                   <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                 </svg>
               </button>
@@ -241,10 +192,7 @@
         <!-- Sidebar Projects -->
         <aside class="triage-sidebar">
           <div class="sidebar-header">
-            <div>
-              <span class="sidebar-kicker">Obsidian Vault</span>
-              <h2 class="sidebar-title">Tus Proyectos</h2>
-            </div>
+            <h2 class="sidebar-title">Proyectos</h2>
             <span class="sidebar-badge" id="projects-count">0</span>
           </div>
 
@@ -259,36 +207,28 @@
           <!-- Selected Project Info Bar -->
           <div class="project-hero" id="project-hero">
             <div class="project-hero-content">
-              <span class="hero-label">PROYECTO EN CURSO</span>
-              <h3 class="hero-title" id="selected-project-title">Todos los Proyectos</h3>
-              <p class="hero-thesis" id="selected-project-thesis">Revisando sugerencias cruzadas entre todos tus proyectos de investigación.</p>
+              <h3 class="hero-title" id="selected-project-title">Todos los proyectos</h3>
+              <p class="hero-thesis" id="selected-project-thesis">Sugerencias activas cruzadas con todas las carpetas de proyectos en tu Vault.</p>
             </div>
             <div class="project-hero-actions" id="project-hero-actions" style="display: none;">
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-synthesize-project" title="Sintetizar sugerencias aceptadas en un Research Brief">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                </svg>
-                <span id="btn-synthesize-text">✦ Sintetizar Backlog</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-synthesize-project" title="Sintetizar sugerencias aceptadas en un documento de investigación">
+                <span id="btn-synthesize-text">Compilar síntesis</span>
                 <span class="spinner" id="synthesize-spinner" style="display: none;"></span>
               </button>
             </div>
           </div>
 
-          <!-- Cross-Project Synergies Panel (Feature 5) -->
+          <!-- Cross-Project Synergies Panel -->
           <div class="card glass-card synergies-section" id="synergies-section" style="display: none;">
             <div class="synergies-header">
               <div class="synergies-title-group">
-                <span class="card-kicker">Inteligencia Cruzada</span>
-                <h3 class="synergies-title">✦ Sinergias y Puentes Entre Proyectos</h3>
-                <p class="synergies-subtitle">Afinidades temáticas y resonancias detectadas automáticamente entre tus notas e investigaciones.</p>
+                <h3 class="synergies-title">Conexiones entre proyectos</h3>
+                <p class="synergies-subtitle">Notas de distintos proyectos que abordan preguntas o marcos conceptuales cercanos.</p>
               </div>
               <div class="synergies-header-actions">
-                <span class="badge badge-accent" id="synergies-count-badge">0 Sinergias</span>
+                <span class="badge badge-subtle" id="synergies-count-badge">0</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-synergies" title="Recalcular afinidades entre proyectos">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                  </svg>
-                  <span>Actualizar</span>
+                  <span>Recalcular</span>
                 </button>
               </div>
             </div>
@@ -301,7 +241,7 @@
           <div class="triage-tabs-bar">
             <div class="triage-tabs" role="tablist">
               <button type="button" class="triage-tab active" id="tab-status-active" data-status="active" role="tab" aria-selected="true">
-                <span>No Descartadas</span>
+                <span>No descartadas</span>
                 <span class="pill-badge" id="badge-active">0</span>
               </button>
               <button type="button" class="triage-tab" id="tab-status-pending" data-status="pending" role="tab" aria-selected="false">
@@ -322,11 +262,8 @@
               </button>
             </div>
             <div class="triage-tabs-actions" id="triage-tabs-actions">
-              <button type="button" class="btn btn-sm btn-batch-reevaluate" id="btn-batch-reevaluate" style="display: none;" title="Re-evaluar con IA todas las sugerencias desactualizadas tras cambios en el proyecto">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                </svg>
-                <span id="batch-reevaluate-text">↻ Re-evaluar obsoletas (0)</span>
+              <button type="button" class="btn btn-sm btn-batch-reevaluate" id="btn-batch-reevaluate" style="display: none;" title="Re-evaluar todas las sugerencias desactualizadas tras cambios en tus notas">
+                <span id="batch-reevaluate-text">Re-evaluar obsoletas (0)</span>
                 <span class="spinner" id="batch-reevaluate-spinner" style="display: none;"></span>
               </button>
             </div>
@@ -335,7 +272,7 @@
           <!-- Suggestions List -->
           <div id="suggestions-list" class="suggestions-container">
             <div class="empty-state">
-              <p>Cargando sugerencias de acción...</p>
+              <p>Cargando sugerencias...</p>
             </div>
           </div>
 
@@ -344,7 +281,66 @@
       </div>
     </section>
 
-    <!-- VIEW C: SETTINGS -->
+    <!-- VIEW C: CONSULTANT (ARCHIVE & VAULT RESEARCH PARTNER) -->
+    <section class="view-section" id="view-consultant" aria-label="Consultor">
+      <div class="content-wrapper consultant-wrapper">
+        
+        <!-- Consultant Prompt Header -->
+        <div class="consultant-hero-card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Consulta tu archivo y tus notas</h2>
+              <p class="card-description">Pregunta qué material tienes sobre un tema, si hay base para un nuevo proyecto o cómo conectan tus lecturas guardadas con tus borradores en Obsidian.</p>
+            </div>
+          </div>
+
+          <form id="consultant-query-form" class="consultant-query-form">
+            <div class="input-group">
+              <label for="consultant-query-input" class="visually-hidden">Pregunta a tu biblioteca y Vault</label>
+              <div class="input-wrapper">
+                <svg class="input-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input 
+                  type="text" 
+                  id="consultant-query-input" 
+                  class="text-input" 
+                  placeholder="¿Tenemos contenido relacionado a videojuegos? ¿Puedo armar un proyecto sobre X?..." 
+                  autocomplete="off"
+                  required
+                >
+              </div>
+              <button type="submit" id="btn-submit-consultant" class="btn btn-primary">
+                <span id="consultant-btn-text">Consultar</span>
+                <span class="spinner" id="consultant-spinner" style="display: none;"></span>
+              </button>
+            </div>
+
+            <div class="consultant-chips" aria-label="Ejemplos de consultas">
+              <span class="consultant-chips-label">Ejemplos:</span>
+              <button type="button" class="consultant-chip" data-query="¿Tenemos contenido relacionado a videojuegos o diseño de juegos?">
+                ¿Tenemos contenido sobre videojuegos?
+              </button>
+              <button type="button" class="consultant-chip" data-query="¿Puedo armar un proyecto o ensayo con lo que tenemos sobre videojuegos y narrativa?">
+                ¿Puedo hacer un proyecto sobre videojuegos?
+              </button>
+              <button type="button" class="consultant-chip" data-query="¿Qué ideas conectan mis notas de proyectos actuales con los videos y artículos guardados?">
+                ¿Qué conecta mis notas con la biblioteca?
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Consultant Results Area -->
+        <div id="consultant-results-box" class="consultant-results-box">
+          <p class="consultant-quiet-hint">Escribe una pregunta arriba o elige uno de los ejemplos para revisar todo el catálogo de lecturas y las notas activas de tus proyectos.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW D: SETTINGS -->
     <section class="view-section" id="view-settings" aria-label="Configuración">
       <div class="content-wrapper settings-wrapper">
         
@@ -352,9 +348,8 @@
         <div class="card glass-card settings-hero-card">
           <div class="card-header">
             <div>
-              <span class="card-kicker">Almacenamiento Local</span>
-              <h2 class="card-title">Configuración del Vault de Obsidian</h2>
-              <p class="card-description">Loom opera de forma local sobre tus notas Markdown. Conecta tu bóveda para sincronizar en tiempo real.</p>
+              <h2 class="card-title">Vault de Obsidian</h2>
+              <p class="card-description">Loom lee y sincroniza directamente las notas Markdown dentro de tu bóveda local.</p>
             </div>
             <div id="settings-status-pill" class="status-pill checking">
               <span class="status-dot"></span>
@@ -366,8 +361,7 @@
           <form id="vault-settings-form" class="vault-form" novalidate>
             <div class="form-group">
               <label for="vault-path-input" class="form-label">
-                Ruta Absoluta del Vault
-                <span class="required-indicator" aria-hidden="true">*</span>
+                Ruta absoluta del Vault
               </label>
               <div class="input-with-button">
                 <input 
@@ -375,18 +369,18 @@
                   id="vault-path-input" 
                   name="vaultPath" 
                   class="text-input" 
-                  placeholder="Ej: C:\Usuarios\tunombre\Documentos\Obsidian\MiVault" 
+                  placeholder="Ej: /Users/corcho/Documents/Obsidian Vault" 
                   required
                   autocomplete="off"
                   spellcheck="false"
                 >
                 <button type="submit" class="btn btn-primary" id="btn-save-vault">
-                  <span class="btn-text">Guardar y Sincronizar</span>
+                  <span class="btn-text">Guardar y sincronizar</span>
                   <span class="spinner" id="vault-save-spinner" style="display: none;"></span>
                 </button>
               </div>
               <p class="form-help-text">
-                Loom observará de forma recursiva cualquier nota <code>.md</code> en las carpetas <code>Projects/</code> o <code>Proyectos/</code> dentro de esta ruta.
+                Se indexan automáticamente las carpetas dentro de <code>Projects/</code> o <code>Proyectos/</code>.
               </p>
               <div class="form-feedback" id="vault-form-feedback" style="display: none;"></div>
             </div>
@@ -395,66 +389,33 @@
           <!-- Current Vault Info Bar -->
           <div class="vault-info-bar" id="vault-info-bar">
             <div class="info-item">
-              <span class="info-label">Ruta Activa:</span>
+              <span class="info-label">Ruta activa:</span>
               <code class="info-value" id="info-active-path">No configurado</code>
             </div>
             <div class="info-item">
-              <span class="info-label">Observador en Vivo:</span>
+              <span class="info-label">Observador:</span>
               <span class="info-value" id="info-watcher-status">Inactivo</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Carpeta Proyectos:</span>
+              <span class="info-label">Carpeta de proyectos:</span>
               <span class="info-value" id="info-projects-folder">No detectada</span>
             </div>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-rescan-vault" title="Re-escanear directorio de proyectos">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 4v6h-6"></path>
-                <path d="M1 20v-6h6"></path>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
               <span>Re-escanear</span>
             </button>
           </div>
         </div>
 
-        <!-- Scenarios & Diagnostics Card -->
+        <!-- Projects Diagnostics Table -->
         <div class="card glass-card settings-diagnostics-card">
           <div class="card-header">
             <div>
-              <span class="card-kicker">Diagnóstico en Tiempo Real</span>
-              <h3 class="card-title">Proyectos Detectados y Estado</h3>
-              <p class="card-description">Notas y carpetas encontradas en el Vault actual con sus estadísticas de sugerencias.</p>
+              <h3 class="card-title">Proyectos registrados</h3>
+              <p class="card-description">Carpetas de proyectos detectadas en el disco y su estado de sincronización.</p>
             </div>
-            <span class="badge badge-accent" id="settings-projects-count">0 Proyectos</span>
+            <span class="badge badge-subtle" id="settings-projects-count">0 proyectos</span>
           </div>
 
-          <!-- Scenario Explanation Box -->
-          <div class="scenario-guide-box">
-            <h4 class="guide-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-              </svg>
-              Comportamiento del Vault ante cambios de ruta o carpetas
-            </h4>
-            <div class="guide-grid">
-              <div class="guide-item">
-                <strong>1. Traslado del Vault</strong>
-                <p>Si trasladaste tu carpeta de Vault a otro disco o ruta, la estructura relativa se mantiene. Todas tus sugerencias y evaluaciones existentes continúan enlazadas sin pérdida.</p>
-              </div>
-              <div class="guide-item">
-                <strong>2. Proyectos ausentes en la nueva ruta</strong>
-                <p>Los proyectos que no existan en la nueva ruta se marcarán como <em>inactivos</em>. Nunca se borran sugerencias históricas; si vuelves a apuntar al Vault anterior, se reactivan automáticamente.</p>
-              </div>
-              <div class="guide-item">
-                <strong>3. Nuevos proyectos o notas libres</strong>
-                <p>Cualquier carpeta nueva dentro de <code>Projects/</code> o <code>Proyectos/</code> es indexada al instante. No necesitas <code>project.md</code>; cualquier nota o borrador es reconocido automáticamente.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Settings Projects List Table / Cards -->
           <div class="settings-projects-table-wrapper" id="settings-projects-wrapper">
             <div class="empty-state">
               <p>Cargando información de proyectos...</p>
@@ -472,7 +433,7 @@
   <dialog class="modal-dialog" id="content-detail-modal">
     <div class="modal-wrapper">
       <div class="modal-header">
-        <h3 class="modal-title" id="modal-content-title">Detalle de Contenido</h3>
+        <h3 class="modal-title" id="modal-content-title">Ficha de contenido</h3>
         <button type="button" class="btn-close" id="btn-close-modal" aria-label="Cerrar ventana">&times;</button>
       </div>
       <div class="modal-body" id="modal-content-body">
@@ -485,45 +446,37 @@
   <dialog class="modal-dialog" id="extension-guide-modal">
     <div class="modal-wrapper">
       <div class="modal-header">
-        <h3 class="modal-title">Extensión Web Clipper de Loom</h3>
+        <h3 class="modal-title">Extensión Web Clipper</h3>
         <button type="button" class="btn-close" id="btn-close-extension-modal" aria-label="Cerrar ventana">&times;</button>
       </div>
       <div class="modal-body">
         <div class="guide-steps">
-          <p class="guide-intro">La extensión para navegadores Chromium (Chrome, Brave, Edge) te permite enviar páginas, citas seleccionadas o enlaces desde el menú contextual sin abrir Loom.</p>
+          <p class="guide-intro">Envía páginas, fragmentos seleccionados o enlaces desde el menú contextual de Chrome, Brave o Edge.</p>
           
           <div class="step-card">
             <span class="step-num">1</span>
             <div>
-              <strong>Abre la gestión de extensiones</strong>
-              <p>Escribe <code>chrome://extensions</code> (o <code>brave://extensions</code> / <code>edge://extensions</code>) en la barra de direcciones.</p>
+              <strong>Abre la página de extensiones</strong>
+              <p>Visita <code>chrome://extensions</code> (o <code>brave://extensions</code>) en tu navegador.</p>
             </div>
           </div>
 
           <div class="step-card">
             <span class="step-num">2</span>
             <div>
-              <strong>Activa el "Modo de desarrollador"</strong>
-              <p>Enciende el interruptor situado en la esquina superior derecha.</p>
+              <strong>Activa el modo de desarrollador</strong>
+              <p>Habilita el interruptor en la esquina superior derecha.</p>
             </div>
           </div>
 
           <div class="step-card">
             <span class="step-num">3</span>
             <div>
-              <strong>Carga la extensión descomprimida</strong>
-              <p>Haz clic en el botón <strong>"Cargar descomprimida"</strong> (Load unpacked) y selecciona la carpeta:</p>
+              <strong>Carga la carpeta de la extensión</strong>
+              <p>Elige <strong>Cargar descomprimida</strong> y selecciona el directorio <code>extension</code> dentro del proyecto:</p>
               <div class="code-copy-box">
-                <code>c:\Projects\loom\extension</code>
+                <code>/home/cork/Projects/loom/extension</code>
               </div>
-            </div>
-          </div>
-
-          <div class="step-card highlight">
-            <span class="step-num">✦</span>
-            <div>
-              <strong>¡Listo para usar con soporte offline!</strong>
-              <p>Haz clic en el icono de Loom en la barra de extensiones o clic derecho en cualquier página o texto seleccionado y elige <em>"✦ Enviar a Loom"</em>. Si Loom está apagado, la extensión guardará todo en cola local y lo sincronizará automáticamente al encenderlo.</p>
             </div>
           </div>
         </div>
@@ -531,14 +484,11 @@
     </div>
   </dialog>
 
-  <!-- Synthesis Result Modal (Feature 4) -->
+  <!-- Synthesis Result Modal -->
   <dialog class="modal-dialog modal-dialog-lg" id="synthesis-result-modal">
     <div class="modal-wrapper modal-lg">
       <div class="modal-header">
-        <div>
-          <span class="card-kicker">Compilación de Investigación</span>
-          <h3 class="modal-title" id="synthesis-modal-title">Research Brief Generado</h3>
-        </div>
+        <h3 class="modal-title" id="synthesis-modal-title">Síntesis del proyecto</h3>
         <button type="button" class="btn-close" id="btn-close-synthesis-modal" aria-label="Cerrar ventana">&times;</button>
       </div>
       <div class="modal-body" id="synthesis-modal-body">
@@ -547,14 +497,11 @@
     </div>
   </dialog>
 
-  <!-- Synergy Bridge Exploration Modal (Feature 5) -->
+  <!-- Synergy Bridge Exploration Modal -->
   <dialog class="modal-dialog modal-dialog-lg" id="synergy-bridge-modal">
     <div class="modal-wrapper modal-lg">
       <div class="modal-header">
-        <div>
-          <span class="card-kicker">Puente Conceptual Inter-Proyectos</span>
-          <h3 class="modal-title" id="synergy-modal-title">Síntesis de Sinergia</h3>
-        </div>
+        <h3 class="modal-title" id="synergy-modal-title">Conexión entre proyectos</h3>
         <button type="button" class="btn-close" id="btn-close-synergy-modal" aria-label="Cerrar ventana">&times;</button>
       </div>
       <div class="modal-body" id="synergy-modal-body">

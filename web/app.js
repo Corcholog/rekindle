@@ -43,9 +43,11 @@ const elements = {
   // Tabs & Views
   tabInbox: document.getElementById('tab-inbox'),
   tabTriage: document.getElementById('tab-triage'),
+  tabConsultant: document.getElementById('tab-consultant'),
   tabSettings: document.getElementById('tab-settings'),
   viewInbox: document.getElementById('view-inbox'),
   viewTriage: document.getElementById('view-triage'),
+  viewConsultant: document.getElementById('view-consultant'),
   viewSettings: document.getElementById('view-settings'),
   inboxActiveCount: document.getElementById('inbox-active-count'),
   triagePendingBadge: document.getElementById('triage-pending-badge'),
@@ -266,6 +268,9 @@ function setupSystemStatusPoller() {
 function setupNavigation() {
   elements.tabInbox.addEventListener('click', () => switchView('inbox'));
   elements.tabTriage.addEventListener('click', () => switchView('triage'));
+  if (elements.tabConsultant) {
+    elements.tabConsultant.addEventListener('click', () => switchView('consultant'));
+  }
   if (elements.tabSettings) {
     elements.tabSettings.addEventListener('click', () => switchView('settings'));
   }
@@ -279,12 +284,18 @@ function switchView(viewName) {
 
   elements.tabInbox.classList.toggle('active', viewName === 'inbox');
   elements.tabTriage.classList.toggle('active', viewName === 'triage');
+  if (elements.tabConsultant) {
+    elements.tabConsultant.classList.toggle('active', viewName === 'consultant');
+  }
   if (elements.tabSettings) {
     elements.tabSettings.classList.toggle('active', viewName === 'settings');
   }
 
   elements.viewInbox.classList.toggle('active', viewName === 'inbox');
   elements.viewTriage.classList.toggle('active', viewName === 'triage');
+  if (elements.viewConsultant) {
+    elements.viewConsultant.classList.toggle('active', viewName === 'consultant');
+  }
   if (elements.viewSettings) {
     elements.viewSettings.classList.toggle('active', viewName === 'settings');
   }
@@ -294,6 +305,9 @@ function switchView(viewName) {
   } else if (viewName === 'triage') {
     loadProjects();
     loadSuggestions();
+  } else if (viewName === 'consultant') {
+    const consultantInput = document.getElementById('consultant-query-input');
+    consultantInput?.focus();
   } else if (viewName === 'settings') {
     loadVaultSettings();
   }
@@ -394,33 +408,26 @@ function handleQuickIngestUrlParam() {
 }
 
 function setupLibrarySearchAndAsk() {
-  const form = document.getElementById('library-query-form');
-  const input = document.getElementById('library-query-input');
-  const btnSubmit = document.getElementById('btn-submit-library-query');
-  const btnText = document.getElementById('library-btn-text');
-  const spinner = document.getElementById('library-spinner');
-  const resultsBox = document.getElementById('library-results-box');
-  const btnModeSearch = document.getElementById('btn-mode-search');
-  const btnModeAsk = document.getElementById('btn-mode-ask');
+  const form = document.getElementById('consultant-query-form');
+  const input = document.getElementById('consultant-query-input');
+  const btnSubmit = document.getElementById('btn-submit-consultant');
+  const btnText = document.getElementById('consultant-btn-text');
+  const spinner = document.getElementById('consultant-spinner');
+  const resultsBox = document.getElementById('consultant-results-box');
 
   if (!form || !input || !resultsBox) return;
 
-  let currentMode = 'search'; // 'search' | 'ask'
+  const initialGuideHtml = resultsBox.innerHTML;
 
-  btnModeSearch?.addEventListener('click', () => {
-    currentMode = 'search';
-    btnModeSearch.classList.add('active');
-    btnModeAsk?.classList.remove('active');
-    btnText.textContent = 'Buscar en Biblioteca';
-    input.placeholder = '¿Qué métodos de diseño de agentes o argumentos tenemos?...';
-  });
-
-  btnModeAsk?.addEventListener('click', () => {
-    currentMode = 'ask';
-    btnModeAsk.classList.add('active');
-    btnModeSearch?.classList.remove('active');
-    btnText.textContent = 'Preguntar (Sintetizar)';
-    input.placeholder = 'Formula una pregunta para sintetizar con citas de tu biblioteca...';
+  // Wire up clickable example chips
+  document.querySelectorAll('.consultant-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const presetQuery = chip.getAttribute('data-query');
+      if (presetQuery) {
+        input.value = presetQuery;
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    });
   });
 
   form.addEventListener('submit', async (e) => {
@@ -429,135 +436,188 @@ function setupLibrarySearchAndAsk() {
     if (!query) return;
 
     btnSubmit.disabled = true;
+    if (btnText) btnText.textContent = 'Consultando...';
     spinner.style.display = 'inline-block';
-    resultsBox.style.display = 'block';
+
     resultsBox.innerHTML = `
-      <div class="empty-state">
+      <div class="consultant-loading-state">
         <span class="spinner"></span>
-        <p>${currentMode === 'ask' ? 'Consultando y sintetizando con tus fuentes...' : 'Buscando afinidad semántica en tus lecturas...'}</p>
+        <span>Revisando catálogo de lecturas y notas en el Vault...</span>
       </div>
     `;
 
     try {
-      if (currentMode === 'search') {
-        const res = await fetch(`/api/library/search?q=${encodeURIComponent(query)}&limit=8`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Error en la búsqueda');
+      const res = await fetch('/api/library/consult', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Error al consultar tu archivo');
 
-        if (!data.results || data.results.length === 0) {
-          resultsBox.innerHTML = `
-            <div class="empty-state">
-              <p>No se encontraron contenidos coincidentes en tu biblioteca.</p>
-            </div>
-          `;
-          return;
-        }
+      const formatCitations = (escapedText) =>
+        escapedText.replace(/\[([CN]\d+(?:\s*,\s*[CN]\d+)*)\]/gi, (match, groupStr) => {
+          return groupStr
+            .split(/\s*,\s*/)
+            .map(refTag => {
+              const upperRef = refTag.trim().toUpperCase();
+              const isNote = upperRef.startsWith('N');
+              return `<a href="#consult-ref-${upperRef}" class="consult-ref-badge ${isNote ? 'note-ref' : 'content-ref'}" data-ref="${upperRef}" title="Ir a referencia [${upperRef}]">[${upperRef}]</a>`;
+            })
+            .join(' ');
+        });
 
-        resultsBox.innerHTML = `
-          <div class="feed-header" style="padding-bottom: 0.5rem;">
-            <span class="feed-title" style="font-size: 1.05rem;">Resultados Semánticos (${data.total})</span>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-library-results">Cerrar</button>
+      const formattedDiagnosis = formatCitations(escapeHtml(data.diagnosis || ''))
+        .split(/\n\n+/)
+        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+
+      const viabilityHtml = data.projectViability
+        ? `
+          <div class="consultant-viability-box">
+            <strong class="viability-heading">Enfoque de proyecto sugerido</strong>
+            <p class="viability-text">${formatCitations(escapeHtml(data.projectViability))}</p>
           </div>
-          <div class="items-list">
-            ${data.results.map(r => `
-              <div class="feed-item" data-id="${r.id}">
-                <div class="feed-item-header">
-                  <span class="domain-tag">${escapeHtml(r.channelOrDomain || 'Web')}</span>
-                  <span class="badge badge-accent">${Math.round(r.similarityScore * 100)}% afinidad</span>
-                </div>
-                <h4 class="feed-item-title">${escapeHtml(r.title || r.uri)}</h4>
-                <p class="feed-item-summary">${escapeHtml((r.summary || '').substring(0, 200))}...</p>
-                <div class="feed-item-meta">
-                  <a href="${escapeHtml(r.uri)}" target="_blank" rel="noopener" class="source-link">Ver enlace original ↗</a>
-                  <button type="button" class="btn btn-secondary btn-sm btn-view-library-detail" data-id="${r.id}">Ver Ficha</button>
-                </div>
-              </div>
-            `).join('')}
+        `
+        : '';
+
+      const matchedContents = Array.isArray(data.matchedContents) ? data.matchedContents : [];
+      const matchedNotes = Array.isArray(data.matchedNotes) ? data.matchedNotes : [];
+
+      const contentsColumnHtml = matchedContents.length > 0
+        ? `
+          <div class="consultant-matches-list">
+            ${matchedContents.map(item => {
+              const isYoutube = (item.sourceType === 'youtube') || /youtube\.com|youtu\.be/i.test(item.uri || '');
+              const typeLabel = isYoutube ? 'Video' : 'Artículo';
+              return `
+                <article class="consultant-match-card content-match" id="consult-ref-${escapeHtml(item.refId)}">
+                  <div class="match-card-top">
+                    <div class="match-card-badges">
+                      <span class="consult-ref-pill content-ref">[${escapeHtml(item.refId)}]</span>
+                      <span class="match-meta-text">${escapeHtml(item.channelOrDomain || typeLabel)}</span>
+                    </div>
+                    <div class="match-card-actions">
+                      <button type="button" class="btn-text-action btn-view-library-detail" data-id="${escapeHtml(item.id)}">Ver ficha</button>
+                      <a href="${escapeHtml(item.uri)}" target="_blank" rel="noopener" class="source-link">Abrir original ↗</a>
+                    </div>
+                  </div>
+                  <h4 class="match-card-title">${escapeHtml(item.title || item.uri)}</h4>
+                  <p class="why-connects-text">${escapeHtml(item.whyItConnects)}</p>
+                </article>
+              `;
+            }).join('')}
           </div>
+        `
+        : `
+          <p class="consultant-empty-column">Ningún video o artículo guardado aborda directamente esta consulta.</p>
         `;
 
-        document.getElementById('btn-clear-library-results')?.addEventListener('click', () => {
-          resultsBox.style.display = 'none';
-          resultsBox.innerHTML = '';
-        });
-
-        resultsBox.querySelectorAll('.btn-view-library-detail').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const cid = btn.getAttribute('data-id');
-            const found = state.contents.find(c => c.id === cid) || data.results.find(c => c.id === cid);
-            if (found) openContentDetailModal(found);
-          });
-        });
-
-      } else {
-        // Mode === 'ask' (RAG Synthesis)
-        const res = await fetch('/api/library/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Error al sintetizar respuesta');
-
-        let formattedAnswer = escapeHtml(data.answer);
-        formattedAnswer = formattedAnswer.replace(/\[(\d+)\]/g, (match, num) => {
-          return `<a href="#source-${num}" class="ask-source-badge" title="Ver Fuente [${num}]">[${num}]</a>`;
-        });
-
-        const insightsHtml = (data.keyInsights && data.keyInsights.length > 0)
-          ? `
-            <div class="ask-insights-title">✦ Conclusiones Clave:</div>
-            <ul class="ask-insights-list">
-              ${data.keyInsights.map(k => `<li>${escapeHtml(k)}</li>`).join('')}
-            </ul>
-          ` : '';
-
-        const sourcesHtml = (data.sources && data.sources.length > 0)
-          ? `
-            <div class="ask-sources-header">Fuentes Consultadas de tu Biblioteca:</div>
-            <div class="ask-sources-grid">
-              ${data.sources.map(s => `
-                <div class="ask-source-item" id="source-${s.index}">
-                  <div class="ask-source-top">
-                    <span class="ask-source-idx">[${s.index}]</span>
-                    <span class="badge badge-accent">${Math.round(s.similarityScore * 100)}% afinidad</span>
+      const notesColumnHtml = matchedNotes.length > 0
+        ? `
+          <div class="consultant-matches-list">
+            ${matchedNotes.map(note => {
+              const snippetText = (note.contentSnippet || '').trim();
+              const snippetHtml = snippetText
+                ? `
+                  <details class="note-snippet-details">
+                    <summary>Leer extracto de la nota</summary>
+                    <pre class="note-snippet-pre">${escapeHtml(snippetText.substring(0, 700))}${snippetText.length > 700 ? '…' : ''}</pre>
+                  </details>
+                `
+                : '';
+              return `
+                <article class="consultant-match-card note-match" id="consult-ref-${escapeHtml(note.refId)}">
+                  <div class="match-card-top">
+                    <div class="match-card-badges">
+                      <span class="consult-ref-pill note-ref">[${escapeHtml(note.refId)}]</span>
+                      <span class="note-project-badge">${escapeHtml(note.projectTitle)}</span>
+                    </div>
+                    <code class="note-path-code">${escapeHtml(note.notePath || note.noteTitle)}</code>
                   </div>
-                  <h5 class="ask-source-title">${escapeHtml(s.title || s.uri)}</h5>
-                  <div class="ask-source-meta">
-                    <span>${escapeHtml(s.channelOrDomain || 'Web')}</span>
-                    <a href="${escapeHtml(s.uri)}" target="_blank" rel="noopener" class="source-link">Abrir ↗</a>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : '';
-
-        resultsBox.innerHTML = `
-          <div class="ask-answer-card">
-            <div class="feed-header" style="padding-bottom: 0.6rem; margin-bottom: 0.8rem;">
-              <span class="feed-title" style="font-size: 1.05rem;">Síntesis de Biblioteca</span>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-ask-results">Cerrar</button>
-            </div>
-            <div class="ask-answer-text">${formattedAnswer}</div>
-            ${insightsHtml}
-            ${sourcesHtml}
+                  <h4 class="match-card-title">${escapeHtml(note.noteTitle || note.notePath)}</h4>
+                  <p class="why-connects-text">${escapeHtml(note.whyItConnects)}</p>
+                  ${snippetHtml}
+                </article>
+              `;
+            }).join('')}
           </div>
+        `
+        : `
+          <p class="consultant-empty-column">Ninguna nota en tu Vault de Obsidian aborda directamente este tema todavía.</p>
         `;
 
-        document.getElementById('btn-clear-ask-results')?.addEventListener('click', () => {
-          resultsBox.style.display = 'none';
-          resultsBox.innerHTML = '';
+      resultsBox.innerHTML = `
+        <div class="consultant-diagnosis-card">
+          <div class="consultant-diagnosis-header">
+            <h3 class="consultant-diagnosis-title">${escapeHtml(data.query)}</h3>
+            <div class="consultant-diagnosis-meta">
+              <span class="consultant-eval-stats">
+                ${data.totalLibraryEvaluated} lecturas y ${data.totalNotesEvaluated} notas revisadas
+              </span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-consultant-results">Limpiar</button>
+            </div>
+          </div>
+
+          <div class="consultant-diagnosis-body">
+            ${formattedDiagnosis}
+          </div>
+
+          ${viabilityHtml}
+        </div>
+
+        <div class="consultant-columns">
+          <div class="consultant-column-card">
+            <div class="consultant-column-header">
+              <h3 class="consultant-column-title">En tu biblioteca</h3>
+              <span class="consultant-column-count">${matchedContents.length}</span>
+            </div>
+            ${contentsColumnHtml}
+          </div>
+
+          <div class="consultant-column-card">
+            <div class="consultant-column-header">
+              <h3 class="consultant-column-title">En tus notas de Obsidian</h3>
+              <span class="consultant-column-count">${matchedNotes.length}</span>
+            </div>
+            ${notesColumnHtml}
+          </div>
+        </div>
+      `;
+
+      resultsBox.querySelectorAll('.btn-view-library-detail').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cid = btn.getAttribute('data-id');
+          if (cid) openContentDetailModal(cid);
         });
-      }
+      });
+
+      resultsBox.querySelectorAll('.consult-ref-badge').forEach(badge => {
+        badge.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          const ref = badge.getAttribute('data-ref');
+          const targetEl = document.getElementById(`consult-ref-${ref}`);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetEl.classList.add('highlight-pulse');
+            setTimeout(() => targetEl.classList.remove('highlight-pulse'), 1800);
+          }
+        });
+      });
+
+      document.getElementById('btn-clear-consultant-results')?.addEventListener('click', () => {
+        resultsBox.innerHTML = initialGuideHtml;
+      });
     } catch (err) {
       resultsBox.innerHTML = `
-        <div class="form-error">
-          ${escapeHtml(err.message || 'Error en la consulta')}
+        <div class="form-error" style="display: block;">
+          ${escapeHtml(err.message || 'Error al consultar la biblioteca y el Vault')}
         </div>
       `;
       showToast(err.message, 'error');
     } finally {
       btnSubmit.disabled = false;
+      if (btnText) btnText.textContent = 'Consultar';
       spinner.style.display = 'none';
     }
   });
@@ -625,7 +685,7 @@ function renderContentsList(items) {
   if (items.length === 0) {
     elements.contentsList.innerHTML = `
       <div class="empty-state">
-        <p>No hay contenidos procesados en este momento.</p>
+        <p>No hay contenidos guardados todavía. Pega un enlace arriba para comenzar.</p>
       </div>
     `;
     return;
@@ -644,25 +704,23 @@ function renderContentsList(items) {
       displayTitle = `${displayTitle} — ${item.channelOrDomain}`;
     }
 
-    // Determine primary evaluation status chip
     let triageBadgeHtml = '';
     if (item.ingestStatus === 'ready') {
       if (item.isEvaluating) {
-        triageBadgeHtml = `<span class="chip chip-neutral" style="background: hsla(270, 80%, 65%, 0.15); color: #c4b5fd; border: 1px solid hsla(270, 80%, 65%, 0.35);"><span class="spinner" style="width:10px;height:10px;display:inline-block;vertical-align:middle;margin-right:5px;border-width:1.5px;"></span>Evaluando LLM...</span>`;
+        triageBadgeHtml = `<span class="chip chip-neutral"><span class="spinner" style="width:10px;height:10px;display:inline-block;vertical-align:middle;margin-right:5px;border-width:1.5px;"></span>Evaluando...</span>`;
       } else if (item.counts.actionable > 0) {
-        triageBadgeHtml = `<span class="chip chip-actionable">⚡ Accionable (${item.counts.actionable})</span>`;
+        triageBadgeHtml = `<span class="chip chip-actionable">Accionable (${item.counts.actionable})</span>`;
       } else if (item.counts.tentative > 0) {
-        triageBadgeHtml = `<span class="chip chip-tentative">👁️ Tentativo (${item.counts.tentative})</span>`;
+        triageBadgeHtml = `<span class="chip chip-tentative">Tentativo (${item.counts.tentative})</span>`;
       } else if (item.counts.irrelevant > 0) {
-        triageBadgeHtml = `<span class="chip chip-discarded">✕ Descartado por LLM</span>`;
+        triageBadgeHtml = `<span class="chip chip-discarded">Sin conexión directa</span>`;
       } else {
-        triageBadgeHtml = `<span class="chip chip-neutral">Sin afinidad (Paso 1)</span>`;
+        triageBadgeHtml = `<span class="chip chip-neutral">Archivado</span>`;
       }
     } else {
       triageBadgeHtml = `<span class="chip ${item.ingestStatus}">${statusLabel}</span>`;
     }
 
-    // Build preview for evaluations (LLM reasoning and project verdict)
     const evalsList = item.evaluationsList || [];
     let evaluationsPreviewHtml = '';
     if (evalsList.length > 0) {
@@ -678,7 +736,7 @@ function renderContentsList(items) {
                 <div class="content-eval-badge-line">
                   <span class="content-eval-project-name">${escapeHtml(ev.projectTitle)}</span>
                   <span class="chip chip-sm ${chipClass}">
-                    ${ev.verdict === 'irrelevant' ? vLabel : `${vLabel} (${scorePct}%)`}
+                    ${ev.verdict === 'irrelevant' ? vLabel : `${vLabel} · ${scorePct}%`}
                   </span>
                 </div>
                 ${ev.triageReasoning ? `
@@ -700,12 +758,7 @@ function renderContentsList(items) {
             </a>
             <div class="content-item-subline">
               ${item.channelOrDomain ? `
-                <span class="content-item-author-tag">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                  ${escapeHtml(item.channelOrDomain)}
-                </span>
+                <span class="content-item-author-tag">${escapeHtml(item.channelOrDomain)}</span>
               ` : ''}
               <span class="content-item-uri">${escapeHtml(item.uri)}</span>
             </div>
@@ -716,33 +769,25 @@ function renderContentsList(items) {
         ${evaluationsPreviewHtml}
 
         ${isFailed && item.ingestStatusReason ? `
-          <div style="margin: 0.6rem 0; font-size: 0.85rem; color: var(--color-danger); background: hsla(350, 85%, 60%, 0.1); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid hsla(350, 85%, 60%, 0.25); display: flex; align-items: center; justify-content: space-between;">
+          <div class="form-error" style="margin: 0.6rem 0; display: flex; align-items: center; justify-content: space-between;">
             <div>
               <strong>Error:</strong> ${escapeHtml(item.ingestStatusReason)}
             </div>
-            <button type="button" class="btn btn-secondary btn-retry" data-retry-url="${escapeHtml(item.uri)}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;">
+            <button type="button" class="btn btn-secondary btn-sm btn-retry" data-retry-url="${escapeHtml(item.uri)}">
               Reintentar
             </button>
           </div>
         ` : ''}
 
         <div class="content-item-meta">
+          <span class="content-item-meta-item">${dateFormatted}</span>
           <span class="content-item-meta-item">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-            ${dateFormatted}
-          </span>
-          <span class="content-item-meta-item">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
             ${item.counts.evaluations > 0 
               ? `${item.counts.evaluations} evaluaci${item.counts.evaluations === 1 ? 'ón' : 'ones'} (${item.counts.actionable} accionables, ${item.counts.tentative || 0} tentativas)` 
-              : (item.isEvaluating ? 'Evaluando con IA...' : (item.ingestStatus !== 'ready' ? (STATUS_LABELS[item.ingestStatus] || item.ingestStatus) : 'Filtrado en Paso 1 (sin coincidencia semántica)'))}
+              : (item.isEvaluating ? 'Evaluando con tus notas...' : (item.ingestStatus !== 'ready' ? (STATUS_LABELS[item.ingestStatus] || item.ingestStatus) : 'Guardado en biblioteca'))}
           </span>
-          <button type="button" class="btn btn-secondary btn-detail" data-content-id="${item.id}" style="margin-left: auto; padding: 0.35rem 0.85rem; font-size: 0.8rem;">
-            Ver Detalle
+          <button type="button" class="btn btn-secondary btn-sm btn-detail" data-content-id="${item.id}" style="margin-left: auto;">
+            Ver ficha
           </button>
         </div>
       </div>
@@ -957,12 +1002,11 @@ function renderSuggestionsList(items) {
   }
   state.renderedSuggestionsSignature = currentSignature;
 
-  // Update batch re-evaluate button in toolbar
   const stalePendingCount = items.filter(s => s.isStale && s.status === 'pending').length;
   if (elements.btnBatchReevaluate && elements.batchReevaluateText) {
     if (stalePendingCount > 0 && state.selectedSuggestionStatus !== 'accepted' && state.selectedSuggestionStatus !== 'discarded') {
       elements.btnBatchReevaluate.style.display = 'inline-flex';
-      elements.batchReevaluateText.textContent = `↻ Re-evaluar obsoletas (${stalePendingCount})`;
+      elements.batchReevaluateText.textContent = `Re-evaluar obsoletas (${stalePendingCount})`;
     } else {
       elements.btnBatchReevaluate.style.display = 'none';
     }
@@ -970,48 +1014,41 @@ function renderSuggestionsList(items) {
 
   if (items.length === 0) {
     const statusText = state.selectedSuggestionStatus === 'active'
-      ? 'No hay sugerencias activas (accionables o tentativas) para este proyecto.'
+      ? 'No hay sugerencias activas para este proyecto.'
       : state.selectedSuggestionStatus === 'pending' 
       ? 'No hay sugerencias pendientes de revisión.' 
       : state.selectedSuggestionStatus === 'tentative'
-      ? 'No hay evaluaciones con afinidad tentativa para este proyecto.'
+      ? 'No hay evaluaciones tentativas para este proyecto.'
       : state.selectedSuggestionStatus === 'accepted' 
       ? 'Aún no has aceptado ninguna sugerencia para este proyecto.' 
       : 'No hay sugerencias descartadas para este proyecto.';
 
     elements.suggestionsList.innerHTML = `
       <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 0.75rem; color: var(--text-tertiary);">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
         <p>${statusText}</p>
       </div>
     `;
     return;
   }
 
-  elements.suggestionsList.innerHTML = items.map((sug, index) => {
+  elements.suggestionsList.innerHTML = items.map((sug) => {
     const isTentative = sug.status === 'tentative';
     const isPending = sug.status === 'pending';
     const isAccepted = sug.status === 'accepted';
     const isDiscarded = sug.status === 'discarded';
 
     let actionLabel = ACTION_LABELS[sug.actionType] || sug.actionType;
-    let chipClass = sug.actionType || 'chip-neutral';
-    let chipStyle = '';
+    let chipClass = 'chip-neutral';
 
     if (isTentative) {
-      actionLabel = '👁️ Tentativo';
+      actionLabel = 'Tentativo';
       chipClass = 'chip-tentative';
-      chipStyle = 'background: hsla(38, 95%, 55%, 0.15); color: #fbbf24; border: 1px solid hsla(38, 95%, 55%, 0.35);';
     } else if (isDiscarded) {
-      actionLabel = sug.targetFile === 'discarded' ? '✕ Descarte IA' : '✕ Descartado';
+      actionLabel = sug.targetFile === 'discarded' ? 'Descartado por filtro' : 'Descartado';
       chipClass = 'chip-discarded';
-      chipStyle = 'background: hsla(0, 80%, 55%, 0.15); color: #f87171; border: 1px solid hsla(0, 80%, 55%, 0.35);';
     } else if (isAccepted) {
-      actionLabel = '✓ Aceptada';
+      actionLabel = 'Aceptada';
       chipClass = 'chip-actionable';
-      chipStyle = 'background: hsla(142, 70%, 45%, 0.15); color: #4ade80; border: 1px solid hsla(142, 70%, 45%, 0.35);';
     }
 
     const dateFormatted = new Date(sug.createdAt).toLocaleDateString('es-ES');
@@ -1032,29 +1069,22 @@ function renderSuggestionsList(items) {
           </div>
         ` : ''}
       </div>
-      <p style="margin-bottom: 0.5rem;"><strong>Razonamiento del modelo:</strong></p>
-      <p style="background: hsla(220, 20%, 10%, 0.5); padding: 0.6rem; border-radius: 6px; font-size: 0.85rem; line-height: 1.4;">
+      <p style="font-size: 0.86rem; line-height: 1.55; color: var(--text-secondary);">
         ${escapeHtml(sug.triageReasoning)}
       </p>
     ` : (cachedReasoning || `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-        <span><strong>Destino de nota:</strong> <code>${escapeHtml(sug.targetFile)}</code></span>
+        <span><strong>Nota destino:</strong> <code>${escapeHtml(sug.targetFile)}</code></span>
         <span class="badge ${sug.writtenToVault ? 'badge-accent' : 'badge-subtle'}">
           ${sug.writtenToVault ? 'En Obsidian' : 'Pendiente de Vault'}
         </span>
       </div>
-      <p style="font-style: italic;">Cargando análisis profundo...</p>
+      <p style="font-style: italic;">Cargando justificación...</p>
     `);
 
-    // Prominent discard rationale box for discarded items
     const discardedReasonBox = isDiscarded && sug.triageReasoning ? `
-      <div style="background: hsla(0, 50%, 20%, 0.2); border: 1px solid hsla(0, 50%, 40%, 0.25); border-radius: 8px; padding: 0.75rem; margin: 0.75rem 0;">
-        <div style="font-size: 0.75rem; color: #f87171; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">
-          Motivo del descarte (LLM)
-        </div>
-        <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-          ${escapeHtml(sug.triageReasoning)}
-        </p>
+      <div class="discard-reason-box">
+        <strong>Motivo del descarte:</strong> ${escapeHtml(sug.triageReasoning)}
       </div>
     ` : '';
 
@@ -1062,31 +1092,22 @@ function renderSuggestionsList(items) {
       <div class="glass-card suggestion-card" id="sug-card-${sug.id}" data-id="${sug.id}">
         <div class="suggestion-header">
           <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-            <span class="action-chip ${chipClass}" style="${chipStyle}">${actionLabel}</span>
+            <span class="action-chip ${chipClass}">${actionLabel}</span>
             <span class="suggestion-project-tag">${escapeHtml(sug.projectTitle || 'Proyecto')}</span>
             ${(sug.isStale && isPending) ? `
-              <span class="badge badge-stale" title="El proyecto evolucionó significativamente desde esta sugerencia (deriva semántica: ${Math.round((sug.driftScore || 0) * 100)}%).">✦ Proyecto modificado</span>
+              <span class="badge badge-stale" title="Las notas del proyecto cambiaron desde esta evaluación.">Notas modificadas</span>
             ` : ''}
           </div>
-          <span style="font-size: 0.75rem; color: var(--text-tertiary);">${dateFormatted}</span>
+          <span style="font-size: 0.78rem; color: var(--text-tertiary); font-family: var(--font-mono);">${dateFormatted}</span>
         </div>
 
         <h4 class="suggestion-action-title">${escapeHtml(sug.suggestedAction)}</h4>
         <p class="suggestion-observation">${escapeHtml(sug.observation)}</p>
 
         <div class="obsidian-callout-preview ${isAccepted ? 'callout-accepted' : ''}">
-          <div class="obsidian-callout-header">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span>${isAccepted ? 'Integrado en Obsidian' : 'Callout de Obsidian'} &gt; [!tip]</span>
-          </div>
           <div class="obsidian-callout-target">
-            Nota destino: <code>${escapeHtml(sug.targetFile && sug.targetFile !== 'discarded' ? sug.targetFile : 'suggestions.md')}</code>
+            <span>${isAccepted ? 'Integrado en' : 'Destino sugerido:'}</span>
+            <code>${escapeHtml(sug.targetFile && sug.targetFile !== 'discarded' ? sug.targetFile : 'suggestions.md')}</code>
           </div>
           <div class="obsidian-callout-text">
             &ldquo;${escapeHtml(sug.suggestedAction)}&rdquo;
@@ -1096,21 +1117,15 @@ function renderSuggestionsList(items) {
         ${discardedReasonBox}
 
         <div class="suggestion-source">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-          </svg>
           <span>Fuente:</span>
           <a href="${safeUrl(sug.contentUri)}" target="_blank" rel="noopener noreferrer">
-            ${escapeHtml(sug.contentTitle || sug.contentUri)}
+            ${escapeHtml(sug.contentTitle || sug.contentUri)} ↗
           </a>
         </div>
 
-        <!-- Collapsible AI Reasoning Details -->
         <details class="ai-triage-details" ${isOpen ? 'open' : ''}>
           <summary class="ai-triage-summary">
-            <span>¿Por qué esta sugerencia? (Evaluación IA)</span>
-            <span style="font-size: 0.75rem; color: var(--accent-primary);">Ver Razonamiento</span>
+            <span>Ver justificación de la sugerencia</span>
           </summary>
           <div class="ai-triage-content" id="triage-details-${sug.id}">
             ${reasoningContent}
@@ -1125,14 +1140,14 @@ function renderSuggestionsList(items) {
                 type="text" 
                 id="feedback-${sug.id}" 
                 class="feedback-input" 
-                placeholder="${isTentative ? 'Nota opcional al integrar...' : 'Añadir nota opcional para Obsidian...'}"
+                placeholder="${isTentative ? 'Nota opcional al integrar...' : 'Añadir comentario opcional al guardar en Obsidian...'}"
                 value="${escapeHtml(draftFeedback)}"
               >
             </div>
             <div class="suggestion-actions">
               ${(sug.isStale && isPending) ? `
-                <button type="button" class="btn btn-outline btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="Re-evaluar esta sugerencia con la versión actual de tus notas">
-                  ↻ Re-evaluar
+                <button type="button" class="btn btn-secondary btn-sm btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="Re-evaluar con la versión actual de tus notas">
+                  Re-evaluar
                 </button>
               ` : ''}
               <button type="button" class="btn btn-danger btn-discard" id="btn-discard-${sug.id}" data-id="${sug.id}">
@@ -1145,8 +1160,8 @@ function renderSuggestionsList(items) {
           </div>
         ` : `
           <div class="suggestion-footer" style="justify-content: flex-end;">
-            <span style="font-size: 0.8rem; color: ${isAccepted ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight: 600;">
-              ${isAccepted ? '✓ Aceptada e integrada en Obsidian' : `✕ Descartada ${sug.targetFile === 'discarded' ? 'por el modelo LLM' : 'por el usuario'}`}
+            <span style="font-size: 0.8rem; color: var(--text-tertiary);">
+              ${isAccepted ? 'Integrada en Obsidian' : `Descartada ${sug.targetFile === 'discarded' ? 'automáticamente' : 'manualmente'}`}
             </span>
           </div>
         `}
@@ -1192,7 +1207,6 @@ function renderSuggestionsList(items) {
       try {
         const res = await fetch(`/api/suggestions/${id}/reevaluate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
         });
 
         const data = await res.json();
@@ -1392,7 +1406,6 @@ async function handleSynthesizeProject() {
   try {
     const res = await fetch(`/api/projects/${state.selectedProjectId}/synthesize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
     });
 
     const data = await res.json();
@@ -1411,7 +1424,7 @@ async function handleSynthesizeProject() {
     showToast(err.message || 'Error al compilar la síntesis.', 'error');
   } finally {
     elements.btnSynthesizeProject.disabled = false;
-    elements.btnSynthesizeText.textContent = '✦ Sintetizar Backlog';
+    elements.btnSynthesizeText.textContent = 'Compilar síntesis';
     elements.synthesizeSpinner.style.display = 'none';
   }
 }
@@ -1419,16 +1432,15 @@ async function handleSynthesizeProject() {
 function openSynthesisResultModal(data, projectTitle) {
   if (!elements.synthesisResultModal) return;
 
-  elements.synthesisModalTitle.textContent = data.title || `Research Brief — ${projectTitle}`;
+  elements.synthesisModalTitle.textContent = data.title || `Síntesis — ${projectTitle}`;
 
   const nextStepsHtml = (data.suggestedNextSteps || []).length > 0
     ? `
       <div class="synthesis-section">
-        <span class="synthesis-section-title">Próximos Pasos Recomendados</span>
+        <span class="synthesis-section-title">Próximos pasos sugeridos</span>
         <ul class="synthesis-steps-list">
           ${(data.suggestedNextSteps || []).map(step => `
             <li class="synthesis-step-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               <span>${escapeHtml(step)}</span>
             </li>
           `).join('')}
@@ -1441,22 +1453,21 @@ function openSynthesisResultModal(data, projectTitle) {
     <div class="synthesis-content-view">
       <div class="synthesis-meta-bar">
         <div class="synthesis-meta-path">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span>Vault: <code>${escapeHtml(data.filePath)}</code></span>
+          <span>Guardado en: <code>${escapeHtml(data.filePath)}</code></span>
         </div>
         <span class="chip chip-actionable">${data.acceptedCount} sugerencias integradas</span>
       </div>
 
       <div class="synthesis-section">
-        <span class="synthesis-section-title">Resumen Ejecutivo</span>
+        <span class="synthesis-section-title">Síntesis</span>
         <div class="synthesis-summary-text">${escapeHtml(data.executiveSummary).replace(/\n/g, '<br>')}</div>
       </div>
 
       ${nextStepsHtml}
 
       <div class="synthesis-actions-bar">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">Copiar Resumen</button>
-        <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">Listo</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">Copiar texto</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">Cerrar</button>
       </div>
     </div>
   `;
@@ -1497,7 +1508,7 @@ async function handleBatchReevaluate() {
   if (elements.btnBatchReevaluate) {
     elements.btnBatchReevaluate.disabled = true;
     if (elements.batchReevaluateSpinner) elements.batchReevaluateSpinner.style.display = 'inline-block';
-    if (elements.batchReevaluateText) elements.batchReevaluateText.textContent = '↻ Re-evaluando...';
+    if (elements.batchReevaluateText) elements.batchReevaluateText.textContent = 'Re-evaluando...';
   }
 
   try {
@@ -1505,23 +1516,19 @@ async function handleBatchReevaluate() {
     if (state.selectedProjectId) {
       const res = await fetch(`/api/projects/${state.selectedProjectId}/reevaluate-stale`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Error en la re-evaluación por lotes');
       reevaluatedCount = data.reevaluatedCount || 0;
     } else {
-      // All projects: find distinct project IDs with stale items
       const projectIds = [...new Set(staleItems.map(s => s.projectId))];
       for (const pid of projectIds) {
         const res = await fetch(`/api/projects/${pid}/reevaluate-stale`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
         });
         const data = await res.json();
-        if (res.ok) {
-          reevaluatedCount += (data.reevaluatedCount || 0);
-        }
+        if (!res.ok) throw new Error(data.message || 'Error en la re-evaluación por lotes');
+        reevaluatedCount += (data.reevaluatedCount || 0);
       }
     }
 
@@ -1571,7 +1578,7 @@ async function loadSynergies(isManualRefresh = false) {
     state.synergies = data.synergies || [];
     renderSynergies();
     if (isManualRefresh) {
-      showToast(`${state.synergies.length} sinergias calculadas con éxito`, 'info');
+      showToast(`${state.synergies.length} conexiones calculadas`, 'info');
     }
   } catch (err) {
     console.error('Failed to load synergies:', err);
@@ -1581,7 +1588,6 @@ async function loadSynergies(isManualRefresh = false) {
 function renderSynergies() {
   if (!elements.synergiesSection || !elements.synergiesGrid) return;
 
-  // Filter synergies by currently selected project (if one is selected)
   let visibleSynergies = state.synergies;
   if (state.selectedProjectId) {
     visibleSynergies = state.synergies.filter(s =>
@@ -1596,19 +1602,19 @@ function renderSynergies() {
 
   elements.synergiesSection.style.display = 'block';
   if (elements.synergiesCountBadge) {
-    elements.synergiesCountBadge.textContent = `${visibleSynergies.length} Sinergia${visibleSynergies.length === 1 ? '' : 's'}`;
+    elements.synergiesCountBadge.textContent = `${visibleSynergies.length}`;
   }
 
   elements.synergiesGrid.innerHTML = visibleSynergies.map(s => {
     const notesHtml = (s.closestNotes && s.closestNotes.length > 0)
       ? `
         <div class="synergy-notes-box">
-          <span class="synergy-notes-label">Notas con mayor afinidad:</span>
+          <span class="synergy-notes-label">Notas relacionadas</span>
           ${s.closestNotes.slice(0, 2).map(n => `
             <div class="synergy-notes-pair">
-              <span class="synergy-note-link" title="${escapeHtml(n.noteAPath)}">[[${escapeHtml(n.noteATitle)}]]</span>
-              <span class="synergy-arrow">⇄</span>
-              <span class="synergy-note-link" title="${escapeHtml(n.noteBPath)}">[[${escapeHtml(n.noteBSTitle)}]]</span>
+              <span class="synergy-note-link" title="${escapeHtml(n.noteAPath)}">${escapeHtml(n.noteATitle)}</span>
+              <span class="synergy-arrow">—</span>
+              <span class="synergy-note-link" title="${escapeHtml(n.noteBPath)}">${escapeHtml(n.noteBSTitle)}</span>
             </div>
           `).join('')}
         </div>
@@ -1617,21 +1623,21 @@ function renderSynergies() {
 
     const hasBridge = Boolean(s.hasExistingBridge);
     const bridgeBadge = hasBridge
-      ? `<span class="synergy-cached-badge" title="Este puente ya fue generado y está guardado en tu Vault">✦ En Vault</span>`
+      ? `<span class="synergy-cached-badge" title="Este puente ya fue guardado en tu Vault">En Vault</span>`
       : '';
-    const btnText = hasBridge ? '✦ Ver Puente Guardado' : '✦ Explorar Puente';
+    const btnText = hasBridge ? 'Ver nota puente' : 'Explorar conexión';
 
     return `
       <div class="synergy-card">
         <div class="synergy-card-header">
           <div class="synergy-proj-bridge">
             <span class="synergy-proj-name" title="${escapeHtml(s.projectA.title)}">${escapeHtml(s.projectA.title)}</span>
-            <span class="synergy-arrow">⇄</span>
+            <span class="synergy-arrow">—</span>
             <span class="synergy-proj-name" title="${escapeHtml(s.projectB.title)}">${escapeHtml(s.projectB.title)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
             ${bridgeBadge}
-            <span class="synergy-score-chip">${s.similarityScore}% Afinidad</span>
+            <span class="synergy-score-chip">${s.similarityScore}%</span>
           </div>
         </div>
 
@@ -1668,12 +1674,12 @@ function renderSynergies() {
 async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forceRegenerate = false) {
   if (!elements.synergyBridgeModal) return;
 
-  elements.synergyModalTitle.textContent = `Puente: ${titleA} ⇄ ${titleB}`;
+  elements.synergyModalTitle.textContent = `${titleA} — ${titleB}`;
   elements.synergyModalBody.innerHTML = `
     <div style="text-align: center; padding: 3rem 1.5rem;">
       <span class="spinner large"></span>
       <p style="color: var(--text-secondary); margin-top: 1rem;">
-        ${forceRegenerate ? 'Regenerando conexiones temáticas y metodológicas con el modelo de IA...' : 'Consultando puente de investigación...'}
+        ${forceRegenerate ? 'Regenerando nota puente...' : 'Cargando conexión entre proyectos...'}
       </p>
     </div>
   `;
@@ -1698,16 +1704,16 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
       : '';
 
     const cacheIndicator = data.isCached
-      ? `<span class="synergy-cached-badge" title="Cargado directamente desde el archivo existente en tu Vault">✦ Existente en Vault</span>`
-      : `<span class="synergy-cached-badge" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-primary-hover); border-color: var(--border-highlight);">✦ Generado ahora</span>`;
+      ? `<span class="synergy-cached-badge">Guardado en Vault</span>`
+      : `<span class="synergy-cached-badge">Recién generado</span>`;
 
     elements.synergyModalBody.innerHTML = `
       <div class="synthesis-content-view">
         <div class="synthesis-meta-bar">
           <div class="synergy-modal-bridge-titles">
-            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleA)}">[[${escapeHtml(titleA)}]]</span>
-            <span class="synergy-arrow">⇄</span>
-            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleB)}">[[${escapeHtml(titleB)}]]</span>
+            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleA)}">${escapeHtml(titleA)}</span>
+            <span class="synergy-arrow">—</span>
+            <span class="synergy-modal-proj-tag" title="${escapeHtml(titleB)}">${escapeHtml(titleB)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             ${cacheIndicator}
@@ -1716,16 +1722,15 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Resonancia Temática</span>
+          <span class="synthesis-section-title">Puntos de contacto</span>
           <div class="synthesis-summary-text">${escapeHtml(data.overview).replace(/\n/g, '<br>')}</div>
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Preguntas y Problemas Compartidos</span>
+          <span class="synthesis-section-title">Preguntas compartidas</span>
           <ul class="synthesis-steps-list">
             ${(data.sharedProblems || []).map(p => `
               <li class="synthesis-step-item">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 <span>${escapeHtml(p)}</span>
               </li>
             `).join('')}
@@ -1733,11 +1738,10 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Transferencia y Beneficios Mutuos</span>
+          <span class="synthesis-section-title">Aportes cruzados</span>
           <ul class="synthesis-steps-list">
             ${(data.mutualBenefits || []).map(b => `
               <li class="synthesis-step-item">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 <span>${escapeHtml(b)}</span>
               </li>
             `).join('')}
@@ -1746,18 +1750,17 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
 
         ${data.markdownContent ? `
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Propuesta de Integración Markdown</span>
+          <span class="synthesis-section-title">Borrador Markdown</span>
           <pre class="synthesis-markdown-preview"><code>${escapeHtml(data.markdownContent)}</code></pre>
         </div>
         ` : ''}
 
         <div class="synthesis-actions-bar">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-regenerate-synergy" title="Volver a solicitar al modelo de lenguaje una síntesis fresca">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-            <span>Regenerar con IA</span>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-regenerate-synergy">
+            <span>Regenerar</span>
           </button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar Nota</button>
-          <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Listo</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar nota</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Cerrar</button>
         </div>
       </div>
     `;
@@ -1773,7 +1776,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
     document.getElementById('btn-copy-synergy-note')?.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(`${data.bridgeTitle}\n\n${data.overview}\n\n${data.markdownContent}`);
-        showToast('Nota de sinergia copiada al portapapeles', 'info');
+        showToast('Nota copiada al portapapeles', 'info');
       } catch {
         showToast('No se pudo copiar automáticamente', 'warning');
       }
@@ -1782,25 +1785,29 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
     if (data.isCached) {
       showToast(`Puente cargado desde el Vault: ${data.filePath}`, 'info');
     } else if (data.writtenToVault && data.filePath) {
-      showToast(`Puente de investigación guardado en Obsidian: ${data.filePath}`, 'success');
+      showToast(`Puente guardado en Obsidian: ${data.filePath}`, 'success');
     }
 
-    // Refresh synergies list in background so the badge updates
     loadSynergies();
   } catch (err) {
     console.error('Synergy exploration error:', err);
     elements.synergyModalBody.innerHTML = `
       <div style="padding: 2rem 1rem; text-align: center; color: var(--color-danger);">
-        <p><strong>Error al explorar sinergia:</strong> ${escapeHtml(err.message || 'Error inesperado')}</p>
+        <p><strong>Error al explorar conexión:</strong> ${escapeHtml(err.message || 'Error inesperado')}</p>
         <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 1rem;" onclick="document.getElementById('synergy-bridge-modal').close()">Cerrar</button>
       </div>
     `;
   }
 }
 
-async function openContentDetailModal(contentId) {
-  elements.modalContentTitle.textContent = 'Cargando información...';
-  elements.modalContentBody.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;"><span class="spinner large"></span><p style="color: var(--text-secondary); margin-top: 0.75rem;">Cargando detalles del contenido...</p></div>';
+async function openContentDetailModal(contentIdOrObj) {
+  const contentId = (typeof contentIdOrObj === 'object' && contentIdOrObj !== null)
+    ? contentIdOrObj.id
+    : contentIdOrObj;
+  if (!contentId) return;
+
+  elements.modalContentTitle.textContent = 'Cargando...';
+  elements.modalContentBody.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;"><span class="spinner large"></span></div>';
   elements.contentDetailModal.showModal();
 
   try {
@@ -1808,7 +1815,7 @@ async function openContentDetailModal(contentId) {
     if (!res.ok) throw new Error('No se pudo obtener el detalle');
     const data = await res.json();
 
-    let displayTitle = data.title || 'Detalle del Contenido';
+    let displayTitle = data.title || 'Ficha de contenido';
     if (data.channelOrDomain && !displayTitle.toLowerCase().includes(data.channelOrDomain.toLowerCase())) {
       displayTitle = `${displayTitle} — ${data.channelOrDomain}`;
     }
@@ -1823,53 +1830,45 @@ async function openContentDetailModal(contentId) {
           <div class="modal-eval-header">
             <strong class="modal-eval-project">${escapeHtml(ev.projectTitle)}</strong>
             <span class="chip ${chipClass}">
-              ${ev.verdict === 'irrelevant' ? vLabel : `${vLabel} (${scorePct}%)`}
+              ${ev.verdict === 'irrelevant' ? vLabel : `${vLabel} · ${scorePct}%`}
             </span>
           </div>
           <p class="modal-eval-reasoning">${escapeHtml(ev.triageReasoning || 'Sin justificación disponible.')}</p>
         </div>
       `;
     }).join('') : `
-      <p class="modal-empty-notice">Este contenido no tuvo coincidencia semántica en el Paso 1 con los proyectos activos actuales (distancia espacial &gt; 0.60).</p>
+      <p class="modal-empty-notice">Sin evaluaciones directas en los proyectos actuales.</p>
     `;
 
     elements.modalContentBody.innerHTML = `
       <div class="modal-section">
-        <span class="modal-section-label">Fuente & URL:</span>
+        <span class="modal-section-label">Fuente original</span>
         <div class="modal-source-row">
           ${data.channelOrDomain ? `
-            <span class="content-item-author-tag">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-              </svg>
-              ${escapeHtml(data.channelOrDomain)}
-            </span>
+            <span class="content-item-author-tag">${escapeHtml(data.channelOrDomain)}</span>
           ` : ''}
           <a href="${safeUrl(data.uri)}" target="_blank" rel="noopener noreferrer" class="modal-uri-link">
-            ${escapeHtml(data.uri)}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 4px; vertical-align: middle;">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
+            ${escapeHtml(data.uri)} ↗
           </a>
         </div>
       </div>
 
       <div class="modal-section">
-        <span class="modal-section-label">Resumen Estructurado:</span>
+        <span class="modal-section-label">Resumen</span>
         <div class="modal-summary-box">
           <p>${escapeHtml(data.summary || 'Aún no se ha generado el resumen del contenido.')}</p>
         </div>
       </div>
 
       <div class="modal-section">
-        <span class="modal-section-label">Evaluaciones por Proyecto:</span>
-        ${evalsList.length > 0 ? evalsList : '<p class="modal-empty-notice">Sin evaluaciones asociadas a proyectos para este contenido.</p>'}
+        <span class="modal-section-label">Evaluación por proyecto</span>
+        ${evalsList}
       </div>
     `;
   } catch (err) {
     elements.modalContentBody.innerHTML = `
       <div class="modal-error-box">
-        <p style="color: var(--color-danger); font-weight: 600;">Error al cargar detalle:</p>
+        <p style="color: var(--color-danger); font-weight: 600;">Error al cargar ficha:</p>
         <p style="color: var(--text-secondary); margin-top: 0.25rem;">${escapeHtml(err.message)}</p>
       </div>
     `;
