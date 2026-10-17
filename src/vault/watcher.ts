@@ -15,10 +15,6 @@ export function isVaultWatcherActive(): boolean {
   return activeWatcher !== null;
 }
 
-export function getActiveVaultWatcherPath(): string | null {
-  return activeVaultPath;
-}
-
 export async function stopVaultWatcher(): Promise<void> {
   for (const timer of debounceTimers.values()) {
     clearTimeout(timer);

@@ -18,7 +18,6 @@ const EnvSchema = z.object({
 export const env = EnvSchema.parse(process.env);
 
 export const PROJECT_DIR_NAMES = ['Projects', 'Proyectos'] as const;
-export type ProjectDirName = typeof PROJECT_DIR_NAMES[number];
 
 export const VECTOR_DISTANCE_THRESHOLD = 0.6;
 export const TOP_K_PROJECTS_LIMIT = 10;

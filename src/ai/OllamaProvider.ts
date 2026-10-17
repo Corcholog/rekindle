@@ -129,6 +129,5 @@ export class OllamaProvider {
   }
 }
 
-export { OllamaProvider as AiProvider };
 export const sharedAiProvider = new OllamaProvider();
 
