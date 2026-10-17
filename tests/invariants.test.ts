@@ -43,7 +43,7 @@ describe('I2: no outbound LLM traffic without GEMINI_API_KEY', () => {
     ollamaInvoke.mockResolvedValue({ answer: 'local' });
     geminiGenerate.mockResolvedValue({ text: '{"answer":"cloud"}' });
   });
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => { vi.unstubAllEnvs(); });
 
   it('uses only Ollama when the key is empty', async () => {
     const provider = await loadProvider('');
@@ -69,7 +69,7 @@ describe('I3: embeddings are computed only locally', () => {
     vi.clearAllMocks();
     ollamaEmbed.mockResolvedValue(new Array(1024).fill(0.1));
   });
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => { vi.unstubAllEnvs(); });
 
   it('never calls Gemini for embeddings, even with a key configured', async () => {
     const provider = await loadProvider('test-key');
