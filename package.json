@@ -1,5 +1,5 @@
 {
-  "name": "loom-monorepo",
+  "name": "loom",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -15,7 +15,6 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@huggingface/transformers": "^4.3.1",
     "@testcontainers/postgresql": "^12.2.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.4",
@@ -25,9 +24,6 @@
     "@vitest/coverage-v8": "1.6.1",
     "drizzle-kit": "^0.31.11",
     "eslint": "^8.57.0",
-    "ollama": "^0.6.4",
-    "testcontainers": "^10.7.0",
-    "ts-node": "^10.9.2",
     "tsx": "^4.23.15",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0"
@@ -49,7 +45,6 @@
     "jsdom": "^30.1.2",
     "pg": "^8.23.1",
     "pg-boss": "^12.37.1",
-    "pgvector": "^0.3.0",
     "youtube-transcript": "^1.3.1",
     "zod": "^4.6.5"
   }

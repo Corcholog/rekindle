@@ -21,7 +21,6 @@
     "drizzle/",
     "demo_vault/",
     "tests/DummyVault*/",
-    "spikes/",
     "web/",
     "extension/"
   ]

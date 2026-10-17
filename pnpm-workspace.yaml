@@ -1,10 +1,6 @@
-packages:
-  - "apps/*"
-  - "packages/*"
 allowBuilds:
   '@google/genai': true
   cpu-features: true
   esbuild: true
-  onnxruntime-node: true
   protobufjs: true
   ssh2: true
