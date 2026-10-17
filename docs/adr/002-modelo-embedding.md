@@ -25,3 +25,7 @@ Dado que el usuario redacta en **español** pero consume contenido en **español
 - **Configuración:** el modelo de embeddings es `EMBED_MODEL` (por defecto `bge-m3`, vía `OLLAMA_URL`). La columna es `vector(1024)`: cambiar a un modelo con otra dimensionalidad exige una migración y recalcular todos los embeddings.
 - **Triaje y resumen:** si hay `GEMINI_API_KEY` se usa Gemini (modelo `GEMINI_MODEL` o `CHAT_MODEL`, por defecto `gemini-3.1-flash-lite`); ante cualquier error de Gemini, o sin clave, se usa `qwen2.5:7b-instruct` en Ollama con ventana de contexto `numCtx = 16384`. Los embeddings **siempre** son locales.
 - **Dependencias residuales:** `@huggingface/transformers` y `ollama` siguen en `devDependencies` solo por los *spikes* (`spikes/`).
+
+## Update (2026-10-17, Phase 1 cleanup)
+
+- The `spikes/` folder and the residual `@huggingface/transformers` and `ollama` devDependencies were removed. The spike's NO-GO result (≈665 MB RSS against a 500 MB budget) is kept above as historical record; it was not re-measured.

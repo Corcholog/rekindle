@@ -24,9 +24,9 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 - **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Gemini is used when `GEMINI_API_KEY` is set; on any Gemini error it seamlessly falls back to local Ollama (`qwen2.5:7b-instruct`).
 - **Living Vault Sync & Staleness**: A watcher (3 s debounce) re-reads project notes recursively, updates immutable snapshots, and computes vector drift (`STALE_DRIFT_THRESHOLD = 0.04`). Stale suggestions are flagged with badges and can be re-evaluated context-aware against updated drafts.
 - **Synergies & Consultor**:
-  - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and synthesizes bridge notes.
-  - **Archive & Vault Research Partner ("Consultor")**: Answers natural language research questions by reasoning across your entire saved library and all active Obsidian project notes simultaneously, generating verified inline citations (`[C1]`, `[N1]`).
-- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault.
+  - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and writes a bridge note (`Projects/synergy_<A>_<B>.md`).
+  - **Archive & Vault Research Partner ("Consultor")**: Answers natural language research questions by reasoning across your entire saved library and all active Obsidian project notes simultaneously, citing sources as `[C1]` (library) and `[N1]` (notes). The cited cards are checked against the catalog; inline references in the answer text are not yet verified.
+- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault. Exception today: the synergy explorer and backlog synthesis write their own files (see *Known limitations*).
 - **Web UI**: 4 focused views:
   1. **Consumo**: Ingestion input card and chronological reading history feed.
   2. **Sugerencias**: Project-scoped triage with staleness pills, backlog synthesis, and accept/discard/reevaluate actions.
@@ -119,9 +119,11 @@ Open <http://127.0.0.1:3000>. Without `VAULT_PATH` the demo vault in [`demo_vaul
 Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the following leaves your machine for Google's API:
 
 - the article text (up to 50,000 characters) for summarisation;
-- for each evaluation, the project **thesis and up to 15,000 characters of your project notes**, plus the article summary.
+- for each evaluation and re-evaluation, **up to 15,000 characters of your project notes**, plus the article summary;
+- for each Consultor question, **the summaries of every ready item in your library and a snippet of every active project note**;
+- for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 10,000 characters of project notes.
 
-Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
+Leave `GEMINI_API_KEY` empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
 
 ---
 
@@ -131,7 +133,8 @@ Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
 |---|---|
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint (`@typescript-eslint`) |
-| `pnpm test` | Vitest. Offline unit tests run instantly; integration tests use Docker / Ollama. |
+| `pnpm test` | Vitest. Offline unit tests run instantly; integration tests need Docker, and most also need Ollama with both models. |
+| `pnpm test:coverage` | Same, with v8 coverage for `src/` |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
@@ -146,11 +149,10 @@ Remove or omit `GEMINI_API_KEY` to keep everything 100% local (Ollama only).
 | `/api/ingest` | `POST` | Queue a URL (`202` new, `200` re-queued) |
 | `/api/contents`, `/api/contents/:id` | `GET` | Reading feed, status indicators, and content details |
 | `/api/library/consult` | `POST` | Full-catalog Archive & Obsidian Vault Research Partner |
-| `/api/library/search`, `/api/library/ask` | `GET` / `POST` | Semantic vector search and RAG Q&A with citations |
-| `/api/projects`, `/api/projects/:id` | `GET` | Projects list with counters and note metadata |
-| `/api/projects/synergies` | `GET` | Cross-project thematic synergies via HNSW note distance |
-| `/api/projects/synergies/explore` | `POST` | AI synergy exploration and Obsidian bridge note generation |
-| `/api/projects/:id/synthesize` | `POST` | Synthesize project backlog into research brief |
+| `/api/projects` | `GET` | Projects list with counters and note metadata |
+| `/api/projects/synergies` | `GET` | Cross-project thematic synergies via note-to-note cosine distance |
+| `/api/projects/synergies/explore` | `POST` | AI synergy exploration; writes a bridge note to the vault |
+| `/api/projects/:id/synthesize` | `POST` | Compile accepted suggestions into `research_brief.md` (overwrites) |
 | `/api/suggestions`, `/api/suggestions/:id` | `GET` | Triage feed with staleness scores (`status=active\|pending\|tentative\|accepted\|discarded`) |
 | `/api/suggestions/:id` | `PATCH` | Accept / discard suggestion (`409` on conflict) |
 | `/api/suggestions/:id/reevaluate` | `POST` | Context-aware re-evaluation of suggestion against current notes |
@@ -167,9 +169,22 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 | Document | Content |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **In-depth technical reference**: Architecture, data model, pipelines, API, configuration, and design |
-| [docs/code-review.md](docs/code-review.md) | Code review findings and historical status |
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
-| [docs/fase-0-report.md … fase-7-report.md](docs) | Historical phase reports (Spanish) |
+| [docs/JOURNEY.md](docs/JOURNEY.md) | Build log: decisions, dead ends, bugs found and fixed |
+
+---
+
+## Known limitations
+
+Found in the October 2026 audit and scheduled for fixing (see `docs/agent/02-roadmap.md`, Phase 2):
+
+- **No authentication.** Keep `HOST=127.0.0.1`. The API does not yet validate the `Host` or `Origin` header, so a malicious web page could reach it through DNS rebinding.
+- **Some features write to the vault without a separate confirmation.** The synergy explorer writes `Projects/synergy_*.md`, and backlog synthesis overwrites `<project>/research_brief.md`.
+- **LLM text reaches the vault unsanitized.** Accepted callouts and generated notes can contain links, embeds or code blocks taken from ingested pages.
+- **Re-ingesting the same URL re-runs evaluation** and can create duplicate pending suggestions.
+- **Writeback has a crash window.** If the server dies between marking a suggestion as written and appending it, that callout is lost.
+- **The private-address check on ingestion is hostname-only.** Redirects and DNS are not checked.
+- **Thresholds are not calibrated, and suggestion quality has not been measured.** There is no evaluation dataset yet. Retrieval and suggestion quality are *not measured*.
 
 ---
 

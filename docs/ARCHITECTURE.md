@@ -1,8 +1,8 @@
 # Loom — Architecture & Technical Reference
 
 > **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Loom.  
-> **State described:** git `master` @ `1cc4432` ("feat(evaluator): implement vector-gated staleness detection and context-aware re-evaluation") + working tree refinements.  
-> **Verification status:** `tsc --noEmit` clean (0 errors), `eslint .` clean (0 errors), 9/9 offline unit tests passing (`tests/parser.test.ts`, `tests/youtube_ingest.test.ts`, `tests/dummy.test.ts`).
+> **State described:** git `master` after the Phase 1 cleanup (see `docs/agent/02-roadmap.md`). Behaviors marked **Known issue** are documented as they are today and are scheduled for Phase 2 (security and integrity fixes).  
+> **Verification:** run `pnpm typecheck`, `pnpm lint` and `pnpm test`; per-phase results are recorded in `docs/JOURNEY.md`.
 
 ---
 
@@ -14,19 +14,19 @@ The workflow centers on writer agency:
 1. **Writing projects as folders in Obsidian**: You maintain projects as collections of Markdown notes under `Projects/<ProjectName>/` (or `Proyectos/<ProjectName>/`).
 2. **Seamless link capture**: You ingest web articles, essays, and YouTube videos via the web UI or the **Manifest V3 Web Clipper extension** (which queues clippings locally when offline and auto-syncs on reconnect).
 3. **Structured summarization & local embedding**: Loom extracts the readable article text or video transcript, synthesizes a structured summary (in Spanish), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
-4. **Hierarchical semantic matching**: Loom compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL via `pgvector` HNSW indexes.
+4. **Hierarchical semantic matching**: Loom compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL using `pgvector` cosine distance.
 5. **Constructive triage & action proposal**: When cosine distance indicates semantic affinity (< 0.6), Loom prompts an LLM (Gemini with automatic local Ollama fallback) to formulate a concrete, constructive action targeting a specific note in your project (e.g., *"Citar evidencia en research/combat.md"*, *"Contraargumento para Acto 2"*).
-6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`.
+6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`. **Known issue:** the synergy explorer and the backlog synthesizer currently write their own files directly (see §11).
 7. **Living knowledge synchronization**:
    - **Vector-gated staleness detection**: Detects when notes evolve in Obsidian and flags older suggestions as stale (`isStale`).
    - **Tentative promotions**: Automatically re-evaluates past tentative contents when project drafts expand or move closer.
-   - **Cross-project thematic synergies**: Discovers conceptual bridges between separate projects via note-to-note HNSW vector distance and generates synthesis notes.
+   - **Cross-project thematic synergies**: Discovers conceptual bridges between separate projects via note-to-note cosine distance and generates bridge notes.
    - **Archive & Vault Research Partner ("Consultor")**: Evaluates your entire saved library and all active Obsidian notes simultaneously to diagnose research questions, assess project viability, and provide cited references (`[C1]`, `[N1]`).
 
 ### Core Design Principles
 - **Obsidian is the primary source of truth**: The filesystem holds your creative writing. PostgreSQL holds derived vector index state, immutable snapshots, and triage history.
-- **Zero unapproved mutations**: AI cannot write or edit notes without your explicit acceptance in the triage UI.
-- **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. By omitting `GEMINI_API_KEY`, the entire system (summaries, evaluations, consultant, Q&A) runs 100% locally with Ollama.
+- **Zero unapproved mutations** (design goal): AI cannot write or edit notes without your explicit action. Suggestions are written only after **Aceptar**. **Known issue:** synergy bridge notes and `research_brief.md` are written as soon as those features run (§11); the planned fix makes them an explicit "save to vault" action.
+- **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. Without `GEMINI_API_KEY`, every LLM call (summaries, evaluations, re-evaluations, Consultor, synergies, synthesis) runs locally with Ollama. Non-LLM outbound traffic remains: fetching the pages and YouTube metadata/transcripts you ingest, and the web fonts the UI loads from Google Fonts.
 - **Language separation**: User-facing copy, prompts, generated summaries, callouts, and UI strings are strictly in **Spanish**. Source code, variables, developer documentation, and commits are strictly in **English**.
 
 ---
@@ -43,9 +43,9 @@ The workflow centers on writer agency:
 | **Job Queue** | `pg-boss` 12 | Background worker queues (`ingest_url`, `evaluate_content`, `sync_suggestions`) running on Postgres. |
 | **Embeddings** | Ollama `bge-m3` (1024-d) via `@langchain/ollama` | High-accuracy multilingual dense embeddings executed 100% locally. |
 | **LLM Provider** | Gemini (`@google/genai`) with fallback to local `ChatOllama` (`qwen2.5:7b-instruct`) | Structured output with Zod schemas. Seamless fallback if Gemini quota, key, or network fails. |
-| **Filesystem Watcher** | `chokidar` 3.x | Real-time debounced watching of Obsidian project directories. |
+| **Filesystem Watcher** | `chokidar` 5.x | Real-time debounced watching of Obsidian project directories. |
 | **Browser Extension** | Manifest V3 (Chrome / Chromium / Edge / Brave) | Background service worker, offline queueing in `chrome.storage.local`, auto-sync alarms. |
-| **Web Frontend** | Vanilla ES Modules + HTML5 + Custom Editorial CSS | Fraunces & Plus Jakarta Sans typography, Obsidian callouts styling, zero heavy UI frameworks. |
+| **Web Frontend** | Vanilla ES Modules + HTML5 + custom CSS | Newsreader, Plus Jakarta Sans and JetBrains Mono (loaded from Google Fonts), Obsidian callout styling, no UI framework. |
 
 ---
 
@@ -67,16 +67,15 @@ loom/
 │  │  └─ routes/
 │  │     ├─ contents.ts               GET /api/contents (Inbox feed & content detail)
 │  │     ├─ ingest.ts                 POST /api/ingest (Ingestion queue trigger)
-│  │     ├─ library.ts                Consultor (/api/library/consult), search & ask RAG
-│  │     ├─ projects.ts               Projects CRUD, /synergies, /explore, /synthesize
+│  │     ├─ library.ts                Consultor (/api/library/consult)
+│  │     ├─ projects.ts               Projects list, /synergies, /explore, /synthesize
 │  │     ├─ settings.ts               Vault path validation, persistence, rescan
 │  │     ├─ suggestions.ts            Triage feed, /reevaluate, /reevaluate-stale, PATCH
 │  │     └─ system.ts                 GET /api/system/status & /health activity indicators
 │  ├─ db/
 │  │  ├─ index.ts                     Postgres pool & Drizzle ORM client
 │  │  ├─ schema.ts                    Tables, enums, pgvector custom type, HNSW indexes
-│  │  ├─ migrate.ts / reset.ts        Migration executor & destructive database reset
-│  │  ├─ seed.ts / repositories.ts    Seeding helpers and database repository abstractions
+│  │  └─ migrate.ts / reset.ts        Migration executor & destructive database reset
 │  ├─ evaluator/
 │  │  └─ index.ts                     Hierarchical 2-step evaluation & backlog promotion engine
 │  ├─ queue/
@@ -95,15 +94,13 @@ loom/
 ├─ web/                               Single Page Application (served via Fastify static)
 │  ├─ index.html                      Semantic HTML with 4 views (Consumo, Sugerencias, Consultor, Config)
 │  ├─ app.js                          Frontend controller, state management, modal handlers
-│  └─ styles.css                      Editorial design system with Tokyo Night accents
+│  └─ styles.css                      Editorial design system
 ├─ scripts/
-│  ├─ run_server.ts                   Server entrypoint for development & production
-│  ├─ seed_demo.ts                    Demo vault & database populator
-│  ├─ reconcile_and_reevaluate.ts     Full vault rescan and re-evaluation utility
-│  └─ generate_extension_icons.ts     SVG-to-PNG generator for extension icon assets
+│  └─ run_server.ts                   Server entrypoint for development & production
+├─ drizzle/                           SQL migrations (never edited once applied)
 ├─ tests/                             Automated test suites (unit + integration + e2e)
 ├─ demo_vault/                        Sample Obsidian vault with project structures
-├─ docs/                              Architecture documentation, ADRs, phase reports
+├─ docs/                              Architecture reference, ADRs, agent workflow (docs/agent), build log (JOURNEY.md)
 ├─ start.bat / start.sh               One-click launch scripts (Linux & Windows)
 ├─ reset_db.bat / reset_db.sh         Database reset scripts
 └─ docker-compose.yml                 PostgreSQL 16 + pgvector container definition
@@ -172,6 +169,7 @@ flowchart TD
   REC -->|Backlog & Promotions| Q_EVAL
 
   API -->|Accept Suggestion| VAULT
+  API -->|Synergy note / research brief| VAULT
   W3 -->|Recovery Writeback| VAULT
 ```
 
@@ -199,9 +197,11 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 | `DATABASE_URL` | `string` | `postgres://loom:loompassword@localhost:5432/loomdb` | PostgreSQL connection URI. |
 | `OLLAMA_URL` | `string` | `http://127.0.0.1:11434` | Ollama service endpoint. |
 | `EMBED_MODEL` | `string` | `'bge-m3'` | Dense embedding model name (must produce 1024-dimensional vectors). |
-| `CHAT_MODEL` | `string` | `'gemini-3.1-flash-lite'` | Gemini model identifier (or override via `GEMINI_MODEL`). |
-| `GEMINI_API_KEY` | `string?` | *optional* | Google AI Studio API key. If omitted, Loom operates 100% locally. |
-| `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. |
+| `CHAT_MODEL` | `string` | `'gemini-3.1-flash-lite'` | Gemini model identifier. The Ollama chat model is fixed to `qwen2.5:7b-instruct` in `OllamaProvider.ts`. |
+| `GEMINI_MODEL` | `string?` | *optional* | Overrides `CHAT_MODEL` (read directly from `process.env`). |
+| `GEMINI_API_KEY` | `string?` | *optional* | Google AI Studio API key. If omitted, every LLM call runs locally on Ollama. |
+| `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. `pnpm start/dev` default to `./demo_vault`; the UI can rewrite it in `.env`. |
+| `LOG_LEVEL` | `string?` | `'warn'` | Fastify log level (read directly from `process.env`). |
 
 ### Semantic Engine Constants (`src/config.ts`)
 - `PROJECT_DIR_NAMES = ['Projects', 'Proyectos']`: Recognised top-level vault project directories.
@@ -210,6 +210,8 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 - `STALE_DRIFT_THRESHOLD = 0.04`: Minimum cosine drift between evaluated snapshot and current snapshot to trigger staleness flagging (`isStale`).
 - `PROMOTION_DELTA_THRESHOLD = 0.08`: Cosine similarity improvement needed to re-evaluate and promote a tentative content after project updates.
 - `NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50`: Absolute note affinity cutoff triggering tentative promotion when a new note is added.
+- The note-level promotion delta (`0.04`) is an inline literal in `src/evaluator/index.ts`, not a named constant.
+- None of these values has been calibrated against labeled data yet (Phase 3 eval harness).
 
 ---
 
@@ -232,7 +234,6 @@ erDiagram
     text uri UK
     text title
     text channel_or_domain
-    text source_type
     text raw_text
     text summary
     vector_1024 embedding
@@ -313,6 +314,7 @@ erDiagram
 1. **`contents`**:
    - Stores canonical web and video content with LLM summaries and 1024-d embeddings.
    - Indexes: HNSW cosine index `contents_embedding_idx` using `vector_cosine_ops`; btree on `consumed_at`.
+   - Note: pgvector uses HNSW only for `ORDER BY distance LIMIT k` queries. The evaluator, backlog and synergy queries filter on a distance threshold or cross-join, so they are not expected to use these indexes (not yet measured with `EXPLAIN` on realistic data).
    - Idempotency: Unique constraint on canonical `uri`.
 2. **`projects`**:
    - Master list of Obsidian projects discovered on disk.
@@ -330,10 +332,10 @@ erDiagram
    - Unique composite index on `(content_id, project_snapshot_id, consumption_seq)` prevents redundant LLM evaluations.
 6. **`action_suggestions`**:
    - Concrete proposed actions generated when an evaluation is `actionable`.
-   - `target_file` specifies the target note resolved by the evaluator (or falls back to the closest affinity note).
+   - `target_file` is the note the LLM proposed (falling back to the closest-affinity note, then `ideas.md`). It is shown in the UI and used for staleness detection; it is **not** used for writing: accepted callouts always go to `<project>/suggestions.md`.
    - Partial btree index `action_suggestions_status_partial_idx` on `status` where `status = 'pending'`.
 7. **`llm_telemetry`**:
-   - Records latency and model identifier for auditability and monitoring.
+   - Currently written only for the evaluator's triage call, and only on success (model name and latency). Token, cost and error columns exist but are not populated yet (Phase 4).
 
 ---
 
@@ -343,9 +345,8 @@ erDiagram
 Loom monitors two top-level directories: `Projects/` and `Proyectos/`.
 - **Recursive note structure**: Projects are represented by directory folders (e.g. `Projects/SciFi_Novel/`). Notes can live at the root of the project or in nested subdirectories (e.g. `Projects/SciFi_Novel/worldbuilding/factions.md`).
 - **No mandatory `project.md`**: Loom does not force a rigid `project.md` file. The project thesis and title are derived heuristically:
-  1. A note containing the `#project` tag (inline or frontmatter `tags: [project]`).
-  2. Otherwise, the note with the primary H1 title.
-  3. Otherwise, the folder name itself, with a synthesis of the collected notes.
+  1. If a note carries the `#project` tag (inline or frontmatter `tags: [project]`), its text is the thesis and its H1 title becomes the project title.
+  2. Otherwise the project title is the folder name and the thesis is the first 800 characters of the concatenated notes.
 - **Excluded patterns**: Hidden files/folders (`.obsidian/`, `.trash/`, `.git/`), attachments, and Loom's own output file (`suggestions.md`) are strictly ignored during parsing and hashing.
 
 ### 7.2 Parser (`parser.ts`)
@@ -375,7 +376,7 @@ When file changes are detected:
 - Chokidar monitors project directories with a 3-second per-project debounce timer.
 - **Linux Removable Drive Support**: `ensureDriveMountedIfLinuxMedia` detects paths under `/run/media/...` and automatically issues `udisksctl mount` if the partition is currently unmounted.
 
-### 7.6 Atomic Writeback (`updater.ts`)
+### 7.6 Writeback (`updater.ts`)
 Policy: **Only accepted suggestions write to the vault.**
 - Callout format:
   ```markdown
@@ -385,8 +386,9 @@ Policy: **Only accepted suggestions write to the vault.**
   > **Fuente:** [Título del Artículo](https://example.com/article)
   > **Feedback:** Considerar también el contraargumento de la página 4.
   ```
-- Writeback executes an atomic database update (`UPDATE action_suggestions SET written_to_vault = true WHERE id = ? AND status = 'accepted' AND written_to_vault = false RETURNING id`).
-- The callout is appended to `<project>/suggestions.md`. If the disk write fails, the database flag is rolled back.
+- Writeback first claims the row with a conditional update (`UPDATE action_suggestions SET written_to_vault = true WHERE id = ? AND status = 'accepted' AND written_to_vault = false RETURNING id`), so concurrent writers cannot both append.
+- The callout is then appended to `<project>/suggestions.md`. If `appendFile` throws, the flag is reset and a `sync_suggestions` job retries later.
+- **Known issue:** if the process dies between the claim and the append, the flag stays `true` and the callout is never written. Model text is written as-is apart from the `> ` prefix on each line (no sanitization of embeds, links or code blocks).
 
 ---
 
@@ -409,7 +411,7 @@ pg-boss 'ingest_url' job
   └───► Web Page: Fetch (15s timeout, 5MB cap, content-type check) + Readability
   │
   ▼
-LLM Summarization (Spanish summary schema, max 50k chars raw text)
+LLM Summarization (Spanish summary schema, raw text capped at 50k chars; only the summary is embedded)
   │
   ▼
 Local Embedding (Ollama bge-m3, 1024-d)
@@ -425,7 +427,8 @@ pg-boss 'evaluate_content' job
 Loom includes a full Manifest V3 browser extension for 1-click clipping from Chromium-based browsers:
 - **Instant Clipping**: Action popup and context menu let users clip the active tab URL or highlighted text selection.
 - **Offline Resilience**: If the Loom server is offline or unreachable, clippings are not lost; they are stored in `chrome.storage.local` with an amber badge indicator showing the queued count.
-- **Background Auto-Sync**: A background service worker (`extension/background.js`) registers network state listeners (`online`), periodic alarms (`chrome.alarms` every 1 minute), and window focus handlers to automatically flush queued clippings to `POST /api/ingest` as soon as Loom reconnects.
+- **Background Auto-Sync**: The service worker (`extension/background.js`) flushes queued clippings to `POST /api/ingest` from a `chrome.alarms` timer (every minute while the queue is non-empty), on tab activation, on browser startup and right after enqueueing. The popup (`popup.js`) can also flush the queue directly. **Known issue:** both flush paths read and rewrite the same storage key without coordination, so a clip can be sent twice or dropped.
+- The extension reaches Loom through its `host_permissions` (`localhost:3000`, `127.0.0.1:3000`), so the server sends no CORS headers. It is the only supported browser clipper.
 
 ---
 
@@ -480,8 +483,10 @@ For each candidate project under the 0.6 cutoff:
      }).nullable(),
    });
    ```
-3. **Target File Resolution**: If the LLM specifies `targetFile`, it is used; otherwise, it falls back to `matchedNotePath`, or finally `ideas.md`.
+3. **Target File Resolution**: If the LLM specifies `targetFile`, it is stored as-is (not validated against the project's notes); otherwise it falls back to `matchedNotePath`, or finally `ideas.md`.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Loom automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
+5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`. **Known issue:** re-ingesting a URL increments `consumption_seq`, so it re-runs evaluation and can create a second pending suggestion. This violates invariant I6 and is scheduled for Phase 2.
+6. **Failure handling** — **Known issue:** an LLM error for one project is logged and skipped; the job still completes, so it is not retried and no failure is recorded in telemetry.
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
 When a project's notes change:
@@ -520,7 +525,7 @@ As the user writes notes in Obsidian, previously generated suggestions may becom
 
 ### Context-Aware Re-evaluation (`POST /api/suggestions/:id/reevaluate`)
 When re-evaluating a stale suggestion:
-1. Loom loads the original suggestion, the content summary, and the **latest text of the target note** from Obsidian.
+1. Loom loads the original suggestion, the content summary, and the **latest project snapshot** from the database (all notes concatenated, capped at 15,000 characters).
 2. The LLM evaluates whether the suggestion should be:
    - `keep_or_refine`: Kept and updated with refined observations matching the new draft.
    - `already_addressed`: Auto-resolved because the writer already incorporated the ideas.
@@ -531,18 +536,20 @@ When re-evaluating a stale suggestion:
 ## 11. Synergies, Backlog Synthesis & Archive Consultant
 
 ### 11.1 Cross-Project Thematic Synergies (`/api/projects/synergies`)
-Loom discovers hidden connections across separate projects by calculating the HNSW vector distance between notes of different projects (`project_note_snapshots` where `pA.id != pB.id`):
+Loom discovers hidden connections across separate projects by calculating the cosine distance between notes of different projects (`project_note_snapshots` where `pA.id != pB.id`):
 - `GET /api/projects/synergies`: Returns high-affinity project pairs, closest matching notes, and semantic similarity scores.
-- `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects, synthesize shared challenges and mutual benefits, and optionally write a bridge note (`Projects/Puente_<ProjectA>_<ProjectB>.md`) directly into Obsidian.
+- `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects, synthesize shared challenges and mutual benefits, and write a bridge note `Projects/synergy_<ProjectA>_<ProjectB>.md` (always under `Projects/`). `saveToVault` defaults to `true` and the UI always sends `true`; `forceRegenerate` overwrites an existing note. If a bridge note already exists, it is returned from disk instead of calling the LLM.
+- **Known issues:** the note-to-note comparison and the notes sent to the LLM are taken from all historical snapshots, not just the latest one, so deleted notes can still appear. The LLM markdown is written without sanitization.
 
 ### 11.2 Project Backlog Synthesis (`/api/projects/:id/synthesize`)
-Synthesizes all pending suggestions and active project notes into a structured **Research Brief** (`dossier`), identifying emergent themes, thematic clusters, and immediate writing priorities.
+Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM, and writes it to `<project>/research_brief.md`, replacing any existing file of that name. The project is then re-reconciled, so the brief becomes part of the project's notes and embeddings. **Known issue:** this write happens without a separate confirmation and overwrites manual edits.
 
 ### 11.3 Archive & Vault Research Partner ("Consultor" - `/api/library/consult`)
 A dedicated research consultant that reasons over your entire intellectual repository:
 - **Full-Catalog Direct Context**: Injects the catalog of all ready library items (`[C1]`, `[C2]`, ...) and all active Obsidian notes (`[N1]`, `[N2]`, ...) simultaneously.
 - **Natural Language Dialogue**: Answers broad questions (e.g. *"¿Tenemos material sobre videojuegos narrativos?"*, *"¿Es viable armar un ensayo sobre atención y tecnología?"*).
-- **Cited Outputs**: Generates a structured diagnosis with verified inline citations, project viability assessment, and itemized connection justifications (`whyItConnects`).
+- **Cited Outputs**: Generates a diagnosis with inline references (`[C1]`, `[N1]`), an optional project viability assessment, and itemized connection cards (`whyItConnects`). The cards are resolved against the catalog and unknown references are dropped; inline references inside the diagnosis text are not verified.
+- **Scale:** the whole catalog is sent in a single prompt (no retrieval step), so large libraries can exceed the local model's 16k-token context window.
 
 ---
 
@@ -552,8 +559,8 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 
 ### 1. Ingestion & Contents
 - `POST /api/ingest`
-  - Body: `{ url: string }`
-  - Returns: `202 { success: true, message: 'Content queued', contentId }` or `200` if re-queued.
+  - Body: `{ url: string, title?: string, selection?: string }` (public `http(s)` URLs only)
+  - Returns: `202 { message, contentId, status: 'pending' }` for a new URL, `200` with the same shape when re-queued.
 - `GET /api/contents`
   - Query: `status?`, `limit?` (default 30), `offset?` (default 0)
   - Returns: List of contents with evaluation counts, verdicts, spatial affinity flag, and active processing status.
@@ -564,19 +571,11 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 - `POST /api/library/consult`
   - Body: `{ query: string }`
   - Returns: `{ query, diagnosis, projectViability, matchedContents: [...], matchedNotes: [...] }`
-- `GET /api/library/search`
-  - Query: `q: string`, `limit?` (default 10)
-  - Returns: Semantic vector search results ranked by cosine distance with affinity percentage.
-- `POST /api/library/ask`
-  - Body: `{ query: string }`
-  - Returns: Top-5 RAG synthesis with numbered citations `[1]`, `[2]` and key insights.
 
 ### 3. Projects & Synergies
 - `GET /api/projects`
   - Query: `isActive?` (boolean)
   - Returns: Projects list with latest snapshot thesis, note titles, and suggestion counters (`pending`, `accepted`, `discarded`, `tentative`, `active`).
-- `GET /api/projects/:id`
-  - Returns: Project detail with snapshot count and timestamps.
 - `GET /api/projects/synergies`
   - Query: `minSimilarity?` (default 20), `limit?` (default 15)
   - Returns: Cross-project thematic pairs with closest note matches and similarity scores.
@@ -584,8 +583,8 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
   - Body: `{ projectAId, projectBId, saveToVault?, forceRegenerate? }`
   - Returns: Comprehensive synthesis markdown, shared problems, mutual benefits, and Obsidian bridge file path.
 - `POST /api/projects/:id/synthesize`
-  - Body: `{ focusArea? }`
-  - Returns: Backlog synthesis dossier with action clusters and suggested research roadmap.
+  - No body.
+  - Returns: `{ success, filePath, title, executiveSummary, suggestedNextSteps, acceptedCount, writtenToVault }`; `400` when the project has no accepted suggestions.
 
 ### 4. Suggestions & Triage
 - `GET /api/suggestions`
@@ -597,7 +596,7 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
   - Body: `{ status: 'accepted' | 'discarded', userFeedback? }`
   - Returns: Updated suggestion. On `accepted`, atomically appends callout to `suggestions.md`.
 - `POST /api/suggestions/:id/reevaluate`
-  - Body: `{ focusNotePath? }`
+  - No body. Only pending suggestions can be re-evaluated.
   - Returns: Context-aware re-evaluation verdict (`keep_or_refine`, `already_addressed`, `obsolete`).
 - `POST /api/projects/:id/reevaluate-stale`
   - Re-evaluates all stale pending suggestions in a project in batch.
@@ -607,14 +606,14 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 - `POST /api/settings/vault`: `{ vaultPath: string }` - Validates, updates `.env`, restarts watcher, and runs vault reconciliation.
 - `POST /api/settings/vault/rescan`: Force rescan and re-embedding of all projects in the vault.
 - `GET /api/system/status`: Real-time health indicator showing active pg-boss jobs and worker states.
-- `GET /health` & `GET /ping`: Liveness probes.
+- `GET /health`: Liveness probe.
 
 ---
 
 ## 13. Web UI Architecture (`web/`)
 
 The Loom frontend is a responsive single-page application built with modern vanilla ES Modules and custom CSS:
-- **Editorial Design System**: Typography pairing Fraunces (editorial serif) and Plus Jakarta Sans (clean geometric sans) with subtle Tokyo Night dark palette accents (`#1a1b26`, `#7aa2f7`, `#bb9af7`).
+- **Editorial Design System**: Newsreader (serif), Plus Jakarta Sans (sans) and JetBrains Mono (code), loaded from Google Fonts.
 - **Four Core Views**:
   1. **Consumo (`#view-inbox`)**: Input card for pasting URLs, active worker progress indicator, and chronological reading history feed with status pills.
   2. **Sugerencias (`#view-triage`)**: Project sidebar with unread counters, status tabs (Activas, Pendientes, Tentativas, Aceptadas, Descartadas), suggestion cards with inline Obsidian callouts, staleness pills, and one-click accept/discard/reevaluate actions. Includes the **Sintetizar Backlog** trigger.
@@ -622,9 +621,10 @@ The Loom frontend is a responsive single-page application built with modern vani
   4. **Configuración (`#view-settings`)**: Vault path configuration, drive status indicator, rescan action, and detected projects table.
 - **Dynamic Modals**:
   - Content Detail Modal (full text snippet, summary, per-project verdicts).
-  - Note Preview Modal (Obsidian note contents preview).
-  - Synergy Explorer Modal (cross-project bridge generator with Obsidian save action).
-  - Backlog Synthesizer Modal (project research brief with actionable clusters).
+  - Extension Guide Modal (how to load the Manifest V3 clipper).
+  - Synergy Bridge Modal (cross-project bridge note, written to the vault).
+  - Synthesis Result Modal (research brief summary and next steps).
+- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only).
 
 ---
 
@@ -637,23 +637,26 @@ pnpm start                 # Start production server
 pnpm typecheck             # Run tsc --noEmit
 pnpm lint                  # Run ESLint over codebase
 pnpm test                  # Run Vitest test suites
+pnpm test:coverage         # Same, with v8 line/branch coverage for src/
+pnpm run db:generate       # Generate a migration after editing src/db/schema.ts
 pnpm run db:migrate        # Apply Drizzle migrations to PostgreSQL
 pnpm run db:reset          # Drop schemas and re-migrate (destructive)
-pnpm run db:seed           # Insert sample project row
-tsx scripts/seed_demo.ts   # Rebuild demo data and demo_vault project
 ```
 
 ### Automated Test Suites (`tests/`)
 - **Unit Tests (Offline, Zero-dependency)**:
   - `tests/parser.test.ts`: Markdown parsing, frontmatter extraction, inline `#project` hashtags.
   - `tests/youtube_ingest.test.ts`: YouTube URL canonicalization, Shorts/embed mappings.
-  - `tests/dummy.test.ts`: Sanity assertion checks.
-- **Integration Tests (Require Docker / Testcontainers)**:
+  - `tests/extension_offline.test.ts`: Extension manifest and offline-queue source checks.
+- **Integration Tests (Require Docker / Testcontainers; most also need a local Ollama with `bge-m3` and `qwen2.5:7b-instruct`)**:
   - `tests/db.test.ts`: Database schema validation, pgvector HNSW cosine KNN operations.
   - `tests/evaluation.test.ts` & `tests/ingestion.test.ts`: Worker pipeline tests.
   - `tests/phase6_lifecycle.test.ts` & `tests/phase7_ui.test.ts`: API route tests via Fastify `inject`.
   - `tests/settings_vault.test.ts`: Vault path configuration and reconciliation tests.
-  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback.
+  - `tests/vector_gated_staleness.test.ts`: Staleness detection and re-evaluation.
+  - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks.
+  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Requires a real `GEMINI_API_KEY`; skipped otherwise.
+- There is no fake LLM provider yet, so AI behavior is only tested against live models (Phase 5).
 
 ---
 
@@ -661,7 +664,8 @@ tsx scripts/seed_demo.ts   # Rebuild demo data and demo_vault project
 
 | Area | Current Behavior | Future Consideration |
 |---|---|---|
-| **Authentication** | Server binds to `127.0.0.1` by default without auth tokens. | Add optional bearer token or local secret if binding to external network interfaces (`0.0.0.0`). |
-| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, article text and project notes (up to 15,000 chars) are sent to Google AI Studio. | Always operate with local Ollama (`GEMINI_API_KEY=""`) if strict data residency is required. |
-| **Virtual Evaluation State** | Discarding a virtual suggestion modifies `evaluations.verdict = 'irrelevant'`. | Consider dedicated `evaluation_decisions` table to preserve original LLM verdict while recording user action. |
+| **Authentication** | Server binds to `127.0.0.1` by default, with no auth token and no Host/Origin validation (only the settings routes check `Origin`). A web page can reach the API through DNS rebinding. | Phase 2: Host/Origin validation and a per-install token. |
+| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 15,000 chars) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus notes for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
+| **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts a new `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. Concurrent accepts can insert two rows. | Phase 2: uniqueness on `evaluation_id`. |
+| **Ingestion SSRF guard** | Private/loopback hostnames are rejected by string matching only; redirects are followed and DNS is not checked. | Phase 2: DNS-resolved IP validation and per-hop redirect checks. |
 | **Multi-Vault Support** | Loom operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |

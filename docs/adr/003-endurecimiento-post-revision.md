@@ -1,7 +1,7 @@
 # ADR 003: Endurecimiento posterior a la revisión de código
 
 ## Contexto
-Una revisión de código (ver `docs/code-review.md`) detectó problemas de seguridad, fiabilidad y mantenibilidad en una versión funcional del sistema. Los cambios se aplicaron en tres commits: `f1e6620` (P1), `094c5d3` (P2) y `855e4f6` (P3).
+Una revisión de código (documento eliminado en la limpieza de la Fase 1; ver el historial de git) detectó problemas de seguridad, fiabilidad y mantenibilidad en una versión funcional del sistema. Los cambios se aplicaron en tres commits: `f1e6620` (P1), `094c5d3` (P2) y `855e4f6` (P3).
 
 ## Decisiones
 
@@ -39,3 +39,11 @@ Si no se puede calcular el embedding de un proyecto, no se guarda el hash ni el 
   - Con `GEMINI_API_KEY` se envían fragmentos de las notas del usuario a la nube (contradice ADR 001, A9).
   - No hay autenticación ni bloqueo de IPs privadas.
 - `.eslintrc.json`, `pnpm typecheck` y un `tsconfig` con resolución `bundler` forman parte del flujo de calidad.
+
+## Update (2026-10-17, Phase 0 audit)
+
+Checked against the code during the Phase 0 audit:
+- **D2:** private and loopback hosts are now rejected, but by hostname string matching only. Redirects are followed and DNS is not checked (scheduled for Phase 2).
+- **D4:** the hash is now recursive over the project folder, not limited to the first level.
+- **D6:** accepting a tentative item is idempotent for sequential requests only. Concurrent requests can insert two suggestions, because `evaluation_id` has no uniqueness constraint (Phase 2). Writeback still has a crash window between the claim and the file append (Phase 2). A reconcile requested while another one is running is now queued as a follow-up pass, not dropped.
+- The open items under *Consecuencias* are tracked in `docs/agent/02-roadmap.md`.

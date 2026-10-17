@@ -58,7 +58,13 @@ Contrastado contra el código en `master` (`855e4f6`). Este ADR se escribió com
 | A6 Contrato Triage → Verdict | 🟡 Distinto | Una sola llamada LLM devuelve veredicto + acción (`unifiedEvaluationSchema`). `tentative` **no** avanza a acción, pero se muestra al usuario en la pestaña *Tentativas*. |
 | A7 Telemetría completa | 🟡 Parcial | Solo se registra el componente `triage` (modelo y latencia). Sin tokens ni costo; no se registran fallos. |
 | A8 Writeback seguro | 🟡 Parcial | `suggestions.md` excluido del watcher y del hash; saltos de línea escapados con `> `. **No** se usa el marcador `%% sug:<uuid> %%`: la idempotencia depende del flag `written_to_vault` (reclamado atómicamente en la escritura individual). |
-| A9 Egreso a Cloud | ❌ Divergente | Con `GEMINI_API_KEY`, el evaluador envía la tesis **y hasta 15 000 caracteres de contenido de las notas**, y la ingesta envía hasta 50 000 caracteres del artículo. Debe decidirse si se acepta o se restringe (ver `docs/code-review.md`). |
+| A9 Egreso a Cloud | ❌ Divergente | Con `GEMINI_API_KEY`, el evaluador envía la tesis **y hasta 15 000 caracteres de contenido de las notas**, y la ingesta envía hasta 50 000 caracteres del artículo. Debe decidirse si se acepta o se restringe. |
 | A10 Stack | 🟡 Distinto | Node `>=22` (no 24), pnpm, TS strict, PostgreSQL 16 + pgvector, pg-boss, chokidar v5, Ollama, Google Gen AI SDK. **Sin** Vite/React (UI en JS vanilla) y **sin** `@huggingface/transformers` en runtime (ver ADR 002). |
 
 Ver también `003-endurecimiento-post-revision.md`.
+
+## Update (2026-10-17, Phase 0 audit and Phase 1 cleanup)
+
+- **A1:** the hash and the reconciler are now **recursive** over the project folder (hidden entries and `suggestions.md` excluded). BOM/CRLF normalization is still not done.
+- **A3:** the owner decided that **re-ingesting the same canonical URL must not create new evaluations or suggestions** (invariant I6 in `CLAUDE.md`). Incrementing `consumption_seq` to re-evaluate is therefore a bug, scheduled for Phase 2.
+- **A9:** the current list of what is sent to Gemini is in the README "Privacy note" and in `docs/ARCHITECTURE.md` §15.
