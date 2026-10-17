@@ -6,3 +6,10 @@ dist/
 coverage/
 tests/DummyVault*/
 *.log
+
+# Local AI-tool state (may contain session tokens)
+.superpowers/
+.antigravity/
+
+# Audit report stays local until its findings are fixed (docs/agent/01-audit.md)
+docs/audit/
