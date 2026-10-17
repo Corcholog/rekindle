@@ -65,6 +65,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-17 | Phase 1 cleanup | Tests, no Ollama/Gemini (passed / failed / skipped) | 58 / 12 / 1 | 56 / 8 / 1 | same. Removed tests account for the lower pass count; every remaining failure needs a live model. |
 | 2026-10-17 | Phase 1 cleanup | Tests with live Ollama, no Gemini (passed / failed / skipped) | not measured | 66 / 0 / 1 | `pnpm test:coverage` with Ollama `bge-m3` + `qwen2.5:7b-instruct` and `GEMINI_API_KEY=` |
 | 2026-10-17 | Phase 1 cleanup | ESLint warnings | 6 | 0 | `pnpm lint` |
+| 2026-10-17 | Phase 1 cleanup | `tests/full_e2e.test.ts` with Gemini (synthetic vault and article) | not measured | 1 / 0 / 0 (served by `gemini:gemini-3.1-flash-lite`) | `pnpm vitest run tests/full_e2e.test.ts` with `GEMINI_API_KEY` from `.env` |
 
 ## Dead ends and things that did not work
 
