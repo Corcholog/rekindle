@@ -442,7 +442,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     evaluateSpy.mockRestore();
   });
 
-  it('Feature 2: OPTIONS /api/ingest responde preflight CORS para bookmarklet y extensiones', async () => {
+  it('Feature 2: /api/ingest no concede CORS a origenes web arbitrarios (bookmarklet eliminado)', async () => {
     const res = await server.inject({
       method: 'OPTIONS',
       url: '/api/ingest',
@@ -452,9 +452,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
       },
     });
 
-    expect(res.statusCode).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('*');
-    expect(res.headers['access-control-allow-methods']).toContain('POST');
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('Feature 2: POST /api/ingest acepta title y selection desde Web Clipper y almacena metadatos', async () => {
@@ -479,7 +477,8 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     });
 
     expect(res.statusCode).toBe(202);
-    expect(res.headers['access-control-allow-origin']).toBe('*');
+    // The extension calls Loom through its host_permissions, so no CORS header is needed
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
     const body = JSON.parse(res.payload);
     expect(body.contentId).toBeDefined();
 
@@ -546,17 +545,18 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(popupJs).toContain('Modo Offline');
   });
 
-  it('Feature 2: Frontend sirve markup del Bookmarklet arrastrable y modal de instalación', async () => {
+  it('Feature 2: Frontend sirve la guía de la extensión y ya no incluye el bookmarklet', async () => {
     const res = await server.inject({
       method: 'GET',
       url: '/index.html',
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.payload).toContain('id="bookmarklet-btn"');
-    expect(res.payload).toContain('id="btn-copy-bookmarklet"');
     expect(res.payload).toContain('id="extension-guide-modal"');
-    expect(res.payload).toContain('c:\\Projects\\loom\\extension');
+    expect(res.payload).not.toContain('id="bookmarklet-btn"');
+
+    const appJs = await fs.readFile(path.resolve(__dirname, '../web/app.js'), 'utf-8');
+    expect(appJs).not.toContain('quick_ingest');
   });
 
   it('Feature 3: GET /api/library/search realiza búsqueda semántica vectorial sobre contenidos listos', async () => {

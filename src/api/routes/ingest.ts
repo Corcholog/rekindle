@@ -21,14 +21,6 @@ const IngestRequestSchema = z.object({
 });
 
 export default async function (server: FastifyInstance) {
-  // CORS Preflight Handler for Browser Bookmarklet & Web Clipper
-  server.options('/api/ingest', async (_request, reply) => {
-    reply.header('Access-Control-Allow-Origin', '*');
-    reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    return reply.status(204).send();
-  });
-
   server.post('/api/ingest', {
     schema: {
       body: IngestRequestSchema,
@@ -53,7 +45,6 @@ export default async function (server: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    reply.header('Access-Control-Allow-Origin', '*');
     const { url: rawUrl, title: passedTitle, selection } = request.body as { url: string; title?: string; selection?: string };
     const url = canonicalizeUrl(rawUrl);
 

@@ -142,7 +142,7 @@ const elements = {
 document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
   setupIngestionForm();
-  setupBookmarkletAndClipper();
+  setupExtensionGuide();
   setupLibrarySearchAndAsk();
   setupTriageStatusTabs();
   setupSettingsView();
@@ -159,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSuggestions();
   loadSynergies();
 
-  handleQuickIngestUrlParam();
 });
 
 // ==========================================================================
@@ -358,30 +357,10 @@ function setupIngestionForm() {
   elements.btnRefreshFeed.addEventListener('click', () => loadContents());
 }
 
-function setupBookmarkletAndClipper() {
-  const bookmarkletBtn = document.getElementById('bookmarklet-btn');
-  const btnCopyBookmarklet = document.getElementById('btn-copy-bookmarklet');
+function setupExtensionGuide() {
   const btnShowExtensionGuide = document.getElementById('btn-show-extension-guide');
   const extensionGuideModal = document.getElementById('extension-guide-modal');
   const btnCloseExtensionModal = document.getElementById('btn-close-extension-modal');
-
-  const origin = window.location.origin;
-  const bookmarkletCode = `javascript:(function(){const u=location.href,t=document.title,s=window.getSelection?window.getSelection().toString():'',serverUrl='${origin}',id='__loom_clipper_hud';let h=document.getElementById(id);if(h)h.remove();h=document.createElement('div');h.id=id;h.style.cssText='position:fixed;top:20px;right:20px;z-index:2147483647;background:#18181b;color:#f4f4f5;border:1px solid #3f3f46;border-radius:10px;padding:12px 18px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);display:flex;align-items:center;gap:10px;transition:all 0.3s ease;';h.innerHTML='<span style="font-size:16px;">⏳</span> Enlazando con Loom...';document.body.appendChild(h);fetch(serverUrl+'/api/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,title:t,selection:s})}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(()=>{h.style.borderColor='#10b981';h.style.background='#064e3b';h.innerHTML='<span style="color:#34d399;font-size:16px;">✦</span> <strong>¡Enviado a Loom!</strong> Analizando notas...';setTimeout(()=>{h.style.opacity='0';setTimeout(()=>h.remove(),400);},2500);}).catch(()=>{h.remove();window.open(serverUrl+'/?quick_ingest='+encodeURIComponent(u)+'&title='+encodeURIComponent(t),'LoomClip','width=560,height=420');});})();`;
-
-  if (bookmarkletBtn) {
-    bookmarkletBtn.setAttribute('href', bookmarkletCode);
-  }
-
-  if (btnCopyBookmarklet) {
-    btnCopyBookmarklet.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(bookmarkletCode);
-        showToast('¡Código del Bookmarklet copiado al portapapeles!', 'success');
-      } catch {
-        prompt('Copia el siguiente código para tu marcador:', bookmarkletCode);
-      }
-    });
-  }
 
   if (btnShowExtensionGuide && extensionGuideModal) {
     btnShowExtensionGuide.addEventListener('click', () => {
@@ -393,17 +372,6 @@ function setupBookmarkletAndClipper() {
     btnCloseExtensionModal.addEventListener('click', () => {
       extensionGuideModal.close();
     });
-  }
-}
-
-function handleQuickIngestUrlParam() {
-  const params = new URLSearchParams(window.location.search);
-  const quickUrl = params.get('quick_ingest');
-  if (quickUrl) {
-    elements.urlInput.value = quickUrl;
-    showToast('✦ Enlace recibido desde el navegador. Analizando...', 'info');
-    elements.ingestForm.dispatchEvent(new Event('submit', { cancelable: true }));
-    window.history.replaceState({}, document.title, window.location.pathname);
   }
 }
 

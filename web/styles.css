@@ -519,17 +519,6 @@ body {
   flex-wrap: wrap;
 }
 
-.bookmarklet-draggable {
-  border: 1px dashed var(--border-strong);
-  color: var(--accent-primary-hover);
-  cursor: grab;
-}
-
-.bookmarklet-draggable:hover {
-  border-style: solid;
-  border-color: var(--accent-filament);
-}
-
 /* Extension Guide Steps */
 .guide-steps {
   display: flex;
