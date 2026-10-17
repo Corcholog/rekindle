@@ -28,11 +28,6 @@ const ProjectItemSchema = z.object({
   updatedAt: z.string(),
 });
 
-const ProjectDetailSchema = ProjectItemSchema.extend({
-  snapshotsCount: z.number(),
-  latestSnapshotAt: z.string().nullable().optional(),
-});
-
 const ListProjectsQuerySchema = z.object({
   isActive: z.enum(['true', 'false'])
     .transform(v => v === 'true')
@@ -643,103 +638,6 @@ ${result.markdownContent}
       filePath: fileName,
       writtenToVault,
       isCached: false,
-    });
-  });
-
-  // 2. Get Single Project Detail
-  server.get('/api/projects/:id', {
-    schema: {
-      params: IdParamSchema,
-      response: {
-        200: ProjectDetailSchema,
-        404: z.object({ error: z.string(), message: z.string() }),
-      },
-    },
-  }, async (request, reply) => {
-    const { id } = request.params as z.infer<typeof IdParamSchema>;
-
-    const [proj] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
-    if (!proj) {
-      return reply.status(404).send({
-        error: 'Not Found',
-        message: `Project with id ${id} not found`,
-      });
-    }
-
-    // Get latest snapshot without embeddings or raw note content
-    const [latestSnapshot] = await db.select({
-      id: projectSnapshots.id,
-      thesisText: projectSnapshots.thesisText,
-      noteTitles: projectSnapshots.noteTitles,
-      capturedAt: projectSnapshots.capturedAt,
-    })
-      .from(projectSnapshots)
-      .where(eq(projectSnapshots.projectId, proj.id))
-      .orderBy(desc(projectSnapshots.capturedAt))
-      .limit(1);
-
-    const [snapCount] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(projectSnapshots)
-      .where(eq(projectSnapshots.projectId, proj.id));
-
-    // Count suggestions by status
-    const countRows = await db.select({
-      status: actionSuggestions.status,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(actionSuggestions)
-    .where(eq(actionSuggestions.projectId, proj.id))
-    .groupBy(actionSuggestions.status);
-
-    let pending = 0;
-    let accepted = 0;
-    let discardedSug = 0;
-    for (const c of countRows) {
-      if (c.status === 'pending') pending = c.count;
-      if (c.status === 'accepted') accepted = c.count;
-      if (c.status === 'discarded') discardedSug = c.count;
-    }
-
-    const [tentativeRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(evaluations)
-      .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-      .where(and(
-        eq(projectSnapshots.projectId, proj.id),
-        eq(evaluations.verdict, 'tentative'),
-        sql`NOT EXISTS (SELECT 1 FROM action_suggestions s WHERE s.evaluation_id = ${evaluations.id})`
-      ));
-    const tentative = tentativeRow?.count ?? 0;
-
-    const [irrelevantRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(evaluations)
-      .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
-      .where(and(
-        eq(projectSnapshots.projectId, proj.id),
-        eq(evaluations.verdict, 'irrelevant')
-      ));
-    const irrelevant = irrelevantRow?.count ?? 0;
-    const totalDiscarded = discardedSug + irrelevant;
-    const active = pending + tentative;
-
-    return reply.send({
-      id: proj.id,
-      title: proj.title,
-      folderPath: proj.folderPath,
-      isActive: proj.isActive,
-      thesisText: latestSnapshot?.thesisText ?? null,
-      noteTitles: (latestSnapshot?.noteTitles as string[]) ?? [],
-      counts: {
-        pending,
-        accepted,
-        discarded: totalDiscarded,
-        tentative,
-        active,
-        total: active + accepted + totalDiscarded,
-      },
-      snapshotsCount: snapCount?.count ?? 0,
-      latestSnapshotAt: latestSnapshot?.capturedAt ? latestSnapshot.capturedAt.toISOString() : null,
-      createdAt: proj.createdAt.toISOString(),
-      updatedAt: proj.updatedAt.toISOString(),
     });
   });
 

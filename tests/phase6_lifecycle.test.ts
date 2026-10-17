@@ -138,28 +138,6 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
     });
   });
 
-  it('GET /api/projects/:id retorna el detalle de un proyecto existente', async () => {
-    const response = await server.inject({
-      method: 'GET',
-      url: `/api/projects/${projectId}`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.payload);
-    expect(body.id).toBe(projectId);
-    expect(body.snapshotsCount).toBe(1);
-  });
-
-  it('GET /api/projects/:id retorna 404 para un ID inexistente', async () => {
-    const fakeId = '00000000-0000-0000-0000-000000000000';
-    const response = await server.inject({
-      method: 'GET',
-      url: `/api/projects/${fakeId}`,
-    });
-
-    expect(response.statusCode).toBe(404);
-  });
-
   it('GET /api/suggestions lista sugerencias pendientes con paginación y filtros', async () => {
     const response = await server.inject({
       method: 'GET',
@@ -239,12 +217,13 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
   it('GET /api/projects refleja los nuevos conteos tras aceptar y descartar', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: `/api/projects/${projectId}`,
+      url: '/api/projects',
     });
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.payload);
-    expect(body.counts).toMatchObject({
+    const project = body.projects.find((p: { id: string }) => p.id === projectId);
+    expect(project.counts).toMatchObject({
       pending: 0,
       accepted: 1,
       discarded: 1,

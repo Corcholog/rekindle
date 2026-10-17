@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import { z } from 'zod';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import ingestRoute from './routes/ingest';
 import suggestionsRoute from './routes/suggestions';
@@ -52,22 +51,6 @@ server.get('/health', async (_request, _reply) => {
 
 server.get('/favicon.ico', async (_request, reply) => {
   return reply.status(204).send();
-});
-
-const QuerySchema = z.object({
-  echo: z.string().optional()
-});
-
-server.get('/ping', {
-  schema: {
-    querystring: QuerySchema,
-    response: {
-      200: z.object({ message: z.string() })
-    }
-  }
-}, async (request, _reply) => {
-  const { echo } = request.query;
-  return { message: echo ? `Pong: ${echo}` : 'Pong' };
 });
 
 // Register routes
