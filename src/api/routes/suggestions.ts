@@ -618,6 +618,16 @@ export default async function (server: FastifyInstance) {
     });
   });
 
+  // A suggestion is re-linked to the new evaluation only if no other suggestion owns it
+  // (evaluation_id is unique per suggestion).
+  async function evaluationLink(newEvaluationId: string, suggestionId: string) {
+    const [owner] = await db.select({ id: actionSuggestions.id })
+      .from(actionSuggestions)
+      .where(eq(actionSuggestions.evaluationId, newEvaluationId))
+      .limit(1);
+    return !owner || owner.id === suggestionId ? { evaluationId: newEvaluationId } : {};
+  }
+
   // Re-evaluation execution helper
   async function executeReevaluation(suggestionId: string) {
     const [sug] = await db.select({
@@ -713,7 +723,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
 
       const refinedAction = evalResult.refinedAction;
       await db.update(actionSuggestions).set({
-        evaluationId: newEvaluationId,
+        ...(await evaluationLink(newEvaluationId, sug.id)),
         actionType: refinedAction?.actionType || sug.actionType,
         observation: refinedAction?.observation || sug.observation,
         suggestedAction: refinedAction?.suggestedAction || sug.suggestedAction,
@@ -750,7 +760,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         : `${prefixTag} ${sug.observation}`;
 
       await db.update(actionSuggestions).set({
-        evaluationId: newEvaluationId,
+        ...(await evaluationLink(newEvaluationId, sug.id)),
         status: 'discarded',
         resolvedAt: new Date(),
         observation: updatedObs,
@@ -954,7 +964,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
     const { id } = request.params as z.infer<typeof IdParamSchema>;
     const { status, userFeedback } = request.body as z.infer<typeof UpdateSuggestionBodySchema>;
 
-    const [existing] = await db.select()
+    let [existing] = await db.select()
       .from(actionSuggestions)
       .where(or(eq(actionSuggestions.id, id), eq(actionSuggestions.evaluationId, id)))
       .limit(1);
@@ -976,110 +986,41 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       .limit(1);
 
       if (evalRow) {
-        if (status === 'discarded') {
-          const [newSug] = await db.insert(actionSuggestions).values({
-            projectId: evalRow.projectId,
-            contentId: evalRow.contentId,
-            evaluationId: evalRow.id,
-            actionType: 'other',
-            targetFile: 'discarded',
-            observation: 'Descarte por el usuario',
-            suggestedAction: evalRow.triageReasoning || 'Descarte analítico',
-            status: 'discarded',
-            userFeedback: userFeedback ?? null,
-            writtenToVault: false,
-            resolvedAt: new Date(),
-          }).returning();
-
-          const [details] = await db.select({
-            id: actionSuggestions.id,
-            projectId: actionSuggestions.projectId,
-            projectTitle: projects.title,
-            contentId: actionSuggestions.contentId,
-            contentTitle: contents.title,
-            contentUri: contents.uri,
-            actionType: actionSuggestions.actionType,
-            targetFile: actionSuggestions.targetFile,
-            observation: actionSuggestions.observation,
-            suggestedAction: actionSuggestions.suggestedAction,
-            status: actionSuggestions.status,
-            userFeedback: actionSuggestions.userFeedback,
-            writtenToVault: actionSuggestions.writtenToVault,
-            resolvedAt: actionSuggestions.resolvedAt,
-            createdAt: actionSuggestions.createdAt,
-            triageReasoning: evaluations.triageReasoning,
-            confidenceScore: evaluations.confidenceScore,
-          })
-          .from(actionSuggestions)
-          .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
-          .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
-          .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
-          .where(eq(actionSuggestions.id, newSug.id))
-          .limit(1);
-
-          return reply.send({
-            ...details,
-            resolvedAt: details.resolvedAt ? details.resolvedAt.toISOString() : null,
-            createdAt: details.createdAt.toISOString(),
-          });
-        } else if (status === 'accepted') {
-          const [newSug] = await db.insert(actionSuggestions).values({
-            projectId: evalRow.projectId,
-            contentId: evalRow.contentId,
-            evaluationId: evalRow.id,
-            actionType: 'narrative_bridge',
+        // Resolving a tentative evaluation creates its suggestion row. The unique index on
+        // evaluation_id makes concurrent requests safe: only one insert wins.
+        const resolution = status === 'accepted'
+          ? {
+            actionType: 'narrative_bridge' as const,
             targetFile: 'ideas.md',
             observation: 'Afinidad temática aceptada por el usuario',
             suggestedAction: evalRow.triageReasoning || 'Integrar conceptos clave en el proyecto',
-            status: 'accepted',
-            userFeedback: userFeedback ?? null,
-            writtenToVault: false,
-            resolvedAt: new Date(),
-          }).returning();
-
-          const vaultPath = process.env.VAULT_PATH;
-          if (vaultPath && !newSug.writtenToVault) {
-            try {
-              await writeAcceptedSuggestionToVault(newSug.id, vaultPath);
-            } catch (err) {
-              server.log.error({ err }, `Failed writing converted suggestion ${newSug.id} to vault`);
-            }
           }
+          : {
+            actionType: 'other' as const,
+            targetFile: 'discarded',
+            observation: 'Descarte por el usuario',
+            suggestedAction: evalRow.triageReasoning || 'Descarte analítico',
+          };
 
-          const [details] = await db.select({
-            id: actionSuggestions.id,
-            projectId: actionSuggestions.projectId,
-            projectTitle: projects.title,
-            contentId: actionSuggestions.contentId,
-            contentTitle: contents.title,
-            contentUri: contents.uri,
-            actionType: actionSuggestions.actionType,
-            targetFile: actionSuggestions.targetFile,
-            observation: actionSuggestions.observation,
-            suggestedAction: actionSuggestions.suggestedAction,
-            status: actionSuggestions.status,
-            userFeedback: actionSuggestions.userFeedback,
-            writtenToVault: actionSuggestions.writtenToVault,
-            resolvedAt: actionSuggestions.resolvedAt,
-            createdAt: actionSuggestions.createdAt,
-            triageReasoning: evaluations.triageReasoning,
-            confidenceScore: evaluations.confidenceScore,
-          })
+        await db.insert(actionSuggestions).values({
+          projectId: evalRow.projectId,
+          contentId: evalRow.contentId,
+          evaluationId: evalRow.id,
+          ...resolution,
+          status,
+          userFeedback: userFeedback ?? null,
+          writtenToVault: false,
+          resolvedAt: new Date(),
+        }).onConflictDoNothing({ target: actionSuggestions.evaluationId });
+
+        [existing] = await db.select()
           .from(actionSuggestions)
-          .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
-          .innerJoin(contents, eq(actionSuggestions.contentId, contents.id))
-          .leftJoin(evaluations, eq(actionSuggestions.evaluationId, evaluations.id))
-          .where(eq(actionSuggestions.id, newSug.id))
+          .where(eq(actionSuggestions.evaluationId, evalRow.id))
           .limit(1);
-
-          return reply.send({
-            ...details,
-            resolvedAt: details.resolvedAt ? details.resolvedAt.toISOString() : null,
-            createdAt: details.createdAt.toISOString(),
-          });
-        }
       }
+    }
 
+    if (!existing) {
       return reply.status(404).send({
         error: 'Not Found',
         message: `Suggestion with id ${id} not found`,

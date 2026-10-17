@@ -85,8 +85,18 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
     }).returning({ id: actionSuggestions.id });
     suggestion1Id = s1.id;
 
+    // Each evaluation yields at most one suggestion, so the second one gets its own evaluation
+    const [ev2] = await drizzleDb.insert(evaluations).values({
+      contentId,
+      projectSnapshotId: (await drizzleDb.select().from(projectSnapshots))[0].id,
+      verdict: 'actionable',
+      confidenceScore: 0.8,
+      triageReasoning: 'Aporta un contraargumento sobre particionamiento.',
+      consumptionSeq: 2,
+    }).returning({ id: evaluations.id });
+
     const [s2] = await drizzleDb.insert(actionSuggestions).values({
-      evaluationId: evalId,
+      evaluationId: ev2.id,
       projectId,
       contentId,
       actionType: 'counter_argument',

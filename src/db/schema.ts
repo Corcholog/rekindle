@@ -10,7 +10,8 @@ import {
   real,
   index,
   pgEnum,
-  unique
+  unique,
+  uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
@@ -131,7 +132,9 @@ export const actionSuggestions = pgTable('action_suggestions', {
   // Partial index on status. In Drizzle we use SQL template for partial conditions.
   index('action_suggestions_status_partial_idx')
     .on(table.status)
-    .where(sql`${table.status} = 'pending'`)
+    .where(sql`${table.status} = 'pending'`),
+  // One suggestion per evaluation: a double accept of a tentative item cannot create two
+  uniqueIndex('action_suggestions_evaluation_id_unique').on(table.evaluationId)
 ]);
 
 // 6. LLM Telemetry Table

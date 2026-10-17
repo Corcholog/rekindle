@@ -12,8 +12,9 @@ describe('Writeback idempotency and recovery', () => {
   let schema: any;
   let vaultPath: string;
   let projectId: string;
-  let evaluationId: string;
+  let snapshotId: string;
   let contentId: string;
+  let seq = 0;
   const projectFolder = 'Projects/Ensayo';
 
   const suggestionsFile = () => path.join(vaultPath, projectFolder, 'suggestions.md');
@@ -23,8 +24,12 @@ describe('Writeback idempotency and recovery', () => {
   };
 
   async function createAcceptedSuggestion(): Promise<string> {
+    // Each evaluation yields at most one suggestion
+    const [evaluation] = await db.insert(schema.evaluations).values({
+      contentId, projectSnapshotId: snapshotId, verdict: 'actionable', consumptionSeq: ++seq,
+    }).returning();
     const [row] = await db.insert(schema.actionSuggestions).values({
-      evaluationId, projectId, contentId,
+      evaluationId: evaluation.id, projectId, contentId,
       actionType: 'evidence_citation',
       targetFile: 'ideas.md',
       observation: 'Observación de prueba',
@@ -49,14 +54,11 @@ describe('Writeback idempotency and recovery', () => {
     const [project] = await db.insert(schema.projects).values({ folderPath: projectFolder, title: 'Ensayo' }).returning();
     projectId = project.id;
     const [snapshot] = await db.insert(schema.projectSnapshots).values({ projectId, treeHash: 'h' }).returning();
+    snapshotId = snapshot.id;
     const [content] = await db.insert(schema.contents).values({
       uri: 'https://example.com/fuente', title: 'Fuente', ingestStatus: 'ready',
     }).returning();
     contentId = content.id;
-    const [evaluation] = await db.insert(schema.evaluations).values({
-      contentId, projectSnapshotId: snapshot.id, verdict: 'actionable', consumptionSeq: 1,
-    }).returning();
-    evaluationId = evaluation.id;
   }, 120000);
 
   afterAll(async () => {
