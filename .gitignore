@@ -9,7 +9,11 @@ tests/DummyVault*/
 
 # Local AI-tool state (may contain session tokens)
 .superpowers/
-.antigravity/
+.claude/settings.local.json
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Audit report stays local until its findings are fixed (docs/agent/01-audit.md)
 docs/audit/
