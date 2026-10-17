@@ -59,6 +59,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       treeHash: 'tree-snap-1',
       thesisText: 'Tesis inicial sobre agentes reactivos.',
       embedding: baseEmbedding,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(Date.now() - 60000),
     }).returning({ id: projectSnapshots.id });
     snap1Id = snap1.id;
@@ -71,6 +72,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       noteTitle: 'Architecture Overview',
       contentSnippet: 'Event driven architecture.',
       embedding: baseEmbedding,
+      embeddingModel: 'bge-m3',
     });
 
     // Seed Content
@@ -80,6 +82,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       summary: 'State of the art in distributed consensus and agent coordination.',
       ingestStatus: 'ready',
       embedding: baseEmbedding,
+      embeddingModel: 'bge-m3',
     }).returning({ id: contents.id });
     contentId = c.id;
 
@@ -148,6 +151,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       treeHash: 'tree-snap-2',
       thesisText: 'Tesis evolucionada hacia agentes deliberativos y grafos de conocimiento.',
       embedding: driftedVector,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(),
     }).returning({ id: projectSnapshots.id });
     snap2Id = snap2.id;
@@ -160,6 +164,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       noteTitle: 'Architecture Overview Updated',
       contentSnippet: 'Shifted from broker to decentralized mesh.',
       embedding: driftedVector,
+      embeddingModel: 'bge-m3',
     });
 
     const res = await server.inject({
@@ -276,6 +281,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       treeHash: 'tree-snap-3',
       thesisText: 'Cambio radical hacia sistemas neuro-simbólicos.',
       embedding: farVector,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(),
     });
 
@@ -321,6 +327,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       summary: 'Potential connection to agent architecture.',
       ingestStatus: 'ready',
       embedding: contentEmbedding,
+      embeddingModel: 'bge-m3',
     }).returning({ id: contents.id });
 
     // Snapshot A: distant project vector
@@ -329,6 +336,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       projectId,
       treeHash: 'tree-snap-A',
       embedding: distantVector,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(Date.now() - 40000),
     }).returning({ id: projectSnapshots.id });
 
@@ -349,6 +357,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       projectId,
       treeHash: 'tree-snap-B',
       embedding: closerVector,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(),
     }).returning({ id: projectSnapshots.id });
 
@@ -370,6 +379,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
       projectId,
       treeHash: 'tree-snap-C',
       embedding: closerVector,
+      embeddingModel: 'bge-m3',
       capturedAt: new Date(),
     });
 

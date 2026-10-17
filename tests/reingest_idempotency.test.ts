@@ -87,10 +87,10 @@ describe('Re-ingesting a known URL', () => {
     const vector = Array.from({ length: 1024 }, (_, i) => (i % 7) / 7);
     const [project] = await db.insert(schema.projects).values({ folderPath: 'Projects/Ensayo', title: 'Ensayo' }).returning();
     await db.insert(schema.projectSnapshots).values({
-      projectId: project.id, treeHash: 'h', thesisText: 'Tesis', notesContent: 'Notas', embedding: vector,
+      projectId: project.id, treeHash: 'h', thesisText: 'Tesis', notesContent: 'Notas', embedding: vector, embeddingModel: 'bge-m3',
     });
     const [content] = await db.insert(schema.contents).values({
-      uri: 'https://example.com/evaluado', title: 'Evaluado', summary: 'Resumen', ingestStatus: 'ready', embedding: vector,
+      uri: 'https://example.com/evaluado', title: 'Evaluado', summary: 'Resumen', ingestStatus: 'ready', embedding: vector, embeddingModel: 'bge-m3',
     }).returning();
 
     const llm = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValue({

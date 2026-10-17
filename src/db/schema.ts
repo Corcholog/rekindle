@@ -77,6 +77,7 @@ export const projectSnapshots = pgTable('project_snapshots', {
   notesContent: text('notes_content'),
   noteTitles: jsonb('note_titles').$type<string[]>(),
   embedding: vector('embedding'),
+  embeddingModel: text('embedding_model'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
 }, (table) => [
   index('project_snapshots_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
@@ -92,6 +93,7 @@ export const projectNoteSnapshots = pgTable('project_note_snapshots', {
   noteTitle: text('note_title').notNull(),
   contentSnippet: text('content_snippet'),
   embedding: vector('embedding'),
+  embeddingModel: text('embedding_model'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('project_note_snapshots_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),

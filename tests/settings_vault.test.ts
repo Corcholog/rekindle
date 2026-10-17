@@ -62,6 +62,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
       treeHash: 'hash-init',
       thesisText: 'Tesis de prueba',
       embedding: dummy1024,
+      embeddingModel: 'bge-m3',
     }).returning({ id: projectSnapshots.id });
 
     const [c] = await drizzleDb.insert(contents).values({
@@ -69,6 +70,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
       title: 'Ejemplo Test',
       summary: 'Resumen test',
       embedding: dummy1024,
+      embeddingModel: 'bge-m3',
       ingestStatus: 'ready',
     }).returning({ id: contents.id });
 
@@ -232,6 +234,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
       title: 'Guía de Agentes Distribuidos',
       summary: 'Patrones avanzados para sistemas de agentes autónomos distribuidos.',
       embedding: latestSnap.embedding,
+      embeddingModel: 'bge-m3',
       ingestStatus: 'ready',
     }).returning({ id: contents.id });
 

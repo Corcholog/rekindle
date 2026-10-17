@@ -59,7 +59,8 @@ describe('Evaluation Pipeline Integration', () => {
       projectId: projectId,
       treeHash: 'hash123',
       thesisText,
-      embedding: projectEmbedding
+      embedding: projectEmbedding,
+      embeddingModel: 'bge-m3',
     });
 
     // 2. Mock a Content

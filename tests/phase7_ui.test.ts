@@ -406,6 +406,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
       title: 'Mecánicas y Consecuencias en Juegos de Rol',
       summary: 'Estudio sobre cómo los árboles de consecuencias y decisiones refuerzan la inmersión del jugador.',
       embedding: mechanicsNote!.embedding,
+      embeddingModel: 'bge-m3',
       ingestStatus: 'ready',
     }).returning({ id: contents.id });
 
@@ -687,12 +688,13 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
       treeHash: 'hash-snap-b',
       thesisText: 'Indexación vectorial HNSW y búsqueda semántica de alta velocidad.',
       embedding: vectorB,
+      embeddingModel: 'bge-m3',
     }).returning({ id: projectSnapshots.id });
 
     // Update Project A's snapshot with vector
     const vectorA = new Array(1024).fill(0.052);
     await drizzleDb.update(projectSnapshots)
-      .set({ embedding: vectorA })
+      .set({ embedding: vectorA, embeddingModel: 'bge-m3' })
       .where(eq(projectSnapshots.projectId, projectId));
 
     // Seed note snapshots for both projects
@@ -704,6 +706,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
         notePath: 'Projects/AI_Agents/architecture.md',
         contentSnippet: 'Coordinación de agentes pub/sub y memoria distribuida.',
         embedding: vectorA,
+        embeddingModel: 'bge-m3',
       },
       {
         projectId: projB.id,
@@ -712,6 +715,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
         notePath: 'Projects/Vector_Databases/hnsw_indexes.md',
         contentSnippet: 'Algoritmos de grafos para recuperación eficiente de vectores.',
         embedding: vectorB,
+        embeddingModel: 'bge-m3',
       },
     ]);
 

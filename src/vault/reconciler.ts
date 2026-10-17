@@ -7,7 +7,7 @@ import { getDirectoryHash } from './hash';
 import { parseMarkdownFile } from './parser';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
-import { PROJECT_DIR_NAMES } from '../config';
+import { PROJECT_DIR_NAMES, env } from '../config';
 import { isLoomGeneratedFile } from './generatedNotes';
 
 const ollama = sharedAiProvider;
@@ -208,6 +208,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         notesContent,
         noteTitles,
         embedding,
+        embeddingModel: env.EMBED_MODEL,
       }).returning({ id: projectSnapshots.id });
 
       // Insert hierarchical note-level snapshots
@@ -220,6 +221,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
             noteTitle: nd.noteTitle,
             contentSnippet: nd.contentSnippet,
             embedding: nd.embedding,
+            embeddingModel: env.EMBED_MODEL,
           }))
         );
       }

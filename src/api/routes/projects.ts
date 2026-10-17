@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents } from '../../db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
+import { env } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/OllamaProvider';
 
@@ -329,6 +330,7 @@ export default async function (server: FastifyInstance) {
       projectId: projectSnapshots.projectId,
       thesisText: projectSnapshots.thesisText,
       embedding: projectSnapshots.embedding,
+      embeddingModel: projectSnapshots.embeddingModel,
     })
     .from(projectSnapshots)
     .where(inArray(projectSnapshots.projectId, projectIds))
@@ -352,7 +354,9 @@ export default async function (server: FastifyInstance) {
         const snapA = snapMap.get(pA.id);
         const snapB = snapMap.get(pB.id);
 
-        const projectDist = computeCosineDistance(snapA?.embedding, snapB?.embedding);
+        // Invariant I7: only compare snapshots embedded with the current model
+        const comparable = snapA?.embeddingModel === env.EMBED_MODEL && snapB?.embeddingModel === env.EMBED_MODEL;
+        const projectDist = comparable ? computeCosineDistance(snapA?.embedding, snapB?.embedding) : null;
 
         // Fetch closest notes between pA and pB via HNSW cosine distance
         const noteResult = await db.execute<{
@@ -371,6 +375,7 @@ export default async function (server: FastifyInstance) {
           FROM project_note_snapshots na
           INNER JOIN project_note_snapshots nb ON na.project_id = ${pA.id}::uuid AND nb.project_id = ${pB.id}::uuid
           WHERE na.embedding IS NOT NULL AND nb.embedding IS NOT NULL
+            AND na.embedding_model = ${env.EMBED_MODEL} AND nb.embedding_model = ${env.EMBED_MODEL}
           ORDER BY distance ASC
           LIMIT 3
         `);

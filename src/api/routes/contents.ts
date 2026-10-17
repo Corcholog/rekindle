@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { contents, evaluations, projectSnapshots, projects } from '../../db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
+import { env, VECTOR_DISTANCE_THRESHOLD } from '../../config';
 
 const IngestStatusSchema = z.enum(['pending', 'extracting', 'summarizing', 'embedding', 'ready', 'failed']);
 
@@ -76,7 +77,7 @@ async function checkPgbossJobTable(): Promise<boolean> {
 
 const hasSpatialAffinitySql = sql<boolean>`EXISTS (
   SELECT 1 FROM (
-    SELECT DISTINCT ON (ps.project_id) ps.embedding
+    SELECT DISTINCT ON (ps.project_id) ps.embedding, ps.embedding_model
     FROM project_snapshots ps
     JOIN projects p ON ps.project_id = p.id
     WHERE p.is_active = true 
@@ -84,7 +85,9 @@ const hasSpatialAffinitySql = sql<boolean>`EXISTS (
     ORDER BY ps.project_id, ps.captured_at DESC
   ) latest_ps
   WHERE contents.embedding IS NOT NULL
-    AND latest_ps.embedding <=> contents.embedding < 0.6
+    AND contents.embedding_model = ${env.EMBED_MODEL}
+    AND latest_ps.embedding_model = ${env.EMBED_MODEL}
+    AND latest_ps.embedding <=> contents.embedding < ${VECTOR_DISTANCE_THRESHOLD}
 )`;
 
 const evaluationsListSql = sql<any>`coalesce((

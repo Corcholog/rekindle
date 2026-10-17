@@ -4,7 +4,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
-import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD } from '../config';
+import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 
 const ollama = sharedAiProvider;
 
@@ -42,13 +42,20 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
     return;
   }
 
+  // Invariant I7: only compare embeddings produced by the current model
+  const embedModel = env.EMBED_MODEL;
+  if (content.embeddingModel !== embedModel) {
+    console.log(`[Evaluator] Content ${contentId} was embedded with ${content.embeddingModel ?? 'an unknown model'}, not ${embedModel}. Skipping.`);
+    return;
+  }
+
   // Step 1: Vector Search: Find relevant project snapshots of active projects using distance threshold (< 0.6)
   const targetVector = `[${content.embedding.join(',')}]`;
   const projectFilter = targetProjectId ? sql`AND p.id = ${targetProjectId}` : sql``;
 
   const topSnapshots = await db.execute(sql`
     WITH latest_snapshots AS (
-      SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, captured_at
+      SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, embedding_model, captured_at
       FROM ${projectSnapshots}
       ORDER BY project_id, captured_at DESC
     ),
@@ -62,6 +69,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
       FROM ${projectNoteSnapshots} pns
       JOIN latest_snapshots ls ON pns.project_snapshot_id = ls.id
       WHERE pns.embedding IS NOT NULL
+        AND pns.embedding_model = ${embedModel}
         AND (pns.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD}
       ORDER BY pns.project_id, (pns.embedding <=> ${targetVector}::vector) ASC
     )
@@ -81,7 +89,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
       ${projectFilter}
       AND (
         mn.note_path IS NOT NULL 
-        OR (ls.embedding IS NOT NULL AND (ls.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD})
+        OR (ls.embedding IS NOT NULL AND ls.embedding_model = ${embedModel} AND (ls.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD})
       )
     ORDER BY best_distance ASC
     LIMIT ${TOP_K_PROJECTS_LIMIT}
@@ -244,6 +252,7 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
   const [latestSnapshot] = await db.select({
     id: projectSnapshots.id,
     embedding: projectSnapshots.embedding,
+    embeddingModel: projectSnapshots.embeddingModel,
   })
   .from(projectSnapshots)
   .where(and(
@@ -253,7 +262,9 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
   .orderBy(desc(projectSnapshots.capturedAt))
   .limit(1);
 
-  if (!latestSnapshot) {
+  // Invariant I7: a snapshot from another model must be re-embedded before it is compared
+  const embedModel = env.EMBED_MODEL;
+  if (!latestSnapshot || latestSnapshot.embeddingModel !== embedModel) {
     return [];
   }
 
@@ -276,6 +287,7 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
       FROM ${contents} c, latest_snap ls
       WHERE c.ingest_status = 'ready'
         AND c.embedding IS NOT NULL
+        AND c.embedding_model = ${embedModel}
         AND (
           ${projectVector ? sql`(c.embedding <=> ls.embedding < ${VECTOR_DISTANCE_THRESHOLD}) OR ` : sql``}
           EXISTS (
@@ -283,6 +295,7 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
             FROM ${projectNoteSnapshots} pns
             WHERE pns.project_snapshot_id = ls.id
               AND pns.embedding IS NOT NULL
+              AND pns.embedding_model = ${embedModel}
               AND (c.embedding <=> pns.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
           )
         )
@@ -303,6 +316,7 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
       WHERE lpe.verdict = 'tentative'
         AND eval_ps.id != ls.id
         AND c.embedding IS NOT NULL
+        AND c.embedding_model = ${embedModel}
         AND eval_ps.embedding IS NOT NULL
         AND ls.embedding IS NOT NULL
         AND NOT EXISTS (
@@ -311,7 +325,8 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
         )
         AND (
           -- Project moved closer to content by at least PROMOTION_DELTA_THRESHOLD (0.08)
-          (ls.embedding <=> c.embedding) <= (eval_ps.embedding <=> c.embedding) - ${PROMOTION_DELTA_THRESHOLD}
+          (eval_ps.embedding_model = ${embedModel}
+            AND (ls.embedding <=> c.embedding) <= (eval_ps.embedding <=> c.embedding) - ${PROMOTION_DELTA_THRESHOLD})
           OR
           -- A new or significantly updated note in latest_snap has strong affinity (< 0.50)
           EXISTS (
@@ -321,10 +336,12 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
               AND pns_old.note_path = pns_new.note_path
             WHERE pns_new.project_snapshot_id = ls.id
               AND pns_new.embedding IS NOT NULL
+              AND pns_new.embedding_model = ${embedModel}
               AND (pns_new.embedding <=> c.embedding) < ${NOTE_PROMOTION_DISTANCE_THRESHOLD}
               AND (
                 pns_old.id IS NULL
                 OR pns_old.embedding IS NULL
+                OR pns_old.embedding_model IS DISTINCT FROM ${embedModel}
                 OR (pns_new.embedding <=> c.embedding) <= (pns_old.embedding <=> c.embedding) - 0.04
               )
           )

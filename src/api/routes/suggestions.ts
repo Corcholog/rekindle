@@ -163,7 +163,7 @@ export default async function (server: FastifyInstance) {
         isStale: boolean;
       }>(sql`
         WITH latest_snapshots AS (
-          SELECT DISTINCT ON (project_id) id, project_id, embedding, captured_at
+          SELECT DISTINCT ON (project_id) id, project_id, embedding, embedding_model, captured_at
           FROM project_snapshots
           ORDER BY project_id, captured_at DESC
         )
@@ -185,9 +185,11 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
-          COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) AS "driftScore",
+          CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
+            ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
           COALESCE(
             eval_ps.id != ls.id AND (
+              ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model OR
               COALESCE((ls.embedding <=> eval_ps.embedding) >= ${STALE_DRIFT_THRESHOLD}, false) OR
               (
                 a.target_file != 'unknown' AND a.target_file != 'tentative' AND
@@ -207,7 +209,7 @@ export default async function (server: FastifyInstance) {
                       OR pns_eval.note_title = a.target_file
                       OR pns_eval.note_path LIKE '%/' || a.target_file
                     )
-                    AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
+                    AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
             ),
@@ -391,7 +393,7 @@ export default async function (server: FastifyInstance) {
       isStale: boolean;
     }>(sql`
       WITH latest_snapshots AS (
-        SELECT DISTINCT ON (project_id) id, project_id, embedding, captured_at
+        SELECT DISTINCT ON (project_id) id, project_id, embedding, embedding_model, captured_at
         FROM project_snapshots
         ORDER BY project_id, captured_at DESC
       ),
@@ -428,9 +430,11 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
-          COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) AS "driftScore",
+          CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
+            ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
           COALESCE(
             ${!isDiscarded} AND eval_ps.id != ls.id AND (
+              ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model OR
               COALESCE((ls.embedding <=> eval_ps.embedding) >= ${STALE_DRIFT_THRESHOLD}, false) OR
               (
                 a.target_file != 'unknown' AND a.target_file != 'tentative' AND
@@ -450,7 +454,7 @@ export default async function (server: FastifyInstance) {
                       OR pns_eval.note_title = a.target_file
                       OR pns_eval.note_path LIKE '%/' || a.target_file
                     )
-                    AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
+                    AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
             ),
@@ -875,7 +879,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
     try {
       const staleRows = await db.execute<{ id: string }>(sql`
         WITH latest_snapshots AS (
-          SELECT DISTINCT ON (project_id) id, project_id, embedding, captured_at
+          SELECT DISTINCT ON (project_id) id, project_id, embedding, embedding_model, captured_at
           FROM project_snapshots
           WHERE project_id = ${projectId}
           ORDER BY project_id, captured_at DESC
@@ -889,6 +893,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
           AND a.status = 'pending'
           AND COALESCE(
             eval_ps.id != ls.id AND (
+              ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model OR
               COALESCE((ls.embedding <=> eval_ps.embedding) >= ${STALE_DRIFT_THRESHOLD}, false) OR
               (
                 a.target_file != 'unknown' AND a.target_file != 'tentative' AND
@@ -908,7 +913,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
                       OR pns_eval.note_title = a.target_file
                       OR pns_eval.note_path LIKE '%/' || a.target_file
                     )
-                    AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
+                    AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
             ),
