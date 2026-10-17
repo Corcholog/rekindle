@@ -277,7 +277,7 @@ ${query}
       server.log.error({ err }, 'Error during Consult Library & Vault LLM evaluation');
       return reply.status(500).send({
         error: 'Failed to consult library and vault',
-        message: err?.message || 'Error al analizar tu biblioteca y notas con el modelo de lenguaje.',
+        message: 'Error al analizar tu biblioteca y notas con el modelo de lenguaje.',
       });
     }
   });

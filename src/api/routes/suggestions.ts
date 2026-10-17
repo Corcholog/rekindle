@@ -845,7 +845,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       server.log.error({ err }, `Error re-evaluating suggestion ${id}`);
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: err.message || 'Error al re-evaluar la sugerencia con el modelo de IA.',
+        message: 'Error al re-evaluar la sugerencia con el modelo de IA.',
       });
     }
   });
@@ -947,7 +947,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       server.log.error({ err }, `Error in batch re-evaluation for project ${projectId}`);
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: err.message || 'Error en la re-evaluación por lotes de sugerencias desactualizadas.',
+        message: 'Error en la re-evaluación por lotes de sugerencias desactualizadas.',
       });
     }
   });
