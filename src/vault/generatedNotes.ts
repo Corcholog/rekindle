@@ -1,0 +1,137 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { sanitizeForVault, yamlString } from './sanitize';
+
+// Earlier versions wrote these types without the loom_generated marker.
+const GENERATED_FRONTMATTER = /^---\r?\n[\s\S]*?^(loom_generated:\s*true|type:\s*(research_brief|cross_project_synergy))\s*$/m;
+const MAX_BODY_LENGTH = 20000;
+
+/** True if the note was written by Loom; such notes are excluded from hashes and snapshots. */
+export async function isLoomGeneratedFile(fullPath: string): Promise<boolean> {
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(fullPath, 'r');
+    const buffer = Buffer.alloc(2048);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const head = buffer.subarray(0, bytesRead).toString('utf-8');
+    const frontmatterEnd = head.indexOf('\n---', 3);
+    if (!head.startsWith('---') || frontmatterEnd === -1) return false;
+    return GENERATED_FRONTMATTER.test(head.slice(0, frontmatterEnd + 4));
+  } catch {
+    return false;
+  } finally {
+    await handle?.close();
+  }
+}
+
+function timestampSuffix(date: Date): string {
+  return date.toISOString().slice(0, 19).replace(/:/g, '-');
+}
+
+/**
+ * Writes a new note inside the vault and returns its vault-relative path.
+ * Never overwrites: if the name is taken, a timestamped name is used instead.
+ */
+export async function writeGeneratedNote(targetDir: string, vaultRoot: string, baseName: string, content: string): Promise<string> {
+  const root = path.resolve(vaultRoot);
+  const dir = path.resolve(targetDir);
+  const rel = path.relative(root, dir);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('Ruta de destino fuera del Vault');
+  }
+
+  await fs.mkdir(dir, { recursive: true });
+  const stamp = timestampSuffix(new Date());
+  const candidates = [`${baseName}.md`, `${baseName}-${stamp}.md`];
+  for (let i = 2; i <= 20; i++) candidates.push(`${baseName}-${stamp}-${i}.md`);
+
+  for (const name of candidates) {
+    try {
+      await fs.writeFile(path.join(dir, name), content, { encoding: 'utf-8', flag: 'wx' });
+      return path.relative(root, path.join(dir, name)).replace(/\\/g, '/');
+    } catch (err: any) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+  }
+  throw new Error(`No se encontró un nombre libre para ${baseName}.md`);
+}
+
+const bulletList = (items: string[]) => items.map(item => `- ${sanitizeForVault(item).replace(/\n/g, ' ')}`).join('\n');
+const quoteBlock = (text: string) => sanitizeForVault(text).replace(/\n/g, '\n> ');
+
+export interface ResearchBriefContent {
+  title: string;
+  executiveSummary: string;
+  markdownContent: string;
+  suggestedNextSteps: string[];
+}
+
+export function formatResearchBrief(brief: ResearchBriefContent, acceptedCount: number): string {
+  const title = sanitizeForVault(brief.title, 300).replace(/\n/g, ' ');
+  return `---
+title: ${yamlString(brief.title)}
+type: research_brief
+loom_generated: true
+synthesized_at: "${new Date().toISOString()}"
+accepted_suggestions_count: ${Math.max(0, Math.floor(acceptedCount))}
+tags:
+  - loom/synthesis
+  - loom/research-brief
+---
+
+# ${title}
+
+> [!abstract] Resumen Ejecutivo
+> ${quoteBlock(brief.executiveSummary)}
+
+${sanitizeForVault(brief.markdownContent, MAX_BODY_LENGTH)}
+
+## Próximos Pasos Recomendados
+${brief.suggestedNextSteps.map(step => `- [ ] ${sanitizeForVault(step).replace(/\n/g, ' ')}`).join('\n')}
+
+---
+*Generado por Loom a partir de ${Math.max(0, Math.floor(acceptedCount))} sugerencias aceptadas.*
+`;
+}
+
+export interface SynergyNoteContent {
+  bridgeTitle: string;
+  overview: string;
+  sharedProblems: string[];
+  mutualBenefits: string[];
+  markdownContent: string;
+}
+
+export function formatSynergyNote(note: SynergyNoteContent, titleA: string, titleB: string): string {
+  const title = sanitizeForVault(note.bridgeTitle, 300).replace(/\n/g, ' ');
+  const linkA = sanitizeForVault(titleA, 200).replace(/[[\]\n]/g, '');
+  const linkB = sanitizeForVault(titleB, 200).replace(/[[\]\n]/g, '');
+  return `---
+title: ${yamlString(note.bridgeTitle)}
+type: cross_project_synergy
+loom_generated: true
+project_a: ${yamlString(titleA)}
+project_b: ${yamlString(titleB)}
+created_at: "${new Date().toISOString()}"
+tags:
+  - loom/synergy
+  - loom/cross-project
+---
+
+# ${title}
+
+> [!abstract] Resonancia Temática
+> ${quoteBlock(note.overview)}
+
+## Preguntas y Problemas Compartidos
+${bulletList(note.sharedProblems)}
+
+## Beneficios Mutuos y Transferencia
+${bulletList(note.mutualBenefits)}
+
+${sanitizeForVault(note.markdownContent, MAX_BODY_LENGTH)}
+
+---
+*Generado por Loom mediante análisis de sinergia cruzada entre [[${linkA}]] y [[${linkB}]].*
+`;
+}

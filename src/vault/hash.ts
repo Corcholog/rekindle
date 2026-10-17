@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { isLoomGeneratedFile } from './generatedNotes';
 
 /**
  * Calculates SHA256 hash of a file's contents via streaming.
@@ -18,7 +19,7 @@ export async function getFileHash(filePath: string): Promise<string> {
 
 /**
  * Calculates deterministic hash of a project directory.
- * Hashes only top-level *.md files that the reconciler parses, ignoring suggestions.md.
+ * Hashes the *.md files the reconciler parses (recursively), ignoring suggestions.md and Loom-generated notes.
  * Incorporates file names so renaming a file triggers reconciliation.
  */
 export async function getDirectoryHash(dirPath: string): Promise<string> {
@@ -39,7 +40,7 @@ export async function getDirectoryHash(dirPath: string): Promise<string> {
         await walk(full);
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
-        if (lower.endsWith('.md') && lower !== 'suggestions.md') {
+        if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isLoomGeneratedFile(full))) {
           const rel = path.relative(dirPath, full).replace(/\\/g, '/');
           mdFiles.push({ fullPath: full, relPath: rel });
         }

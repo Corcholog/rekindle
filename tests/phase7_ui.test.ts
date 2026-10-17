@@ -590,7 +590,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(body.message).toContain('No hay sugerencias aceptadas');
   });
 
-  it('Feature 4: POST /api/projects/:id/synthesize compila research_brief.md cuando existen sugerencias aceptadas', async () => {
+  it('Feature 4: POST /api/projects/:id/synthesize genera el brief sin escribir en el Vault; guardar crea un archivo nuevo', async () => {
     const { actionSuggestions } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
     const { eq } = await import('drizzle-orm');
@@ -619,19 +619,39 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.success).toBe(true);
-    expect(body.filePath).toBe('research_brief.md');
+    expect(body.filePath).toBeNull();
     expect(body.title).toBe('Síntesis de Investigación: AI Agents');
     expect(body.executiveSummary).toContain('Compilación estructurada');
+    expect(body.markdownContent).toContain('Arquitectura Base');
     expect(body.acceptedCount).toBeGreaterThanOrEqual(1);
-    expect(body.writtenToVault).toBe(true);
+    expect(body.writtenToVault).toBe(false);
 
-    // Verify file on disk in Vault
+    // Invariant I1: generating the brief must not touch the vault
     const briefDiskPath = path.join(vaultPath, 'Projects', 'AI_Agents', 'research_brief.md');
-    const fileExists = await fs.access(briefDiskPath).then(() => true).catch(() => false);
-    expect(fileExists).toBe(true);
+    expect(await fs.access(briefDiskPath).then(() => true).catch(() => false)).toBe(false);
+
+    // Explicit save writes a new, marked, sanitized file
+    const savePayload = {
+      title: body.title,
+      executiveSummary: body.executiveSummary,
+      markdownContent: body.markdownContent + '\n```dataviewjs\ndv.paragraph(1)\n```',
+      suggestedNextSteps: body.suggestedNextSteps,
+      acceptedCount: body.acceptedCount,
+    };
+    const saved = await server.inject({ method: 'POST', url: `/api/projects/${projectId}/synthesis/save`, payload: savePayload });
+    expect(saved.statusCode).toBe(200);
+    const savedBody = JSON.parse(saved.payload);
+    expect(savedBody.filePath).toBe('Projects/AI_Agents/research_brief.md');
     const fileContent = await fs.readFile(briefDiskPath, 'utf-8');
-    expect(fileContent).toContain('type: research_brief');
+    expect(fileContent).toContain('loom_generated: true');
     expect(fileContent).toContain('# Síntesis de Investigación: AI Agents');
+    expect(fileContent).not.toMatch(/(^|[^\\])```/);
+
+    // Saving again never overwrites
+    const savedAgain = await server.inject({ method: 'POST', url: `/api/projects/${projectId}/synthesis/save`, payload: savePayload });
+    expect(savedAgain.statusCode).toBe(200);
+    expect(JSON.parse(savedAgain.payload).filePath).not.toBe(savedBody.filePath);
+    expect(await fs.readFile(briefDiskPath, 'utf-8')).toBe(fileContent);
 
     evalSpy.mockRestore();
   });
@@ -719,7 +739,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(synergy.closestNotes.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('Feature 5: POST /api/projects/synergies/explore genera nota puente en el Vault', async () => {
+  it('Feature 5: explore genera la nota puente sin escribir; guardar la escribe en el Vault', async () => {
     const { projects } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
     const { eq } = await import('drizzle-orm');
@@ -761,14 +781,29 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(body.bridgeTitle).toBe('Puente Conceptual: Agentes y Memoria Vectorial');
     expect(body.sharedProblems.length).toBe(2);
     expect(body.mutualBenefits.length).toBe(2);
-    expect(body.writtenToVault).toBe(true);
-    expect(body.filePath).toContain('synergy_');
+    // Invariant I1: exploring never writes, even if a client still sends saveToVault
+    expect(body.writtenToVault).toBe(false);
+    const projectsDir = await fs.readdir(path.join(vaultPath, 'Projects'));
+    expect(projectsDir.some(name => name.startsWith('synergy_'))).toBe(false);
 
-    // Verify bridge file saved in Vault
-    const bridgePath = path.join(vaultPath, 'Projects', body.filePath);
-    const fileExists = await fs.access(bridgePath).then(() => true).catch(() => false);
-    expect(fileExists).toBe(true);
-    const content = await fs.readFile(bridgePath, 'utf-8');
+    const saved = await server.inject({
+      method: 'POST',
+      url: '/api/projects/synergies/save',
+      payload: {
+        projectAId: projectId,
+        projectBId: projB.id,
+        bridgeTitle: body.bridgeTitle,
+        overview: body.overview,
+        sharedProblems: body.sharedProblems,
+        mutualBenefits: body.mutualBenefits,
+        markdownContent: body.markdownContent,
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    const savedBody = JSON.parse(saved.payload);
+    expect(savedBody.filePath).toMatch(/^Projects\/synergy_[^/]+\.md$/);
+    const content = await fs.readFile(path.join(vaultPath, savedBody.filePath), 'utf-8');
+    expect(content).toContain('loom_generated: true');
     expect(content).toContain('type: cross_project_synergy');
     expect(content).toContain('Puente Conceptual: Agentes y Memoria Vectorial');
 

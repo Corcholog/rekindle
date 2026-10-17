@@ -6,7 +6,7 @@ import { db } from '../../db';
 import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents } from '../../db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
-import { reconcileProject } from '../../vault/reconciler';
+import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/OllamaProvider';
 
 const ProjectItemSchema = z.object({
@@ -84,6 +84,11 @@ function computeCosineDistance(a: number[] | null | undefined, b: number[] | nul
   if (normA === 0 || normB === 0) return 1.0;
   const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
   return Math.max(0, 1 - sim);
+}
+
+// Bridge notes live in the vault's projects directory (Projects/ or Proyectos/) of project A.
+function synergyDirFor(vaultPath: string, folderPath: string): string {
+  return path.join(vaultPath, folderPath.split('/')[0]);
 }
 
 function getSynergyFileNames(titleA: string, titleB: string): [string, string] {
@@ -407,8 +412,8 @@ export default async function (server: FastifyInstance) {
         const vaultPath = getCurrentVaultPath();
         if (vaultPath) {
           try {
-            const p1 = path.join(vaultPath, 'Projects', f1);
-            const p2 = path.join(vaultPath, 'Projects', f2);
+            const p1 = path.join(synergyDirFor(vaultPath, pA.folderPath), f1);
+            const p2 = path.join(synergyDirFor(vaultPath, pA.folderPath), f2);
             if (await fs.access(p1).then(() => true).catch(() => false)) {
               existingBridgeFile = f1;
             } else if (await fs.access(p2).then(() => true).catch(() => false)) {
@@ -459,7 +464,6 @@ export default async function (server: FastifyInstance) {
       body: z.object({
         projectAId: z.string().uuid(),
         projectBId: z.string().uuid(),
-        saveToVault: z.boolean().optional().default(true),
         forceRegenerate: z.boolean().optional().default(false),
       }),
       response: {
@@ -479,7 +483,7 @@ export default async function (server: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
-    const { projectAId, projectBId, saveToVault = true, forceRegenerate = false } = request.body as any;
+    const { projectAId, projectBId, forceRegenerate = false } = request.body as any;
 
     const [projA] = await db.select().from(projects).where(eq(projects.id, projectAId)).limit(1);
     const [projB] = await db.select().from(projects).where(eq(projects.id, projectBId)).limit(1);
@@ -497,8 +501,9 @@ export default async function (server: FastifyInstance) {
     // If not forcing regeneration, check if bridge already exists on disk in Obsidian Vault
     if (!forceRegenerate && vaultPath) {
       try {
-        const pathA = path.join(vaultPath, 'Projects', fileA);
-        const pathB = path.join(vaultPath, 'Projects', fileB);
+        const bridgeDir = synergyDirFor(vaultPath, projA.folderPath);
+        const pathA = path.join(bridgeDir, fileA);
+        const pathB = path.join(bridgeDir, fileB);
 
         let existingPath: string | null = null;
         let existingFileName: string | null = null;
@@ -521,7 +526,7 @@ export default async function (server: FastifyInstance) {
             sharedProblems: parsed.sharedProblems,
             mutualBenefits: parsed.mutualBenefits,
             markdownContent: parsed.markdownContent,
-            filePath: existingFileName,
+            filePath: path.relative(vaultPath, existingPath).replace(/\\/g, '/'),
             writtenToVault: true,
             isCached: true,
           });
@@ -580,54 +585,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       });
     }
 
-    let writtenToVault = false;
-    let fileName: string | null = null;
-
-    if (saveToVault && vaultPath) {
-      try {
-        const cleanA = projA.title.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
-        const cleanB = projB.title.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_').substring(0, 20);
-        fileName = `synergy_${cleanA}_${cleanB}.md`;
-
-        const targetDir = path.join(vaultPath, 'Projects');
-        const targetFilePath = path.join(targetDir, fileName);
-
-        const frontmatter = `---
-title: "${result.bridgeTitle.replace(/"/g, '\\"')}"
-type: cross_project_synergy
-project_a: "${projA.title}"
-project_b: "${projB.title}"
-created_at: "${new Date().toISOString()}"
-tags:
-  - loom/synergy
-  - loom/cross-project
----
-
-# ${result.bridgeTitle}
-
-> [!abstract] Resonancia Temática
-> ${result.overview.replace(/\n/g, '\n> ')}
-
-## Preguntas y Problemas Compartidos
-${result.sharedProblems.map((p: string) => `- ${p}`).join('\n')}
-
-## Beneficios Mutuos y Transferencia
-${result.mutualBenefits.map((b: string) => `- ${b}`).join('\n')}
-
-${result.markdownContent}
-
----
-*Generado automáticamente por Loom mediante análisis de sinergia cruzada entre [[${projA.title}]] y [[${projB.title}]].*
-`;
-
-        await fs.mkdir(targetDir, { recursive: true });
-        await fs.writeFile(targetFilePath, frontmatter, 'utf-8');
-        writtenToVault = true;
-      } catch (err) {
-        console.error('[Synergy] Failed to write bridge note to vault:', err);
-      }
-    }
-
+    // Generation never writes to the vault; saving is an explicit action (POST /api/projects/synergies/save)
     return reply.send({
       success: true,
       bridgeTitle: result.bridgeTitle,
@@ -635,10 +593,55 @@ ${result.markdownContent}
       sharedProblems: result.sharedProblems,
       mutualBenefits: result.mutualBenefits,
       markdownContent: result.markdownContent,
-      filePath: fileName,
-      writtenToVault,
+      filePath: null,
+      writtenToVault: false,
       isCached: false,
     });
+  });
+
+  // 1.7 Explicitly save a bridge note shown in the UI (never overwrites an existing file)
+  server.post('/api/projects/synergies/save', {
+    schema: {
+      body: z.object({
+        projectAId: z.string().uuid(),
+        projectBId: z.string().uuid(),
+        bridgeTitle: z.string().min(1).max(300),
+        overview: z.string().max(20000),
+        sharedProblems: z.array(z.string().max(2000)).max(30),
+        mutualBenefits: z.array(z.string().max(2000)).max(30),
+        markdownContent: z.string().max(40000),
+      }),
+      response: {
+        200: z.object({ success: z.boolean(), filePath: z.string() }),
+        400: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+  }, async (request, reply) => {
+    const body = request.body as {
+      projectAId: string; projectBId: string; bridgeTitle: string; overview: string;
+      sharedProblems: string[]; mutualBenefits: string[]; markdownContent: string;
+    };
+
+    const [projA] = await db.select().from(projects).where(eq(projects.id, body.projectAId)).limit(1);
+    const [projB] = await db.select().from(projects).where(eq(projects.id, body.projectBId)).limit(1);
+    if (!projA || !projB) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Uno o ambos proyectos no fueron encontrados.' });
+    }
+
+    const vaultPath = getCurrentVaultPath();
+    if (!vaultPath) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'No hay un Vault de Obsidian configurado.' });
+    }
+
+    const [fileName] = getSynergyFileNames(projA.title, projB.title);
+    const filePath = await writeGeneratedNote(
+      synergyDirFor(vaultPath, projA.folderPath),
+      vaultPath,
+      fileName.replace(/\.md$/, ''),
+      formatSynergyNote(body, projA.title, projB.title),
+    );
+    return reply.send({ success: true, filePath });
   });
 
   const synthesisSchema = z.object({
@@ -650,9 +653,10 @@ ${result.markdownContent}
 
   const SynthesizeResponseSchema = z.object({
     success: z.boolean(),
-    filePath: z.string(),
+    filePath: z.string().nullable(),
     title: z.string(),
     executiveSummary: z.string(),
+    markdownContent: z.string(),
     suggestedNextSteps: z.array(z.string()),
     acceptedCount: z.number(),
     writtenToVault: z.boolean(),
@@ -761,60 +765,59 @@ ${suggestionsPrompt}
       });
     }
 
-    // 4. Write synthesized document to Obsidian Vault
-    const vaultPath = getCurrentVaultPath();
-    let writtenToVault = false;
-    const fileName = 'research_brief.md';
-
-    if (vaultPath) {
-      try {
-        const projectFolderPath = path.join(vaultPath, proj.folderPath);
-        const targetFilePath = path.join(projectFolderPath, fileName);
-
-        const frontmatter = `---
-title: "${result.title.replace(/"/g, '\\"')}"
-type: research_brief
-synthesized_at: "${new Date().toISOString()}"
-accepted_suggestions_count: ${acceptedList.length}
-tags:
-  - loom/synthesis
-  - loom/research-brief
----
-
-# ${result.title}
-
-> [!abstract] Resumen Ejecutivo
-> ${result.executiveSummary.replace(/\n/g, '\n> ')}
-
-${result.markdownContent}
-
-## Próximos Pasos Recomendados
-${(result.suggestedNextSteps || []).map(step => `- [ ] ${step}`).join('\n')}
-
----
-*Generado automáticamente por Loom compilando ${acceptedList.length} sugerencias aceptadas.*
-`;
-
-        await fs.mkdir(projectFolderPath, { recursive: true });
-        await fs.writeFile(targetFilePath, frontmatter, 'utf-8');
-        writtenToVault = true;
-
-        // Reconcile project so newly written brief is immediately parsed into snapshots
-        await reconcileProject(projectFolderPath, vaultPath, true);
-        console.log(`[Synthesizer] Research brief generated and saved at: ${targetFilePath}`);
-      } catch (err) {
-        console.error('[Synthesizer] Failed writing research brief to vault:', err);
-      }
-    }
-
+    // Generation never writes to the vault; saving is an explicit action (POST /api/projects/:id/synthesis/save)
     return reply.send({
       success: true,
-      filePath: fileName,
+      filePath: null,
       title: result.title,
       executiveSummary: result.executiveSummary,
+      markdownContent: result.markdownContent,
       suggestedNextSteps: result.suggestedNextSteps || [],
       acceptedCount: acceptedList.length,
-      writtenToVault,
+      writtenToVault: false,
     });
+  });
+
+  // 4. Explicitly save a research brief shown in the UI (never overwrites an existing file)
+  server.post('/api/projects/:id/synthesis/save', {
+    schema: {
+      params: IdParamSchema,
+      body: z.object({
+        title: z.string().min(1).max(300),
+        executiveSummary: z.string().max(20000),
+        markdownContent: z.string().max(40000),
+        suggestedNextSteps: z.array(z.string().max(2000)).max(30),
+        acceptedCount: z.number().int().min(0).optional().default(0),
+      }),
+      response: {
+        200: z.object({ success: z.boolean(), filePath: z.string() }),
+        400: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string() }),
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      title: string; executiveSummary: string; markdownContent: string;
+      suggestedNextSteps: string[]; acceptedCount: number;
+    };
+
+    const [proj] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+    if (!proj) {
+      return reply.status(404).send({ error: 'Not Found', message: 'Proyecto no encontrado' });
+    }
+
+    const vaultPath = getCurrentVaultPath();
+    if (!vaultPath) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'No hay un Vault de Obsidian configurado.' });
+    }
+
+    const filePath = await writeGeneratedNote(
+      path.join(vaultPath, proj.folderPath),
+      vaultPath,
+      'research_brief',
+      formatResearchBrief(body, body.acceptedCount),
+    );
+    return reply.send({ success: true, filePath });
   });
 }

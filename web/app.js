@@ -1381,12 +1381,9 @@ async function handleSynthesizeProject() {
       throw new Error(data.message || 'Error al generar la síntesis del proyecto.');
     }
 
-    // Open Synthesis Result Modal
-    openSynthesisResultModal(data, proj?.title || 'Proyecto');
-    showToast(`Research Brief generado y guardado en Obsidian: ${data.filePath}`, 'success');
-
-    // Reload projects to update notes and snapshots
-    loadProjects();
+    // Generation does not write to the vault; the modal offers an explicit save button
+    openSynthesisResultModal(data, proj?.title || 'Proyecto', state.selectedProjectId);
+    showToast('Research Brief generado. Revísalo y guárdalo en Obsidian si te sirve.', 'success');
   } catch (err) {
     console.error('Synthesis error:', err);
     showToast(err.message || 'Error al compilar la síntesis.', 'error');
@@ -1397,7 +1394,7 @@ async function handleSynthesizeProject() {
   }
 }
 
-function openSynthesisResultModal(data, projectTitle) {
+function openSynthesisResultModal(data, projectTitle, projectId) {
   if (!elements.synthesisResultModal) return;
 
   elements.synthesisModalTitle.textContent = data.title || `Síntesis — ${projectTitle}`;
@@ -1420,8 +1417,8 @@ function openSynthesisResultModal(data, projectTitle) {
   elements.synthesisModalBody.innerHTML = `
     <div class="synthesis-content-view">
       <div class="synthesis-meta-bar">
-        <div class="synthesis-meta-path">
-          <span>Guardado en: <code>${escapeHtml(data.filePath)}</code></span>
+        <div class="synthesis-meta-path" id="synthesis-save-status">
+          <span>Aún no guardado en Obsidian</span>
         </div>
         <span class="chip chip-actionable">${data.acceptedCount} sugerencias integradas</span>
       </div>
@@ -1435,6 +1432,7 @@ function openSynthesisResultModal(data, projectTitle) {
 
       <div class="synthesis-actions-bar">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">Copiar texto</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-save-synthesis">Guardar en Obsidian</button>
         <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">Cerrar</button>
       </div>
     </div>
@@ -1444,9 +1442,35 @@ function openSynthesisResultModal(data, projectTitle) {
     elements.synthesisResultModal.close();
   });
 
+  document.getElementById('btn-save-synthesis')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/synthesis/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          executiveSummary: data.executiveSummary,
+          markdownContent: data.markdownContent || '',
+          suggestedNextSteps: data.suggestedNextSteps || [],
+          acceptedCount: data.acceptedCount || 0,
+        }),
+      });
+      const saved = await res.json();
+      if (!res.ok) throw new Error(saved.message || 'No se pudo guardar el Research Brief.');
+      button.textContent = 'Guardado';
+      document.getElementById('synthesis-save-status').innerHTML = `<span>Guardado en: <code>${escapeHtml(saved.filePath)}</code></span>`;
+      showToast(`Research Brief guardado en Obsidian: ${saved.filePath}`, 'success');
+    } catch (err) {
+      button.disabled = false;
+      showToast(err.message || 'No se pudo guardar el Research Brief.', 'error');
+    }
+  });
+
   document.getElementById('btn-copy-synthesis-summary')?.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(`${data.title}\n\n${data.executiveSummary}`);
+      await navigator.clipboard.writeText(`${data.title}\n\n${data.executiveSummary}\n\n${data.markdownContent || ''}`);
       showToast('Resumen copiado al portapapeles', 'info');
     } catch {
       showToast('No se pudo copiar automáticamente', 'warning');
@@ -1657,7 +1681,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
     const res = await fetch('/api/projects/synergies/explore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectAId, projectBId, saveToVault: true, forceRegenerate }),
+      body: JSON.stringify({ projectAId, projectBId, forceRegenerate }),
     });
 
     const data = await res.json();
@@ -1673,7 +1697,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
 
     const cacheIndicator = data.isCached
       ? `<span class="synergy-cached-badge">Guardado en Vault</span>`
-      : `<span class="synergy-cached-badge">Recién generado</span>`;
+      : `<span class="synergy-cached-badge">Recién generado · no guardado</span>`;
 
     elements.synergyModalBody.innerHTML = `
       <div class="synthesis-content-view">
@@ -1728,6 +1752,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
             <span>Regenerar</span>
           </button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar nota</button>
+          ${data.isCached ? '' : '<button type="button" class="btn btn-secondary btn-sm" id="btn-save-synergy-note">Guardar en Obsidian</button>'}
           <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Cerrar</button>
         </div>
       </div>
@@ -1750,13 +1775,37 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
       }
     });
 
+    document.getElementById('btn-save-synergy-note')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const saveRes = await fetch('/api/projects/synergies/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectAId,
+            projectBId,
+            bridgeTitle: data.bridgeTitle,
+            overview: data.overview,
+            sharedProblems: data.sharedProblems || [],
+            mutualBenefits: data.mutualBenefits || [],
+            markdownContent: data.markdownContent || '',
+          }),
+        });
+        const saved = await saveRes.json();
+        if (!saveRes.ok) throw new Error(saved.message || 'No se pudo guardar la nota puente.');
+        button.textContent = 'Guardada';
+        showToast(`Nota puente guardada en Obsidian: ${saved.filePath}`, 'success');
+        loadSynergies();
+      } catch (saveErr) {
+        button.disabled = false;
+        showToast(saveErr.message || 'No se pudo guardar la nota puente.', 'error');
+      }
+    });
+
     if (data.isCached) {
       showToast(`Puente cargado desde el Vault: ${data.filePath}`, 'info');
-    } else if (data.writtenToVault && data.filePath) {
-      showToast(`Puente guardado en Obsidian: ${data.filePath}`, 'success');
     }
-
-    loadSynergies();
   } catch (err) {
     console.error('Synergy exploration error:', err);
     elements.synergyModalBody.innerHTML = `
