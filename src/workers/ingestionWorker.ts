@@ -7,33 +7,22 @@ import { Readability } from '@mozilla/readability';
 import { sharedAiProvider } from '../ai/OllamaProvider';
 import { env } from '../config';
 import { z } from 'zod';
+import * as net from 'net';
+import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
 
 import { YoutubeTranscript } from 'youtube-transcript';
 
 const QUEUE_NAME = 'ingest_url';
 const ollama = sharedAiProvider;
 
+/**
+ * Fast rejection at the API boundary for obviously local targets. The authoritative check
+ * happens after DNS resolution in fetchPublicPage.
+ */
 export function isPrivateOrLoopbackHost(hostname: string): boolean {
   const host = hostname.toLowerCase().trim().replace(/^\[|\]$/g, '');
-  if (
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host === '169.254.169.254'
-  ) {
-    return true;
-  }
-
-  const parts = host.split('.').map(Number);
-  if (parts.length === 4 && parts.every(p => !isNaN(p) && p >= 0 && p <= 255)) {
-    if (parts[0] === 10) return true;
-    if (parts[0] === 127) return true;
-    if (parts[0] === 169 && parts[1] === 254) return true;
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    if (parts[0] === 0) return true;
-  }
+  if (host === 'localhost') return true;
+  if (net.isIP(host)) return isBlockedAddress(host);
 
   if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan') || host.endsWith('.localhost')) {
     return true;
@@ -142,7 +131,7 @@ export const setupIngestionWorker = async () => {
       console.log(`Processing ingestion job for: ${url} (Content ID: ${contentId})`);
 
       try {
-        // 1. Validate against SSRF
+        // 1. Fast rejection of obviously local targets (fetchPublicPage re-checks after DNS)
         const parsedUrl = new URL(url);
         if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
           throw new Error(`Protocolo '${parsedUrl.protocol}' no permitido. Solo se admite http y https.`);
@@ -170,45 +159,10 @@ export const setupIngestionWorker = async () => {
             ? `${yt.title} - ${yt.author}`
             : yt.title;
         } else {
-          const MAX_HTML_BYTES = 5 * 1024 * 1024; // 5 MB size cap
-          const FETCH_TIMEOUT_MS = 15000; // 15s timeout
-
-          const response = await fetch(url, {
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; LoomBot/1.0; +https://github.com/loom-assistant)',
-              'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
-          }
-
-          const contentType = response.headers?.get?.('content-type') || 'text/html';
-          if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml') && !contentType.includes('text/plain')) {
-            throw new Error(`Unsupported content type "${contentType}". Only HTML or text web pages are supported.`);
-          }
-
-          const contentLength = response.headers?.get?.('content-length');
-          if (contentLength && parseInt(contentLength, 10) > MAX_HTML_BYTES) {
-            throw new Error(`Content size exceeds 5MB limit (${contentLength} bytes)`);
-          }
-
-          let html: string;
-          if (typeof response.arrayBuffer === 'function') {
-            const arrayBuffer = await response.arrayBuffer();
-            if (arrayBuffer.byteLength > MAX_HTML_BYTES) {
-              throw new Error(`Downloaded content exceeds 5MB limit (${arrayBuffer.byteLength} bytes)`);
-            }
-            const decoder = new TextDecoder('utf-8');
-            html = decoder.decode(arrayBuffer);
-          } else if (typeof (response as any).text === 'function') {
-            html = await (response as any).text();
-          } else {
-            throw new Error('Unsupported response body format');
-          }
-          const doc = new JSDOM(html, { url });
+          // Public-internet only: every redirect hop and resolved IP is checked, body capped at 5 MB
+          const page = await fetchPublicPage(url);
+          const html = page.text;
+          const doc = new JSDOM(html, { url: page.finalUrl });
           const reader = new Readability(doc.window.document);
           const article = reader.parse();
 
@@ -276,7 +230,7 @@ export const setupIngestionWorker = async () => {
         // For permanent / non-retryable errors (e.g. 404, bad URL, unsupported format, no transcripts),
         // do not rethrow to pg-boss so it doesn't wastefully retry.
         const errMsg = error.message || '';
-        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed/i.test(errMsg);
+        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Acceso denegado \(SSRF\)|Protocolo '|more than \d+ redirects/i.test(errMsg);
         if (!isNonRetryable) {
           throw error;
         }
