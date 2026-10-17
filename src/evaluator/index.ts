@@ -12,7 +12,7 @@ const evaluationActionSchema = z.object({
   actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']).describe("Tipo de acción constructiva para Obsidian"),
   observation: z.string().describe("Observación específica de lo que aporta constructivamente el artículo al proyecto"),
   suggestedAction: z.string().describe("Instrucción concreta de redacción o integración en las notas de Obsidian (ej. citar en Acto 2, crear puente narrativo)."),
-  targetFile: z.string().optional().describe("Archivo de nota de Obsidian al que apunta la acción (ej. ideas.md o research/combat.md). Si no se especifica, se usará la nota con mayor afinidad."),
+  targetFile: z.string().nullish().describe("Archivo de nota de Obsidian al que apunta la acción (ej. ideas.md o research/combat.md). Si no se especifica, se usará la nota con mayor afinidad."),
 });
 
 const unifiedEvaluationSchema = z.object({

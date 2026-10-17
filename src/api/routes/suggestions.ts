@@ -39,8 +39,8 @@ const reevaluationSchema = z.object({
     actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
     observation: z.string(),
     suggestedAction: z.string(),
-    targetFile: z.string().optional(),
-  }).nullable().describe("Acción refinada obligatoria si resolution es 'keep_or_refine'. Debe ser null si resolution es 'already_addressed' o 'obsolete'."),
+    targetFile: z.string().nullish(),
+  }).nullish().describe("Acción refinada obligatoria si resolution es 'keep_or_refine'. Debe ser null si resolution es 'already_addressed' o 'obsolete'."),
 });
 
 const SuggestionDetailSchema = SuggestionItemSchema.extend({
@@ -195,9 +195,18 @@ export default async function (server: FastifyInstance) {
                   SELECT 1 FROM project_note_snapshots pns_eval
                   LEFT JOIN project_note_snapshots pns_latest 
                     ON pns_latest.project_snapshot_id = ls.id 
-                    AND (pns_latest.note_path = pns_eval.note_path OR pns_latest.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_latest.note_path = pns_eval.note_path 
+                      OR pns_latest.note_title = pns_eval.note_title
+                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                    )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
-                    AND (pns_eval.note_path = a.target_file OR pns_eval.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_eval.note_path = a.target_file 
+                      OR pns_eval.note_path = a.target_file || '.md'
+                      OR pns_eval.note_title = a.target_file
+                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                    )
                     AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
@@ -429,9 +438,18 @@ export default async function (server: FastifyInstance) {
                   SELECT 1 FROM project_note_snapshots pns_eval
                   LEFT JOIN project_note_snapshots pns_latest 
                     ON pns_latest.project_snapshot_id = ls.id 
-                    AND (pns_latest.note_path = pns_eval.note_path OR pns_latest.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_latest.note_path = pns_eval.note_path 
+                      OR pns_latest.note_title = pns_eval.note_title
+                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                    )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
-                    AND (pns_eval.note_path = a.target_file OR pns_eval.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_eval.note_path = a.target_file 
+                      OR pns_eval.note_path = a.target_file || '.md'
+                      OR pns_eval.note_title = a.target_file
+                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                    )
                     AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
@@ -868,9 +886,18 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
                   SELECT 1 FROM project_note_snapshots pns_eval
                   LEFT JOIN project_note_snapshots pns_latest 
                     ON pns_latest.project_snapshot_id = ls.id 
-                    AND (pns_latest.note_path = pns_eval.note_path OR pns_latest.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_latest.note_path = pns_eval.note_path 
+                      OR pns_latest.note_title = pns_eval.note_title
+                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                    )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
-                    AND (pns_eval.note_path = a.target_file OR pns_eval.note_path LIKE '%/' || a.target_file)
+                    AND (
+                      pns_eval.note_path = a.target_file 
+                      OR pns_eval.note_path = a.target_file || '.md'
+                      OR pns_eval.note_title = a.target_file
+                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                    )
                     AND (pns_latest.id IS NULL OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
               )
