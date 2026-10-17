@@ -11,6 +11,16 @@ const DEBOUNCE_MS = 3000;
 let activeWatcher: ReturnType<typeof chokidar.watch> | null = null;
 let activeVaultPath: string | null = null;
 
+/** Paths the watcher never reacts to: hidden entries and Loom's own suggestions.md (invariant I4). */
+export function shouldIgnoreVaultPath(vaultRoot: string, targetPath: string): boolean {
+  const rel = path.relative(vaultRoot, targetPath).replace(/\\/g, '/');
+  if (!rel || rel === '.') return false;
+  // Ignore dot-directories or dot-files inside the vault (e.g. .obsidian, .trash)
+  if (rel.split('/').some(segment => segment.startsWith('.'))) return true;
+  // Ignore suggestions.md to avoid self-triggering loops
+  return path.basename(targetPath) === 'suggestions.md';
+}
+
 export function isVaultWatcherActive(): boolean {
   return activeWatcher !== null;
 }
@@ -60,15 +70,7 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
   const watchPaths = PROJECT_DIR_NAMES.map(dir => path.join(resolved, dir));
 
   const watcher = chokidar.watch(watchPaths, {
-    ignored: (targetPath: string) => {
-      const rel = path.relative(resolved, targetPath).replace(/\\/g, '/');
-      if (!rel || rel === '.') return false;
-      // Ignore dot-directories or dot-files inside the vault (e.g. .obsidian, .trash)
-      if (rel.split('/').some(segment => segment.startsWith('.'))) return true;
-      // Ignore suggestions.md to avoid self-triggering loops
-      if (path.basename(targetPath) === 'suggestions.md') return true;
-      return false;
-    },
+    ignored: (targetPath: string) => shouldIgnoreVaultPath(resolved, targetPath),
     persistent: true,
     ignoreInitial: true, // we already did bootReconcile
   });
