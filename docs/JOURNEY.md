@@ -37,10 +37,43 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - Without Ollama, the 8 remaining failures are all tests that call a live model. A fake provider is still missing (Phase 5).
   - Removing the bookmarklet also removed `Access-Control-Allow-Origin: *` and the `?quick_ingest=` auto-submit, which closes one cross-site ingestion path (audit F-02). The rest of F-02 (Host/Origin validation) is Phase 2.
 
+### 2026-10-17 — Phase 2: Fix Critical and High findings
+- **Context:** The audit found one Critical and four High findings (a local API any web page could reach, cross-site ingestion, unsanitized model text in the vault, automatic vault writers, a hostname-only SSRF check), plus integrity bugs against invariants I5–I7. Phase 2 had to close them before anything is published.
+- **What happened:**
+  - Each fix landed in its own commit with a regression test that failed before the fix.
+  - Owner decisions shaped three fixes:
+    - I6 is literal: re-ingesting never re-evaluates.
+    - Synergy notes and briefs are written only by an explicit "Guardar en Obsidian" button.
+    - I7 is enforced now, with existing vectors backfilled as `bge-m3`.
+  - Three Low/Medium fixes were included because they touched the same code: `.env` writer, generic 500 messages, Postgres bound to localhost.
+- **Alternatives considered:**
+  - A per-install API token: rejected for now. Loopback-only binding plus Host/Origin checks blocks the web-page attacks, and a token would add setup friction for a solo local app.
+  - Resolving DNS once before fetching: rejected, because the IP could change before the connection (DNS rebinding). The check runs inside the connect-time lookup instead.
+  - Keeping the claim-then-append writeback: rejected because of the crash window. Callouts now carry markers, and the write runs under a row lock.
+- **Evidence:** commits `0bde5b8`…`c1d543a`. Tests listed in the table below. Migrations `0004` (unique `evaluation_id`) and `0005` (`embedding_model` on snapshots).
+- **Outcome / lesson:**
+  - Every test passes with a live Ollama (123 passed, 1 skipped), and line coverage of `src/` is 84.06%.
+  - Two timing-dependent tests passed even before their fix: concurrent accepts did not interleave under `server.inject`. Only deterministic tests (a database constraint, a simulated crash) proved those fixes. Race tests that rely on timing alone prove little.
+  - Two test fixtures attached two suggestions to one evaluation, which the real evaluator never does. The new uniqueness constraint exposed them.
+  - On the Gemini e2e run after Phase 2, Gemini answered HTTP 503 ("model is currently experiencing high demand") twice. Loom fell back to local Ollama and the test still passed, so the provider fallback was exercised live.
+  - I committed one test that did not typecheck (`16e5b63` fixed it). Since then, typecheck and lint run before every commit.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
 |---|---|---|---|---|---|
+| F-01 | No Host/Origin validation: a web page could reach the local API through DNS rebinding (read notes, accept suggestions) | Phase 0 audit, code reading | Critical | `0bde5b8` | `tests/request_guard.test.ts` |
+| F-02 | `Access-Control-Allow-Origin: *` on ingest and an auto-submitting `?quick_ingest=` let any website push content into the pipeline | Phase 0 audit | High | `7be41b1` (bookmarklet removal), `0bde5b8` (Origin guard) | `tests/phase7_ui.test.ts` (Feature 2), `tests/request_guard.test.ts` |
+| F-03 | Synergy notes and research briefs written to the vault without the accept flow; the brief overwrote manual edits and fed back into project context | Phase 0 audit | High | `d59f564` | `tests/generated_notes.test.ts`, `tests/phase7_ui.test.ts` (Features 4–5) |
+| F-04 | Model text written to the vault raw (code fences, embeds, HTML, forged callouts) | Phase 0 audit | High | `f6e1004` | `tests/vault_sanitize.test.ts` |
+| F-05 | SSRF guard was a hostname string check: redirects, DNS, IPv6 and IPv4-mapped addresses bypassed it; body read fully before the size cap | Phase 0 audit | High | `f510026` | `tests/safe_fetch.test.ts` |
+| F-06 | Writeback crash window: flag set before the append, so a crash lost the callout permanently | Phase 0 audit | Medium | `6c9b933` | `tests/writeback_recovery.test.ts` |
+| F-07 | Concurrent accept of a tentative item could create two suggestions and two callouts | Phase 0 audit | Medium | `a94fca7` | `tests/tentative_accept_race.test.ts` |
+| F-08 | Re-ingesting a URL bumped `consumption_seq` and re-ran evaluation, duplicating suggestions (invariant I6) | Phase 0 audit; owner decided I6 is literal | Medium | `89fd28b` | `tests/reingest_idempotency.test.ts` |
+| F-10 | Vault-path `.env` writer allowed newline injection and `$`-pattern corruption; non-atomic write | Phase 0 audit | Low | `33a2c1b` | `tests/env_writer.test.ts` |
+| F-17 | Embedding model not tracked on snapshots or enforced in distance queries (invariant I7) | Phase 0 audit | Medium | `cbaf4a2` | `tests/embedding_model.test.ts` |
+| F-22 | Docker Postgres published on all interfaces with the default password | Phase 0 audit | Medium | `c1d543a` | not testable in the suite (config); verified with `docker compose config` |
+| F-26 | 500 responses returned internal error text (provider errors, hosts) | Phase 0 audit | Low | `38f49dd` | `tests/error_responses.test.ts` |
 
 ## Dead code and legacy removed
 
@@ -66,6 +99,11 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-17 | Phase 1 cleanup | Tests with live Ollama, no Gemini (passed / failed / skipped) | not measured | 66 / 0 / 1 | `pnpm test:coverage` with Ollama `bge-m3` + `qwen2.5:7b-instruct` and `GEMINI_API_KEY=` |
 | 2026-10-17 | Phase 1 cleanup | ESLint warnings | 6 | 0 | `pnpm lint` |
 | 2026-10-17 | Phase 1 cleanup | `tests/full_e2e.test.ts` with Gemini (synthetic vault and article) | not measured | 1 / 0 / 0 (served by `gemini:gemini-3.1-flash-lite`) | `pnpm vitest run tests/full_e2e.test.ts` with `GEMINI_API_KEY` from `.env` |
+| 2026-10-17 | Phase 2 fixes | Line / branch / function coverage of `src/`, live Ollama, no Gemini | not measured (Phase 1 coverage was only measured offline) | 84.06% / 67.31% / 81.57% | `pnpm test:coverage` with `GEMINI_API_KEY=` |
+| 2026-10-17 | Phase 2 fixes | Line / branch / function coverage of `src/`, no Ollama/Gemini | 74.75% / 59.68% / 74.35% | 84.20% / 67.79% / 81.57% | `pnpm test:coverage --exclude tests/ollama.test.ts`, unreachable `OLLAMA_URL` |
+| 2026-10-17 | Phase 2 fixes | Tests with live Ollama, no Gemini (passed / failed / skipped) | 66 / 0 / 1 | 123 / 0 / 1 | `pnpm test:coverage` with `GEMINI_API_KEY=` |
+| 2026-10-17 | Phase 2 fixes | Tests without Ollama/Gemini (passed / failed / skipped) | 56 / 8 / 1 | 114 / 7 / 1 | offline command above; every failure needs a live model |
+| 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |
 
 ## Dead ends and things that did not work
 

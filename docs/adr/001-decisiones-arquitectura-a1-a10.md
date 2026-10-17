@@ -66,5 +66,6 @@ Ver también `003-endurecimiento-post-revision.md`.
 ## Update (2026-10-17, Phase 0 audit and Phase 1 cleanup)
 
 - **A1:** the hash and the reconciler are now **recursive** over the project folder (hidden entries and `suggestions.md` excluded). BOM/CRLF normalization is still not done.
-- **A3:** the owner decided that **re-ingesting the same canonical URL must not create new evaluations or suggestions** (invariant I6 in `CLAUDE.md`). Incrementing `consumption_seq` to re-evaluate is therefore a bug, scheduled for Phase 2.
+- **A3:** the owner decided that **re-ingesting the same canonical URL must not create new evaluations or suggestions** (invariant I6 in `CLAUDE.md`). Since Phase 2, a known URL is not re-queued (unless its ingest failed) and `consumption_seq` is no longer incremented (`tests/reingest_idempotency.test.ts`).
+- **A8:** since Phase 2, each callout carries a hidden `%% loom:<id> %%` marker, which recovery uses to avoid duplicates after a crash (`tests/writeback_recovery.test.ts`).
 - **A9:** the current list of what is sent to Gemini is in the README "Privacy note" and in `docs/ARCHITECTURE.md` §15.

@@ -24,9 +24,9 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 - **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Gemini is used when `GEMINI_API_KEY` is set; on any Gemini error it seamlessly falls back to local Ollama (`qwen2.5:7b-instruct`).
 - **Living Vault Sync & Staleness**: A watcher (3 s debounce) re-reads project notes recursively, updates immutable snapshots, and computes vector drift (`STALE_DRIFT_THRESHOLD = 0.04`). Stale suggestions are flagged with badges and can be re-evaluated context-aware against updated drafts.
 - **Synergies & Consultor**:
-  - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and writes a bridge note (`Projects/synergy_<A>_<B>.md`).
+  - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and drafts a bridge note you can save to the vault.
   - **Archive & Vault Research Partner ("Consultor")**: Answers natural language research questions by reasoning across your entire saved library and all active Obsidian project notes simultaneously, citing sources as `[C1]` (library) and `[N1]` (notes). The cited cards are checked against the catalog; inline references in the answer text are not yet verified.
-- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault. Exception today: the synergy explorer and backlog synthesis write their own files (see *Known limitations*).
+- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault. Synergy notes and research briefs are saved only when you click **Guardar en Obsidian**.
 - **Web UI**: 4 focused views:
   1. **Consumo**: Ingestion input card and chronological reading history feed.
   2. **Sugerencias**: Project-scoped triage with staleness pills, backlog synthesis, and accept/discard/reevaluate actions.
@@ -74,7 +74,7 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Bind address. Keep it local: the API has no authentication. |
+| `HOST` | `127.0.0.1` | Bind address. Must be loopback (`127.0.0.1`, `localhost`, `::1`); the API has no authentication. |
 | `PORT` | `3000` | HTTP port. |
 | `DATABASE_URL` | `postgres://loom:loompassword@localhost:5432/loomdb` | Matches `docker-compose.yml`. |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama endpoint. |
@@ -151,8 +151,10 @@ Leave `GEMINI_API_KEY` empty and every LLM call runs on local Ollama. Loom still
 | `/api/library/consult` | `POST` | Full-catalog Archive & Obsidian Vault Research Partner |
 | `/api/projects` | `GET` | Projects list with counters and note metadata |
 | `/api/projects/synergies` | `GET` | Cross-project thematic synergies via note-to-note cosine distance |
-| `/api/projects/synergies/explore` | `POST` | AI synergy exploration; writes a bridge note to the vault |
-| `/api/projects/:id/synthesize` | `POST` | Compile accepted suggestions into `research_brief.md` (overwrites) |
+| `/api/projects/synergies/explore` | `POST` | AI synergy exploration (writes nothing) |
+| `/api/projects/synergies/save` | `POST` | Save a bridge note to the vault as a new file |
+| `/api/projects/:id/synthesize` | `POST` | Compile accepted suggestions into a research brief (writes nothing) |
+| `/api/projects/:id/synthesis/save` | `POST` | Save the research brief to the vault as a new file |
 | `/api/suggestions`, `/api/suggestions/:id` | `GET` | Triage feed with staleness scores (`status=active\|pending\|tentative\|accepted\|discarded`) |
 | `/api/suggestions/:id` | `PATCH` | Accept / discard suggestion (`409` on conflict) |
 | `/api/suggestions/:id/reevaluate` | `POST` | Context-aware re-evaluation of suggestion against current notes |
@@ -174,17 +176,21 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ---
 
+## Security model
+
+Loom is a single-user, local-only tool:
+
+- **Network:** the API has no login. It only binds to loopback (`HOST` must be `127.0.0.1`, `localhost` or `::1`), and it rejects requests addressed to any other host name, which blocks DNS rebinding. It also rejects state-changing requests from other web origins. The browser extension may only call `/api/ingest`.
+- **Your vault:** Loom writes only when you act. **Aceptar** appends a callout to `<project>/suggestions.md`; **Guardar en Obsidian** saves a synergy note or research brief as a new file and never overwrites one. Model text is sanitized first: code blocks, embeds, HTML and fake callouts are neutralized.
+- **Ingestion:** only public `http(s)` pages are fetched. Every resolved IP address and every redirect is checked, and pages are capped at 5 MB.
+
 ## Known limitations
 
-Found in the October 2026 audit and scheduled for fixing (see `docs/agent/02-roadmap.md`, Phase 2):
-
-- **No authentication.** Keep `HOST=127.0.0.1`. The API does not yet validate the `Host` or `Origin` header, so a malicious web page could reach it through DNS rebinding.
-- **Some features write to the vault without a separate confirmation.** The synergy explorer writes `Projects/synergy_*.md`, and backlog synthesis overwrites `<project>/research_brief.md`.
-- **LLM text reaches the vault unsanitized.** Accepted callouts and generated notes can contain links, embeds or code blocks taken from ingested pages.
-- **Re-ingesting the same URL re-runs evaluation** and can create duplicate pending suggestions.
-- **Writeback has a crash window.** If the server dies between marking a suggestion as written and appending it, that callout is lost.
-- **The private-address check on ingestion is hostname-only.** Redirects and DNS are not checked.
 - **Thresholds are not calibrated, and suggestion quality has not been measured.** There is no evaluation dataset yet. Retrieval and suggestion quality are *not measured*.
+- **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the error is logged and that pair is skipped until the project changes.
+- **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
+- **Synergies may include deleted notes**, because they compare notes from older project snapshots too.
+- **The extension can send a queued clip twice** when two sync triggers fire at once. Re-ingesting is harmless; it no longer creates duplicate suggestions.
 
 ---
 

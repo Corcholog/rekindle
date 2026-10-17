@@ -1,7 +1,7 @@
 # Loom — Architecture & Technical Reference
 
 > **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Loom.  
-> **State described:** git `master` after the Phase 1 cleanup (see `docs/agent/02-roadmap.md`). Behaviors marked **Known issue** are documented as they are today and are scheduled for Phase 2 (security and integrity fixes).  
+> **State described:** git `master` after Phase 2 (security and integrity fixes; see `docs/agent/02-roadmap.md`). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
 > **Verification:** run `pnpm typecheck`, `pnpm lint` and `pnpm test`; per-phase results are recorded in `docs/JOURNEY.md`.
 
 ---
@@ -16,7 +16,7 @@ The workflow centers on writer agency:
 3. **Structured summarization & local embedding**: Loom extracts the readable article text or video transcript, synthesizes a structured summary (in Spanish), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
 4. **Hierarchical semantic matching**: Loom compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL using `pgvector` cosine distance.
 5. **Constructive triage & action proposal**: When cosine distance indicates semantic affinity (< 0.6), Loom prompts an LLM (Gemini with automatic local Ollama fallback) to formulate a concrete, constructive action targeting a specific note in your project (e.g., *"Citar evidencia en research/combat.md"*, *"Contraargumento para Acto 2"*).
-6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`. **Known issue:** the synergy explorer and the backlog synthesizer currently write their own files directly (see §11).
+6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`. Synergy bridge notes and research briefs are only written when you click **Guardar en Obsidian** (§11).
 7. **Living knowledge synchronization**:
    - **Vector-gated staleness detection**: Detects when notes evolve in Obsidian and flags older suggestions as stale (`isStale`).
    - **Tentative promotions**: Automatically re-evaluates past tentative contents when project drafts expand or move closer.
@@ -25,7 +25,7 @@ The workflow centers on writer agency:
 
 ### Core Design Principles
 - **Obsidian is the primary source of truth**: The filesystem holds your creative writing. PostgreSQL holds derived vector index state, immutable snapshots, and triage history.
-- **Zero unapproved mutations** (design goal): AI cannot write or edit notes without your explicit action. Suggestions are written only after **Aceptar**. **Known issue:** synergy bridge notes and `research_brief.md` are written as soon as those features run (§11); the planned fix makes them an explicit "save to vault" action.
+- **Zero unapproved mutations** (invariant I1): AI cannot write or edit notes without your explicit action. Suggestions are written only after **Aceptar**; generated notes only after **Guardar en Obsidian**, as new files that never overwrite anything. Model text is sanitized before it reaches the vault (`src/vault/sanitize.ts`).
 - **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. Without `GEMINI_API_KEY`, every LLM call (summaries, evaluations, re-evaluations, Consultor, synergies, synthesis) runs locally with Ollama. Non-LLM outbound traffic remains: fetching the pages and YouTube metadata/transcripts you ingest, and the web fonts the UI loads from Google Fonts.
 - **Language separation**: User-facing copy, prompts, generated summaries, callouts, and UI strings are strictly in **Spanish**. Source code, variables, developer documentation, and commits are strictly in **English**.
 
@@ -59,11 +59,12 @@ loom/
 │  ├─ popup.html / popup.js           Clipper popup UI with status badges & manual controls
 │  └─ icons/                          Extension action icons (16px, 48px, 128px)
 ├─ src/
-│  ├─ config.ts                       Zod-validated environment config & threshold constants
+│  ├─ config.ts                       Zod-validated environment config (loopback-only HOST) & thresholds
 │  ├─ ai/
 │  │  └─ OllamaProvider.ts            AI provider singleton (Gemini + Ollama fallback, embeddings)
 │  ├─ api/
-│  │  ├─ server.ts                    Fastify app setup, error handler, lifecycle hooks
+│  │  ├─ server.ts                    Fastify app setup, error handler, lifecycle hooks, boot writeback recovery
+│  │  ├─ requestGuard.ts              Host/Origin guard against DNS rebinding and cross-site writes
 │  │  └─ routes/
 │  │     ├─ contents.ts               GET /api/contents (Inbox feed & content detail)
 │  │     ├─ ingest.ts                 POST /api/ingest (Ingestion queue trigger)
@@ -85,8 +86,12 @@ loom/
 │  │  ├─ hash.ts                      Deterministic recursive project directory SHA-256 hash
 │  │  ├─ parser.ts                    Markdown parser (#project tags, frontmatter, H1 title)
 │  │  ├─ reconciler.ts                Project reconciler & note-level embedding generator
-│  │  ├─ updater.ts                   Atomic writeback to <project>/suggestions.md
+│  │  ├─ updater.ts                   Crash-safe writeback to <project>/suggestions.md (markers + recovery)
+│  │  ├─ sanitize.ts                  Neutralizes active markdown in model text before vault writes
+│  │  ├─ generatedNotes.ts            Explicitly saved synergy notes and briefs (never overwrite)
 │  │  └─ watcher.ts                   Chokidar live filesystem watcher with debounce
+│  ├─ net/
+│  │  └─ safeFetch.ts                 Public-internet-only page fetch (DNS-checked IPs, redirects, 5 MB cap)
 │  └─ workers/
 │     ├─ ingestionWorker.ts           Job processor for 'ingest_url' queue
 │     ├─ evaluationWorker.ts          Job processor for 'evaluate_content' queue
@@ -169,7 +174,7 @@ flowchart TD
   REC -->|Backlog & Promotions| Q_EVAL
 
   API -->|Accept Suggestion| VAULT
-  API -->|Synergy note / research brief| VAULT
+  API -->|Explicit save: synergy note / research brief| VAULT
   W3 -->|Recovery Writeback| VAULT
 ```
 
@@ -192,7 +197,7 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `NODE_ENV` | `enum` | `'development'` | Application environment (`development`, `production`, `test`). |
-| `HOST` | `string` | `'127.0.0.1'` | Network bind address. Localhost recommended for security. |
+| `HOST` | `string` | `'127.0.0.1'` | Network bind address. Must be `127.0.0.1`, `localhost` or `::1`; startup fails otherwise (the API has no authentication). |
 | `PORT` | `number` | `3000` | HTTP listen port. |
 | `DATABASE_URL` | `string` | `postgres://loom:loompassword@localhost:5432/loomdb` | PostgreSQL connection URI. |
 | `OLLAMA_URL` | `string` | `http://127.0.0.1:11434` | Ollama service endpoint. |
@@ -260,6 +265,7 @@ erDiagram
     text notes_content
     jsonb note_titles
     vector_1024 embedding
+    text embedding_model
     timestamp captured_at
   }
 
@@ -271,6 +277,7 @@ erDiagram
     text note_title
     text content_snippet
     vector_1024 embedding
+    text embedding_model
     timestamp created_at
   }
 
@@ -347,7 +354,7 @@ Loom monitors two top-level directories: `Projects/` and `Proyectos/`.
 - **No mandatory `project.md`**: Loom does not force a rigid `project.md` file. The project thesis and title are derived heuristically:
   1. If a note carries the `#project` tag (inline or frontmatter `tags: [project]`), its text is the thesis and its H1 title becomes the project title.
   2. Otherwise the project title is the folder name and the thesis is the first 800 characters of the concatenated notes.
-- **Excluded patterns**: Hidden files/folders (`.obsidian/`, `.trash/`, `.git/`), attachments, and Loom's own output file (`suggestions.md`) are strictly ignored during parsing and hashing.
+- **Excluded patterns**: Hidden files/folders (`.obsidian/`, `.trash/`, `.git/`), attachments, Loom's own output file (`suggestions.md`) and notes Loom generated (frontmatter `loom_generated: true`, or `type: research_brief` / `cross_project_synergy` from earlier versions) are ignored during parsing and hashing, so generated text never feeds back into project context.
 
 ### 7.2 Parser (`parser.ts`)
 - Strips YAML frontmatter anchored at file start.
@@ -386,9 +393,11 @@ Policy: **Only accepted suggestions write to the vault.**
   > **Fuente:** [Título del Artículo](https://example.com/article)
   > **Feedback:** Considerar también el contraargumento de la página 4.
   ```
-- Writeback first claims the row with a conditional update (`UPDATE action_suggestions SET written_to_vault = true WHERE id = ? AND status = 'accepted' AND written_to_vault = false RETURNING id`), so concurrent writers cannot both append.
-- The callout is then appended to `<project>/suggestions.md`. If `appendFile` throws, the flag is reset and a `sync_suggestions` job retries later.
-- **Known issue:** if the process dies between the claim and the append, the flag stays `true` and the callout is never written. Model text is written as-is apart from the `> ` prefix on each line (no sanitization of embeds, links or code blocks).
+- Each callout ends with a hidden Obsidian comment, `%% loom:<suggestion id> %%`.
+- The write runs in a transaction that locks the suggestion row (`SELECT … FOR UPDATE`): read `suggestions.md`; append the callout only if its marker is absent; then set `written_to_vault = true`. A crash after the append leaves the marker, so the retry only sets the flag (invariant I5).
+- If the write fails, the flag stays `false` and a `sync_suggestions` job retries; every pending writeback is also retried when the server starts.
+- The project folder must already exist inside the vault; Loom never creates it (this matters after switching vaults).
+- Model text is passed through `sanitizeForVault()`: code fences, `![[embeds]]` and remote images, raw HTML, Templater tags, `%%` comments, forged `[!callouts]` and Dataview inline queries are neutralized; prose, links and `[[wikilinks]]` are kept.
 
 ---
 
@@ -402,13 +411,14 @@ URL Ingest (UI / Extension)
 URL Normalization (Strip UTM, fbclid, canonicalize YouTube variants)
   │
   ▼
-DB Insert (contents: status='pending', increment consumption_seq)
+DB Insert (new URL only; a known URL is not re-queued unless its previous ingest failed — invariant I6)
   │
   ▼
 pg-boss 'ingest_url' job
   │
   ├───► YouTube: oEmbed metadata + youtube-transcript
-  └───► Web Page: Fetch (15s timeout, 5MB cap, content-type check) + Readability
+  └───► Web Page: fetchPublicPage (every resolved IP and redirect hop must be public, 15s timeout,
+         5MB streamed cap, content-type check) + Readability
   │
   ▼
 LLM Summarization (Spanish summary schema, raw text capped at 50k chars; only the summary is embedded)
@@ -485,8 +495,9 @@ For each candidate project under the 0.6 cutoff:
    ```
 3. **Target File Resolution**: If the LLM specifies `targetFile`, it is stored as-is (not validated against the project's notes); otherwise it falls back to `matchedNotePath`, or finally `ideas.md`.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Loom automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
-5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`. **Known issue:** re-ingesting a URL increments `consumption_seq`, so it re-runs evaluation and can create a second pending suggestion. This violates invariant I6 and is scheduled for Phase 2.
+5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`).
 6. **Failure handling** — **Known issue:** an LLM error for one project is logged and skipped; the job still completes, so it is not retried and no failure is recorded in telemetry.
+7. **Embedding model**: only embeddings produced by the current `EMBED_MODEL` are compared; contents and snapshots from another model are skipped until re-embedded (invariant I7).
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
 When a project's notes change:
@@ -538,11 +549,12 @@ When re-evaluating a stale suggestion:
 ### 11.1 Cross-Project Thematic Synergies (`/api/projects/synergies`)
 Loom discovers hidden connections across separate projects by calculating the cosine distance between notes of different projects (`project_note_snapshots` where `pA.id != pB.id`):
 - `GET /api/projects/synergies`: Returns high-affinity project pairs, closest matching notes, and semantic similarity scores.
-- `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects, synthesize shared challenges and mutual benefits, and write a bridge note `Projects/synergy_<ProjectA>_<ProjectB>.md` (always under `Projects/`). `saveToVault` defaults to `true` and the UI always sends `true`; `forceRegenerate` overwrites an existing note. If a bridge note already exists, it is returned from disk instead of calling the LLM.
-- **Known issues:** the note-to-note comparison and the notes sent to the LLM are taken from all historical snapshots, not just the latest one, so deleted notes can still appear. The LLM markdown is written without sanitization.
+- `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects and returns a bridge note (shared problems, mutual benefits, markdown). It does **not** write to the vault. If a bridge note already exists on disk, it is returned instead of calling the LLM (`forceRegenerate` skips that).
+- `POST /api/projects/synergies/save` (the **Guardar en Obsidian** button): writes the note shown in the UI as `synergy_<A>_<B>.md` in project A's projects directory (`Projects/` or `Proyectos/`), sanitized and marked `loom_generated: true`. An existing file is never overwritten; a timestamped name is used instead.
+- **Known issue:** the note-to-note comparison and the notes sent to the LLM are taken from all historical snapshots, not just the latest one, so deleted notes can still appear.
 
 ### 11.2 Project Backlog Synthesis (`/api/projects/:id/synthesize`)
-Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM, and writes it to `<project>/research_brief.md`, replacing any existing file of that name. The project is then re-reconciled, so the brief becomes part of the project's notes and embeddings. **Known issue:** this write happens without a separate confirmation and overwrites manual edits.
+Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM and returns it without writing anything. `POST /api/projects/:id/synthesis/save` (the **Guardar en Obsidian** button) writes it to the project folder as `research_brief.md`, or a timestamped name if that file exists. Saved briefs are sanitized, marked `loom_generated: true`, and excluded from the project's notes and embeddings.
 
 ### 11.3 Archive & Vault Research Partner ("Consultor" - `/api/library/consult`)
 A dedicated research consultant that reasons over your entire intellectual repository:
@@ -560,7 +572,7 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 ### 1. Ingestion & Contents
 - `POST /api/ingest`
   - Body: `{ url: string, title?: string, selection?: string }` (public `http(s)` URLs only)
-  - Returns: `202 { message, contentId, status: 'pending' }` for a new URL, `200` with the same shape when re-queued.
+  - Returns: `202 { message, contentId, status: 'pending' }` for a new URL. For a known URL, `200` with the same shape: `status: 'pending'` if a failed ingest is retried, otherwise its current status (nothing is re-queued).
 - `GET /api/contents`
   - Query: `status?`, `limit?` (default 30), `offset?` (default 0)
   - Returns: List of contents with evaluation counts, verdicts, spatial affinity flag, and active processing status.
@@ -580,11 +592,17 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
   - Query: `minSimilarity?` (default 20), `limit?` (default 15)
   - Returns: Cross-project thematic pairs with closest note matches and similarity scores.
 - `POST /api/projects/synergies/explore`
-  - Body: `{ projectAId, projectBId, saveToVault?, forceRegenerate? }`
-  - Returns: Comprehensive synthesis markdown, shared problems, mutual benefits, and Obsidian bridge file path.
+  - Body: `{ projectAId, projectBId, forceRegenerate? }`
+  - Returns: `{ success, bridgeTitle, overview, sharedProblems, mutualBenefits, markdownContent, filePath, writtenToVault, isCached }`. Writes nothing; `filePath` is set only when an existing note was read from disk.
+- `POST /api/projects/synergies/save`
+  - Body: `{ projectAId, projectBId, bridgeTitle, overview, sharedProblems, mutualBenefits, markdownContent }`
+  - Returns: `{ success, filePath }` (vault-relative path of the new note).
 - `POST /api/projects/:id/synthesize`
   - No body.
-  - Returns: `{ success, filePath, title, executiveSummary, suggestedNextSteps, acceptedCount, writtenToVault }`; `400` when the project has no accepted suggestions.
+  - Returns: `{ success, filePath: null, title, executiveSummary, markdownContent, suggestedNextSteps, acceptedCount, writtenToVault: false }`; `400` when the project has no accepted suggestions.
+- `POST /api/projects/:id/synthesis/save`
+  - Body: `{ title, executiveSummary, markdownContent, suggestedNextSteps, acceptedCount? }`
+  - Returns: `{ success, filePath }`.
 
 ### 4. Suggestions & Triage
 - `GET /api/suggestions`
@@ -648,12 +666,18 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
   - `tests/parser.test.ts`: Markdown parsing, frontmatter extraction, inline `#project` hashtags.
   - `tests/youtube_ingest.test.ts`: YouTube URL canonicalization, Shorts/embed mappings.
   - `tests/extension_offline.test.ts`: Extension manifest and offline-queue source checks.
+  - `tests/request_guard.test.ts`, `tests/safe_fetch.test.ts`: Host/Origin guard and SSRF protection (local HTTP servers).
+  - `tests/vault_sanitize.test.ts`, `tests/generated_notes.test.ts`, `tests/env_writer.test.ts`: vault-write sanitization, generated notes, `.env` writer.
+  - `tests/invariants.test.ts`: invariants I2, I3 and I4 with mocked LLM SDKs.
 - **Integration Tests (Require Docker / Testcontainers; most also need a local Ollama with `bge-m3` and `qwen2.5:7b-instruct`)**:
   - `tests/db.test.ts`: Database schema validation, pgvector HNSW cosine KNN operations.
   - `tests/evaluation.test.ts` & `tests/ingestion.test.ts`: Worker pipeline tests.
   - `tests/phase6_lifecycle.test.ts` & `tests/phase7_ui.test.ts`: API route tests via Fastify `inject`.
   - `tests/settings_vault.test.ts`: Vault path configuration and reconciliation tests.
   - `tests/vector_gated_staleness.test.ts`: Staleness detection and re-evaluation.
+  - `tests/writeback_recovery.test.ts`, `tests/tentative_accept_race.test.ts`: crash-safe, single-callout writeback (I5).
+  - `tests/reingest_idempotency.test.ts`, `tests/embedding_model.test.ts`: invariants I6 and I7.
+  - `tests/error_responses.test.ts`: 500 responses do not leak internal errors.
   - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks.
   - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Requires a real `GEMINI_API_KEY`; skipped otherwise.
 - There is no fake LLM provider yet, so AI behavior is only tested against live models (Phase 5).
@@ -664,8 +688,8 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
 
 | Area | Current Behavior | Future Consideration |
 |---|---|---|
-| **Authentication** | Server binds to `127.0.0.1` by default, with no auth token and no Host/Origin validation (only the settings routes check `Origin`). A web page can reach the API through DNS rebinding. | Phase 2: Host/Origin validation and a per-install token. |
+| **Authentication** | No auth token. The server only binds to loopback, rejects any `Host` other than `127.0.0.1`/`localhost`/`[::1]` (blocks DNS rebinding), and rejects state-changing requests from foreign origins; the extension origin may only call `/api/ingest` (`src/api/requestGuard.ts`). | A per-install token if LAN access is ever needed. |
 | **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 15,000 chars) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus notes for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
-| **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts a new `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. Concurrent accepts can insert two rows. | Phase 2: uniqueness on `evaluation_id`. |
-| **Ingestion SSRF guard** | Private/loopback hostnames are rejected by string matching only; redirects are followed and DNS is not checked. | Phase 2: DNS-resolved IP validation and per-hop redirect checks. |
+| **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
+| **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
 | **Multi-Vault Support** | Loom operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |
