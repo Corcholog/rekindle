@@ -179,6 +179,20 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ---
 
+## Evaluation
+
+`pnpm eval` runs Loom's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (31 actionable, 20 tentative, 325 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
+
+| | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | Qwen 2.5 7B (local) |
+|---|---|---|---|
+| Triage macro-F1 | 0.56 | **0.74** | 0.61 |
+| `actionable` precision / recall | 44% / 100% | **94% / 97%** | 100% / 39% |
+| Target-note accuracy (19 pairs) | 37% | 42% | 32% |
+| Latency p50 / p95 | 4.2 / 6.7 s | **2.1 / 4.1 s** | 3.4 / 7.6 s |
+| Cost of 215 triage calls | free tier (4 overloads retried) | about $0.18 at list price | $0 |
+
+DeepSeek leading is why the default chain is `deepseek,gemini,ollama`. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+
 ## Security model
 
 Loom is a single-user, local-only tool:
@@ -189,7 +203,9 @@ Loom is a single-user, local-only tool:
 
 ## Known limitations
 
-- **Thresholds are not calibrated, and suggestion quality has not been measured.** There is no evaluation dataset yet. Retrieval and suggestion quality are *not measured*.
+- **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so almost every article costs several LLM calls. A threshold sweep is the next measurement to make.
+- **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.18–0.38 and the right target note is chosen in 32–42% of cases (small samples: 20 and 19 pairs).
+- **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts and target notes are scored, against one person's labels.
 - **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the error is logged and that pair is skipped until the project changes.
 - **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
 - **Synergies may include deleted notes**, because they compare notes from older project snapshots too.

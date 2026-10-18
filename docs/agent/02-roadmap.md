@@ -7,7 +7,7 @@ Order rationale: less code first (cleanup) makes every later step cheaper; secur
 - [x] **Phase 0 — Audit** (`docs/agent/01-audit.md`). Gate: owner reviews `docs/audit/AUDIT_REPORT.md` and decides what proceeds.
 - [x] **Phase 1 — Cleanup: dead code and legacy**
 - [x] **Phase 2 — Fix Critical and High findings**
-- [ ] **Phase 3 — Evaluation harness**
+- [x] **Phase 3 — Evaluation harness**
 - [ ] **Phase 4 — AI observability**
 - [ ] **Phase 5 — CI, integration and failure-scenario tests, threat model**
 - [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test**

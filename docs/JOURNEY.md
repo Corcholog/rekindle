@@ -58,6 +58,26 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - On the Gemini e2e run after Phase 2, Gemini answered HTTP 503 ("model is currently experiencing high demand") twice. Loom fell back to local Ollama and the test still passed, so the provider fallback was exercised live.
   - I committed one test that did not typecheck (`16e5b63` fixed it). Since then, typecheck and lint run before every commit.
 
+### 2026-10-18 — Phase 3: evaluation harness and a DeepSeek provider chain
+- **Context:** Until now nothing showed whether Loom picked the right projects or whether a model change helped. The owner also wanted DeepSeek (`deepseek-flash`, about $2 of credit) as the first LLM, with Gemini (free tier) and local Qwen as fallbacks.
+- **What happened:**
+  - Built the provider chain (`LLM_PROVIDERS`, DeepSeek with thinking explicitly off, one retry on malformed output, per-attempt records) and a harness (`pnpm eval`) that runs the real reconciler, retrieval and evaluator on a throwaway Postgres.
+  - Dataset: 47 articles (29 real, from the owner's URLs; 18 synthetic) against 8 projects (2 real with 5 notes in total, 6 synthetic distractors from areas the owner named), 376 labeled pairs.
+  - Compared Gemini, DeepSeek and Qwen alone, each on identical summaries and retrieval, then flipped the default chain to DeepSeek → Gemini → Ollama in a separate commit.
+  - The owner approved a read-only copy of the two real projects into the git-ignored `evals/private/`. This is the one exception to "never touch the real vault"; the vault itself was only read.
+- **Alternatives considered:**
+  - Switching to DeepSeek first and measuring afterwards: rejected, to get a real before/after.
+  - Evaluating the production chain (with fallbacks) instead of single providers: rejected for quality comparison, because a fallback silently replaces one model's answers with another's; chains are covered by unit tests instead.
+  - Letting the agent propose labels: rejected; every verdict is the owner's.
+- **Evidence:** commits `25a5df4`…`56fd36e`; `evals/REPORT.md`; first-pass and recomputed result files in `evals/results/`.
+- **Outcome / lesson:**
+  - **Label quality changed the ranking.** The owner labeled quickly the first time (18 actionable / 8 tentative / 350 irrelevant). With those labels Qwen came first (macro-F1 0.61, DeepSeek 0.53, Gemini 0.43). After the owner re-checked every label with the review page (31 / 20 / 325) DeepSeek came first (0.74, Gemini 0.56, Qwen 0.61). A model comparison is only as good as its labels.
+  - Qwen is extremely conservative (100% precision, 39% recall on `actionable`); Gemini finds everything but over-calls (44% precision); DeepSeek balances both (94% / 97%).
+  - The default switch followed the pre-agreed rule (at least as good on triage and target-note accuracy, at lower cost or latency): macro-F1 0.74 vs 0.56, target note 42% vs 37%, p50 latency 2.1 s vs 4.2 s, no overloads.
+  - The 0.6 retrieval threshold lets 94% of unrelated articles through, so every article costs several LLM calls; a threshold sweep is the biggest open lever.
+  - Weak spots for all models: `tentative` (F1 0.18–0.38 on 20 pairs) and target-note choice (32–42% on 19 pairs). Not done yet: thinking-on for the action step (needs splitting triage and action into two calls), and suggestion-quality ratings (not measured).
+  - Process lessons: a Gemini 503 ("high demand") would have been scored as a wrong "irrelevant", so 5xx errors are retried in evals; the first Gemini run let Qwen answer one call through the fallback, which led to single-provider eval configs; I once committed with two failing tests because my command chain used `;` instead of `&&`; with DeepSeek first in the default chain, tests would have used the real key, so tests now run with cloud keys blanked unless `LOOM_LIVE_TESTS=1`.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -103,10 +123,19 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-17 | Phase 2 fixes | Line / branch / function coverage of `src/`, no Ollama/Gemini | 74.75% / 59.68% / 74.35% | 84.20% / 67.79% / 81.57% | `pnpm test:coverage --exclude tests/ollama.test.ts`, unreachable `OLLAMA_URL` |
 | 2026-10-17 | Phase 2 fixes | Tests with live Ollama, no Gemini (passed / failed / skipped) | 66 / 0 / 1 | 123 / 0 / 1 | `pnpm test:coverage` with `GEMINI_API_KEY=` |
 | 2026-10-17 | Phase 2 fixes | Tests without Ollama/Gemini (passed / failed / skipped) | 56 / 8 / 1 | 114 / 7 / 1 | offline command above; every failure needs a live model |
+| 2026-10-18 | Label review (owner re-checked all 376 pairs) | Triage macro-F1, DeepSeek Flash | 0.53 | 0.74 | `pnpm eval run evals/private --config evals/configs/deepseek-flash.json --replay` |
+| 2026-10-18 | Label review | Triage macro-F1, Gemini 3.1 Flash Lite | 0.43 | 0.56 | `…baseline-gemini.json --replay` |
+| 2026-10-18 | Label review | Triage macro-F1, Qwen 2.5 7B | 0.61 | 0.61 | `…qwen-local.json --replay` |
+| 2026-10-18 | Default chain Gemini → DeepSeek first | Triage macro-F1 / target-note accuracy / p50 latency (same labels) | 0.56 / 37% / 4.2 s (Gemini) | 0.74 / 42% / 2.1 s (DeepSeek) | same commands; `evals/REPORT.md` |
+| 2026-10-18 | Retrieval, threshold 0.6, k=3 | Recall / precision / false retrieval | not measured | 91% / 55% / 94% | `pnpm eval run … --replay` |
+| 2026-10-18 | DeepSeek spend | Estimated list-price cost, 215 triage calls | not measured | about $0.18 (summaries about $0.06 more) | token counts in the result files; not a billed amount |
+| 2026-10-18 | Phase 3 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 123 / 1 | 186 / 2 | `pnpm test:coverage`; lines 84.06% → 85.28% |
 | 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |
 
 ## Dead ends and things that did not work
 
 - **ONNX embeddings in Node (`@huggingface/transformers`, `paraphrase-multilingual-MiniLM-L12-v2`):** the Phase 0 spike recorded ≈665 MB RSS against a 500 MB budget, a NO-GO (ADR 002; this number was not re-measured). Loom moved to Ollama `bge-m3`. The spike code was removed in `7c1eb33`.
 - **"Ask My Library" (top-5 RAG with `[1]`, `[2]` citations):** replaced by the full-catalog Consultor, then removed in `07f0890`. Open question for Phase 3: the Consultor sends the whole catalog in one prompt, which will not scale.
+- **Recording an eval fixture with a throwaway script:** the first attempt (a top-level-await `.ts` file) failed on the CJS output format and went against the owner's rule that checks live in the project; the CLI's `--record` flag replaced it.
+- **Evaluating the production chain as one unit:** fallbacks hid which model had answered; evals use one provider per config.
 - **Bookmarklet clipper:** convenient, but it required an open CORS policy on `/api/ingest`. Removed in favor of the extension (`7be41b1`).
