@@ -39,6 +39,8 @@ const ProviderSpecSchema = z.object({
   model: z.string().optional(),
   /** DeepSeek thinking mode; off unless a config opts in. */
   thinking: z.boolean().optional(),
+  /** Minimum time between calls to this provider, to stay under its requests-per-minute limit. */
+  minIntervalMs: z.number().int().nonnegative().optional(),
 });
 export type ProviderSpec = z.infer<typeof ProviderSpecSchema>;
 

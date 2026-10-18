@@ -44,7 +44,10 @@ export class GeminiProvider implements ChatProvider {
         });
       }
       const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-      throw new ProviderError(timedOut ? 'timeout' : 'http', timedOut ? 'Gemini no respondió a tiempo' : 'Gemini devolvió un error');
+      // Google's error bodies describe the problem (model, quota, safety) and carry no credentials
+      throw new ProviderError(timedOut ? 'timeout' : 'http', timedOut
+        ? 'Gemini no respondió a tiempo'
+        : `Gemini devolvió un error (HTTP ${err?.status ?? '?'}): ${message.slice(0, 300)}`);
     }
 
     const data = parseModelJson(res.text, schema);

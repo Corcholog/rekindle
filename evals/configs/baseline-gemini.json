@@ -1,7 +1,7 @@
 {
   "name": "baseline-gemini",
-  "description": "Production chain today: Gemini, then local Qwen. Summaries by DeepSeek (identical across configs).",
-  "providers": [{ "name": "gemini" }, { "name": "ollama" }],
+  "description": "Gemini 3.1 Flash Lite alone (the first link of today's production chain), paced under the free-tier limit of 15 requests per minute. No fallback, so every answer comes from Gemini. Summaries by DeepSeek (identical across configs).",
+  "providers": [{ "name": "gemini", "minIntervalMs": 4500 }],
   "summaryProviders": [{ "name": "deepseek", "thinking": false }],
   "k": 3,
   "threshold": 0.6,

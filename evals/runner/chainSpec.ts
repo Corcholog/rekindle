@@ -3,12 +3,21 @@ import { buildProviderChain } from '../../src/ai/chain';
 import { ChatProvider, Completion, CompletionOptions } from '../../src/ai/types';
 import { ProviderSpec } from '../schema';
 
-/** Fixes the options of a provider (for example DeepSeek thinking) as declared in the config. */
-class ConfiguredProvider implements ChatProvider {
-  constructor(private inner: ChatProvider, private fixed: CompletionOptions) {}
+/**
+ * Applies what the config declares for a provider: fixed options (for example DeepSeek thinking)
+ * and pacing, so calls stay under the provider's requests-per-minute limit.
+ */
+export class ConfiguredProvider implements ChatProvider {
+  private lastStart = 0;
+
+  constructor(private inner: ChatProvider, private fixed: CompletionOptions, private minIntervalMs = 0) {}
   get name() { return this.inner.name; }
   get model() { return this.inner.model; }
-  complete<S extends z.ZodTypeAny>(system: string, user: string, schema: S, options?: CompletionOptions): Promise<Completion<z.infer<S>>> {
+
+  async complete<S extends z.ZodTypeAny>(system: string, user: string, schema: S, options?: CompletionOptions): Promise<Completion<z.infer<S>>> {
+    const wait = this.lastStart + this.minIntervalMs - Date.now();
+    if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+    this.lastStart = Date.now();
     return this.inner.complete(system, user, schema, { ...options, ...this.fixed });
   }
 }
@@ -27,6 +36,7 @@ export function buildChainFromSpecs(specs: ProviderSpec[], env: NodeJS.ProcessEn
       overrides[modelKey] = spec.model;
     }
     const [provider] = buildProviderChain({ ...env, ...overrides });
-    return spec.thinking === undefined ? provider : new ConfiguredProvider(provider, { thinking: spec.thinking });
+    if (spec.thinking === undefined && !spec.minIntervalMs) return provider;
+    return new ConfiguredProvider(provider, spec.thinking === undefined ? {} : { thinking: spec.thinking }, spec.minIntervalMs);
   });
 }

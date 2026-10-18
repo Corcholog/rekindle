@@ -1,7 +1,7 @@
 {
   "name": "deepseek-flash",
-  "description": "Proposed chain: DeepSeek Flash with thinking off, then Gemini, then Qwen. Price is DeepSeek's list price at peak hours with a cache miss (api-docs.deepseek.com/quick_start/pricing, checked 2026-10-18), so it is an upper bound.",
-  "providers": [{ "name": "deepseek", "thinking": false }, { "name": "gemini" }, { "name": "ollama" }],
+  "description": "DeepSeek Flash alone with thinking off, no fallback. Price is DeepSeek's list price at peak hours with a cache miss (api-docs.deepseek.com/quick_start/pricing, checked 2026-10-18), so it is an upper bound.",
+  "providers": [{ "name": "deepseek", "thinking": false }],
   "summaryProviders": [{ "name": "deepseek", "thinking": false }],
   "k": 3,
   "threshold": 0.6,
