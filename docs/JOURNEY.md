@@ -78,6 +78,16 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - Weak spots for all models: `tentative` (F1 0.18–0.38 on 20 pairs) and target-note choice (32–42% on 19 pairs). Not done yet: thinking-on for the action step (needs splitting triage and action into two calls), and suggestion-quality ratings (not measured).
   - Process lessons: a Gemini 503 ("high demand") would have been scored as a wrong "irrelevant", so 5xx errors are retried in evals; the first Gemini run let Qwen answer one call through the fallback, which led to single-provider eval configs; I once committed with two failing tests because my command chain used `;` instead of `&&`; with DeepSeek first in the default chain, tests would have used the real key, so tests now run with cloud keys blanked unless `LOOM_LIVE_TESTS=1`.
 
+### 2026-10-18 — Phase 3 follow-up: how many projects should reach the LLM?
+- **Context:** At the 0.6 distance threshold 94% of unrelated articles still retrieved a project, and every article cost 4.6 LLM calls.
+- **What happened:** Added `pnpm eval:sweep`, a retrieval-only analysis over the candidates stored with each run (no model calls), then verified the most promising cutoff exactly by replaying the three configs with `maxProjects: 3` from the cache (the prompts for the kept pairs are unchanged).
+- **Evidence:** `evals/SWEEP.md`; result files `*-top3-private.json`; commits after `1e67810`.
+- **Outcome / lesson:**
+  - Distance separates relevant from irrelevant pairs only moderately: AUC 0.89, median 0.48 for relevant vs 0.56 for irrelevant pairs. A hard distance cutoff loses relevant pairs quickly (< 0.55 keeps 78% of them at 2.4 calls per article, < 0.50 keeps 57%).
+  - Sending only the 3 closest projects keeps 86% of relevant pairs at 2.5 calls per article (−45%). Measured by replay: DeepSeek macro-F1 0.74 → 0.79, `actionable` recall 97% → 87% (3 of 31 pairs lost), cost of the triage calls about $0.18 → $0.11; Gemini 0.56 → 0.61; Qwen unchanged at 0.61; target-note accuracy unchanged. With 51 relevant pairs the F1 gain is within noise; the cost reduction is not.
+  - The "false retrieval" rate stays at 94% with any rank cutoff, because a rank cutoff always returns something. The retrieval step cannot tell "nothing relevant" from distance alone; the LLM does that. The cutoff's job is cost, not precision.
+  - Not applied to production yet: `TOP_K_PROJECTS_LIMIT` is still 10, pending the owner's decision.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -128,6 +138,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-18 | Label review | Triage macro-F1, Qwen 2.5 7B | 0.61 | 0.61 | `…qwen-local.json --replay` |
 | 2026-10-18 | Default chain Gemini → DeepSeek first | Triage macro-F1 / target-note accuracy / p50 latency (same labels) | 0.56 / 37% / 4.2 s (Gemini) | 0.74 / 42% / 2.1 s (DeepSeek) | same commands; `evals/REPORT.md` |
 | 2026-10-18 | Retrieval, threshold 0.6, k=3 | Recall / precision / false retrieval | not measured | 91% / 55% / 94% | `pnpm eval run … --replay` |
+| 2026-10-18 | Send only the 3 closest projects to the LLM (replay) | LLM calls / DeepSeek macro-F1 / `actionable` recall / triage cost | 215 / 0.74 / 97% / about $0.18 | 118 / 0.79 / 87% / about $0.11 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3.json --replay` |
 | 2026-10-18 | DeepSeek spend | Estimated list-price cost, 215 triage calls | not measured | about $0.18 (summaries about $0.06 more) | token counts in the result files; not a billed amount |
 | 2026-10-18 | Phase 3 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 123 / 1 | 186 / 2 | `pnpm test:coverage`; lines 84.06% → 85.28% |
 | 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |

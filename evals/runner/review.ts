@@ -4,8 +4,8 @@ import { AddressInfo } from 'net';
 import * as path from 'path';
 import { z } from 'zod';
 import { isRequestAllowed } from '../../src/api/requestGuard';
-import { Labels, LabelsSchema, RunDetails, RunDetailsSchema, VerdictSchema } from '../schema';
-import { Dataset, loadDataset, saveLabels, validateLabels } from './dataset';
+import { Labels, LabelsSchema, RunDetails, VerdictSchema } from '../schema';
+import { Dataset, loadDataset, loadRuns, saveLabels, validateLabels } from './dataset';
 import { noteMatches } from './metrics';
 import { predictionsFromDetails, scoreRun } from './scoring';
 
@@ -27,17 +27,6 @@ const LabelUpdateSchema = z.object({
   others: VerdictSchema.nullable().optional(),
   notes: z.string().nullable().optional(),
 });
-
-async function loadRuns(dir: string): Promise<Record<string, RunDetails>> {
-  const runsDir = path.join(dir, 'runs');
-  const files = (await fs.readdir(runsDir).catch(() => [])).filter(f => f.endsWith('.json')).sort();
-  const runs: Record<string, RunDetails> = {};
-  for (const file of files) {
-    const details = RunDetailsSchema.parse(JSON.parse(await fs.readFile(path.join(runsDir, file), 'utf-8')));
-    runs[details.config] = details;
-  }
-  return runs;
-}
 
 function computeMetrics(dataset: Dataset, labels: Labels, runs: Record<string, RunDetails>) {
   return Object.fromEntries(Object.entries(runs).map(([config, details]) => [

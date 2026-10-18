@@ -215,7 +215,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         pairs: {},
       };
 
-      await evaluateContentMatch(content.id, undefined, { threshold: config.threshold });
+      await evaluateContentMatch(content.id, undefined, { threshold: config.threshold, limit: config.maxProjects });
       await saveCaches(); // progress survives an interrupted run
       if (quotaExhausted) {
         throw new Error('Cuota agotada en el proveedor de IA (límite diario). El progreso quedó guardado: vuelve a ejecutar con --record más tarde para continuar.');

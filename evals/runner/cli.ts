@@ -2,7 +2,8 @@ import 'dotenv/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { checkResult, loadThresholds } from './check';
-import { generateLabelSheet, loadDataset, validateLabels } from './dataset';
+import { generateLabelSheet, loadDataset, loadRuns, validateLabels } from './dataset';
+import { renderSweep, sweepRetrieval } from './sweep';
 import { latestPerConfig, loadResults, renderReport } from './report';
 import { RunMode, runEval } from './run';
 
@@ -34,6 +35,7 @@ const USAGE = `Uso: pnpm eval <comando>
   label <dataset> [--check] [--strict] genera labels.yaml vacío o valida el que existe
   check --dataset <nombre> [--config <nombre>] [--thresholds <archivo>]
   review <dataset> [--port N]          página local para ver las respuestas de los modelos y corregir etiquetas
+  sweep <dataset> [--thresholds 0.3,0.4] [--ranks 1,2] [--write]   barrido de umbral de recuperación sin llamar a ningún modelo
   report                               regenera evals/REPORT.md`;
 
 async function main() {
@@ -98,6 +100,22 @@ async function main() {
       const server = await startReviewServer(dir, { port: Number(flags.port ?? 3210) });
       console.log(`Revisión de etiquetas en ${server.url}  (Ctrl+C para terminar)`);
       await new Promise(() => {}); // serve until interrupted
+      break;
+    }
+    case 'sweep': {
+      const dir = positional[0];
+      if (!dir) throw new Error('sweep necesita <dataset>');
+      const dataset = await loadDataset(dir);
+      if (!dataset.labels) throw new Error('El dataset no tiene labels.yaml');
+      const runs = await loadRuns(dir);
+      if (Object.keys(runs).length === 0) throw new Error('No hay ejecuciones en <dataset>/runs: ejecuta pnpm eval run … primero');
+      const thresholds = String(flags.thresholds ?? '0.30,0.35,0.40,0.45,0.50,0.55,0.60').split(',').map(Number);
+      const ranks = String(flags.ranks ?? '1,2,3,4').split(',').filter(Boolean).map(Number);
+      const combos: [number, number][] = [[0.55, 3], [0.50, 3], [0.55, 2]];
+      const result = sweepRetrieval({ projects: dataset.projects.map(p => p.folderPath), cases: dataset.labels.cases, runs, thresholds, ranks, combos });
+      const markdown = renderSweep(path.basename(path.resolve(dir)), result, Object.keys(runs).sort());
+      if (flags.write) { await fs.writeFile('evals/SWEEP.md', markdown, 'utf-8'); console.log('evals/SWEEP.md actualizado.'); }
+      else console.log(markdown);
       break;
     }
     case 'report': {

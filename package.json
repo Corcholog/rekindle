@@ -18,7 +18,8 @@
     "eval:label": "tsx evals/runner/cli.ts label",
     "eval:check": "tsx evals/runner/cli.ts check",
     "eval:report": "tsx evals/runner/cli.ts report",
-    "eval:review": "tsx evals/runner/cli.ts review"
+    "eval:review": "tsx evals/runner/cli.ts review",
+    "eval:sweep": "tsx evals/runner/cli.ts sweep"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.2.0",

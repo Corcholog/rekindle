@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "gitSha": "1e67810",
+    "gitDirty": true,
+    "config": "deepseek-flash-top3",
+    "configHash": "e6d83e5a006b8cc6bfdf5be7487d961ac9e39ca3fddffbdd359816afdfac9e0d",
+    "dataset": "private",
+    "datasetManifestHash": "8f069a86db6913f19fa3fb9fa9a482df5941a46d8f487e67d8aac492f208ca47",
+    "labeledBy": "Giorgio",
+    "mode": "replay",
+    "embeddingModel": "bge-m3",
+    "cases": 47,
+    "labeledPairs": 376,
+    "startedAt": "2026-10-18T14:51:07.244Z"
+  },
+  "retrieval": {
+    "k": 3,
+    "threshold": 0.6,
+    "precisionAtK": 0.5517241379310345,
+    "recallAtK": 0.9051724137931034,
+    "casesWithRelevant": 29,
+    "falseRetrievalRate": 0.9444444444444444,
+    "casesWithoutRelevant": 18
+  },
+  "triage": {
+    "confusion": {
+      "actionable": {
+        "actionable": 27,
+        "tentative": 1,
+        "irrelevant": 3
+      },
+      "tentative": {
+        "actionable": 0,
+        "tentative": 16,
+        "irrelevant": 4
+      },
+      "irrelevant": {
+        "actionable": 1,
+        "tentative": 27,
+        "irrelevant": 297
+      }
+    },
+    "perClass": {
+      "actionable": {
+        "precision": 0.9642857142857143,
+        "recall": 0.8709677419354839,
+        "f1": 0.9152542372881356,
+        "support": 31
+      },
+      "tentative": {
+        "precision": 0.36363636363636365,
+        "recall": 0.8,
+        "f1": 0.5,
+        "support": 20
+      },
+      "irrelevant": {
+        "precision": 0.9769736842105263,
+        "recall": 0.9138461538461539,
+        "f1": 0.9443561208267091,
+        "support": 325
+      }
+    },
+    "macroF1": 0.7865367860382815,
+    "targetNoteAccuracy": 0.42105263157894735,
+    "targetNoteCases": 19
+  },
+  "reliability": {
+    "llmCalls": 118,
+    "attempts": 118,
+    "malformedOutputs": 0,
+    "fallbacks": 0,
+    "failures": 0,
+    "rateLimitHits": 0,
+    "unavailableHits": 0,
+    "rateLimitWaitMs": 0,
+    "latencyMsP50": 2268,
+    "latencyMsP95": 4418
+  },
+  "cost": {
+    "promptTokens": 247785,
+    "completionTokens": 33840,
+    "estimatedUsd": 0.11494350000000002,
+    "note": "0 of 118 LLM calls were made in this run (the rest replayed from cache). Local models are counted as $0."
+  }
+}

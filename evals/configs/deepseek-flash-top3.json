@@ -1,0 +1,25 @@
+{
+  "name": "deepseek-flash-top3",
+  "description": "DeepSeek Flash alone with thinking off, no fallback. Same as deepseek-flash but only the 3 closest projects per article are sent to the model (maxProjects 3). Prompts for the kept pairs are identical, so it replays from the cache.",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3
+}

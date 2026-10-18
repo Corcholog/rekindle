@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import YAML from 'yaml';
-import { Article, ArticleSchema, Labels, LabelsSchema } from '../schema';
+import { Article, ArticleSchema, Labels, LabelsSchema, RunDetails, RunDetailsSchema } from '../schema';
 import { noteMatches, Verdict } from './metrics';
 
 /**
@@ -121,6 +121,18 @@ export async function generateLabelSheet(dir: string): Promise<void> {
   }
 
   await fs.writeFile(path.join(dir, 'labels.yaml'), SHEET_HEADER + YAML.stringify(labels), 'utf-8');
+}
+
+/** Per-config detail files written by `pnpm eval run`, keyed by config name. */
+export async function loadRuns(dir: string): Promise<Record<string, RunDetails>> {
+  const runsDir = path.join(dir, 'runs');
+  const files = (await fs.readdir(runsDir).catch(() => [])).filter(f => f.endsWith('.json')).sort();
+  const runs: Record<string, RunDetails> = {};
+  for (const file of files) {
+    const details = RunDetailsSchema.parse(JSON.parse(await fs.readFile(path.join(runsDir, file), 'utf-8')));
+    runs[details.config] = details;
+  }
+  return runs;
 }
 
 /** Writes labels.yaml atomically (temp file + rename), keeping the explanatory header. */

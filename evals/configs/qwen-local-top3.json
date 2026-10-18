@@ -1,0 +1,24 @@
+{
+  "name": "qwen-local-top3",
+  "description": "Fully local: Qwen 2.5 7B on Ollama. Summaries by DeepSeek (identical across configs). Same as qwen-local but only the 3 closest projects per article are sent to the model (maxProjects 3). Prompts for the kept pairs are identical, so it replays from the cache.",
+  "providers": [
+    {
+      "name": "ollama"
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3
+}
