@@ -33,6 +33,7 @@ const USAGE = `Uso: pnpm eval <comando>
   fetch <dataset>                      descarga las URLs de <dataset>/sources.yaml a articles/
   label <dataset> [--check] [--strict] genera labels.yaml vacío o valida el que existe
   check --dataset <nombre> [--config <nombre>] [--thresholds <archivo>]
+  review <dataset> [--port N]          página local para ver las respuestas de los modelos y corregir etiquetas
   report                               regenera evals/REPORT.md`;
 
 async function main() {
@@ -88,6 +89,15 @@ async function main() {
       const failures = results.flatMap(r => checkResult(r, thresholds));
       if (failures.length > 0) { console.error(failures.map(f => `- ${f}`).join('\n')); process.exitCode = 1; }
       else console.log(`Todas las comprobaciones pasan (${results.length} resultado(s)).`);
+      break;
+    }
+    case 'review': {
+      const dir = positional[0];
+      if (!dir) throw new Error('review necesita <dataset>');
+      const { startReviewServer } = await import('./review');
+      const server = await startReviewServer(dir, { port: Number(flags.port ?? 3210) });
+      console.log(`Revisión de etiquetas en ${server.url}  (Ctrl+C para terminar)`);
+      await new Promise(() => {}); // serve until interrupted
       break;
     }
     case 'report': {

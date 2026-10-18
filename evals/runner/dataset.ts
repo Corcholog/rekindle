@@ -123,6 +123,14 @@ export async function generateLabelSheet(dir: string): Promise<void> {
   await fs.writeFile(path.join(dir, 'labels.yaml'), SHEET_HEADER + YAML.stringify(labels), 'utf-8');
 }
 
+/** Writes labels.yaml atomically (temp file + rename), keeping the explanatory header. */
+export async function saveLabels(dir: string, labels: Labels): Promise<void> {
+  const file = path.join(dir, 'labels.yaml');
+  const temp = `${file}.${process.pid}.tmp`;
+  await fs.writeFile(temp, SHEET_HEADER + YAML.stringify(LabelsSchema.parse(labels)), 'utf-8');
+  await fs.rename(temp, file);
+}
+
 export function validateLabels(dataset: Dataset, options: { strict: boolean }): string[] {
   const errors: string[] = [];
   const labels = dataset.labels;

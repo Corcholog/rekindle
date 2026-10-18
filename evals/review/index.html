@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Revisión de etiquetas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Revisión de etiquetas</h1>
+      <p class="subtitle" id="subtitle">Cargando…</p>
+    </div>
+    <p class="save-state" id="save-state" role="status" aria-live="polite"></p>
+  </header>
+
+  <section class="metrics" id="metrics" aria-label="Métricas con tus etiquetas actuales"></section>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Artículos">
+      <div class="filters" role="radiogroup" aria-label="Filtro de artículos">
+        <button type="button" role="radio" data-filter="all" aria-checked="true">Todos</button>
+        <button type="button" role="radio" data-filter="disagree" aria-checked="false">Con desacuerdos</button>
+        <button type="button" role="radio" data-filter="split" aria-checked="false">Modelos divididos</button>
+      </div>
+      <input type="search" id="search" placeholder="Buscar por título o id…" aria-label="Buscar artículo">
+      <ol class="article-list" id="article-list"></ol>
+    </aside>
+    <main class="detail" id="detail" tabindex="-1"></main>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
