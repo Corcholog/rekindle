@@ -76,6 +76,42 @@ export type EvalConfig = z.infer<typeof ConfigSchema>;
 
 const NullableNumber = z.number().nullable();
 
+/** What one model said about one (article, project) pair, kept privately for the review page. */
+export const PairDetailSchema = z.object({
+  verdict: VerdictSchema,
+  confidence: z.number().nullable(),
+  reasoning: z.string().nullable(),
+  action: z.object({
+    type: z.string(),
+    observation: z.string(),
+    suggestedAction: z.string(),
+    targetFile: z.string(),
+  }).nullable(),
+});
+
+/**
+ * Per-config detail of a run: summaries, retrieval distances and every model answer. It holds
+ * text derived from the owner's notes, so it is written inside the (git-ignored) dataset only.
+ */
+export const RunDetailsSchema = z.object({
+  config: z.string(),
+  configHash: z.string(),
+  generatedAt: z.string(),
+  k: z.number(),
+  threshold: z.number(),
+  articles: z.record(z.string(), z.object({
+    summary: z.string(),
+    retrieval: z.array(z.object({
+      project: z.string(),
+      distance: z.number(),
+      level: z.enum(['note', 'project']),
+      note: z.string().nullable(),
+    })),
+    pairs: z.record(z.string(), PairDetailSchema),
+  })),
+});
+export type RunDetails = z.infer<typeof RunDetailsSchema>;
+
 export const ResultSchema = z.object({
   meta: z.object({
     gitSha: z.string(),

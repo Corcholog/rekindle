@@ -21,7 +21,8 @@ describe('eval harness replay', () => {
     const { runEval } = await import('../evals/runner/run');
     const resultsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evalresults-'));
     dirs.push(resultsDir);
-    return runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', maxUsd: 0, resultsDir });
+    const run = await runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', maxUsd: 0, resultsDir, detailsDir: resultsDir });
+    return { ...run, detailsFile: path.join(resultsDir, 'mini-ollama.json') };
   }
 
   it('reproduces identical numbers twice without any model or network', async () => {
@@ -47,6 +48,28 @@ describe('eval harness replay', () => {
     const llmCalls = fetchSpy.mock.calls.filter(([url]) => !String(url).startsWith('http://127.0.0.1:') || !String(url).includes(':9')).length;
     expect(llmCalls).toBe(0);
     fetchSpy.mockRestore();
+  }, 180000);
+
+  it('keeps a detail file whose re-scoring reproduces the run exactly', async () => {
+    const { result, detailsFile } = await replay();
+    const { RunDetailsSchema } = await import('../evals/schema');
+    const { scoreRun, predictionsFromDetails } = await import('../evals/runner/scoring');
+    const { loadDataset } = await import('../evals/runner/dataset');
+
+    const details = RunDetailsSchema.parse(JSON.parse(await fs.readFile(detailsFile, 'utf-8')));
+    const dataset = await loadDataset(DATASET);
+    const rescored = scoreRun({
+      projects: dataset.projects.map(p => p.folderPath), cases: dataset.labels!.cases,
+      predictions: predictionsFromDetails(details), k: details.k,
+    });
+
+    expect(rescored.triage).toEqual(result.triage);
+    expect(rescored.retrieval).toMatchObject({ precisionAtK: result.retrieval.precisionAtK, recallAtK: result.retrieval.recallAtK });
+    // The page needs the models' reasons, the summaries and the retrieval distances
+    const article = details.articles['muerte-anime'];
+    expect(article.summary.length).toBeGreaterThan(10);
+    expect(article.retrieval[0].distance).toBeGreaterThan(0);
+    expect(Object.values(article.pairs).some(p => (p.reasoning ?? '').length > 5)).toBe(true);
   }, 180000);
 
   it('writes aggregate numbers only: no note or article text reaches the result file', async () => {

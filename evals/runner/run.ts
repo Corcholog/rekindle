@@ -5,13 +5,12 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { z } from 'zod';
 import { ChainError, runChain } from '../../src/ai/chain';
 import { Attempt } from '../../src/ai/types';
-import { ConfigSchema, EvalConfig, EvalResult, ResultSchema } from '../schema';
+import { ConfigSchema, EvalConfig, EvalResult, ResultSchema, RunDetails } from '../schema';
 import { JsonCache, RecordedCall, roundVector, sha256 } from './cache';
 import { buildChainFromSpecs } from './chainSpec';
 import { effectiveVerdict, loadDataset, validateLabels } from './dataset';
-import {
-  classMetrics, confusionMatrix, estimateCostUsd, mean, noteMatches, percentile, precisionRecallAtK, Verdict as VerdictType,
-} from './metrics';
+import { estimateCostUsd, percentile } from './metrics';
+import { predictionsFromDetails, scoreRun } from './scoring';
 
 export type RunMode = 'live' | 'record' | 'replay';
 
@@ -24,6 +23,8 @@ export interface RunOptions {
   /** Require every verdict to be filled in. */
   strict?: boolean;
   resultsDir?: string;
+  /** Where the per-config detail file goes (default: <dataset>/runs, inside the git-ignored dataset). */
+  detailsDir?: string;
   log?: (message: string) => void;
 }
 
@@ -185,7 +186,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     // --- run every labeled article
     const articleById = new Map(dataset.articles.map(a => [a.id, a]));
     const contentIdByArticle = new Map<string, string>();
-    const retrievedByArticle = new Map<string, string[]>();
+    const detailArticles: RunDetails['articles'] = {};
     let done = 0;
 
     const saveCaches = () => Promise.all([embeddingCache.save(), summaryCache.save(), llmCache.save()]);
@@ -207,8 +208,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       }).returning({ id: schema.contents.id });
       contentIdByArticle.set(article.id, content.id);
 
-      const topK = await retrieveCandidates(embedding, { limit: config.k, threshold: config.threshold });
-      retrievedByArticle.set(article.id, topK.map(c => folderById.get(c.projectId)!));
+      const ranked = await retrieveCandidates(embedding, { limit: 20, threshold: config.threshold });
+      detailArticles[article.id] = {
+        summary,
+        retrieval: ranked.map(c => ({ project: folderById.get(c.projectId)!, distance: c.distance, level: c.level, note: c.notePath })),
+        pairs: {},
+      };
 
       await evaluateContentMatch(content.id, undefined, { threshold: config.threshold });
       await saveCaches(); // progress survives an interrupted run
@@ -223,61 +228,38 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     // --- collect predictions
     const evaluationRows = await db.select({
       contentId: schema.evaluations.contentId, verdict: schema.evaluations.verdict, snapshotId: schema.evaluations.projectSnapshotId,
+      confidence: schema.evaluations.confidenceScore, reasoning: schema.evaluations.triageReasoning,
     }).from(schema.evaluations).where(inArray(schema.evaluations.contentId, [...contentIdByArticle.values()]));
     const snapshotRows = await db.select({ id: schema.projectSnapshots.id, projectId: schema.projectSnapshots.projectId }).from(schema.projectSnapshots);
     const projectBySnapshot = new Map(snapshotRows.map(s => [s.id, s.projectId]));
     const suggestionRows = await db.select({
       contentId: schema.actionSuggestions.contentId, projectId: schema.actionSuggestions.projectId, targetFile: schema.actionSuggestions.targetFile,
+      actionType: schema.actionSuggestions.actionType, observation: schema.actionSuggestions.observation,
+      suggestedAction: schema.actionSuggestions.suggestedAction,
     }).from(schema.actionSuggestions).where(inArray(schema.actionSuggestions.contentId, [...contentIdByArticle.values()]));
 
-    const predicted = new Map<string, VerdictType>(); // "article|folder"
+    const articleByContent = new Map([...contentIdByArticle].map(([articleId, contentId]) => [contentId, articleId]));
     for (const row of evaluationRows) {
-      const articleId = [...contentIdByArticle].find(([, id]) => id === row.contentId)![0];
-      const folder = folderById.get(projectBySnapshot.get(row.snapshotId)!)!;
-      if (row.verdict) predicted.set(`${articleId}|${folder}`, row.verdict);
+      if (!row.verdict) continue;
+      const articleId = articleByContent.get(row.contentId)!;
+      const projectId = projectBySnapshot.get(row.snapshotId)!;
+      const folder = folderById.get(projectId)!;
+      const suggestion = suggestionRows.find(x => x.contentId === row.contentId && x.projectId === projectId);
+      detailArticles[articleId].pairs[folder] = {
+        verdict: row.verdict,
+        confidence: row.confidence,
+        reasoning: row.reasoning,
+        action: suggestion
+          ? { type: suggestion.actionType, observation: suggestion.observation, suggestedAction: suggestion.suggestedAction, targetFile: suggestion.targetFile }
+          : null,
+      };
     }
-    const targetOf = (articleId: string, folder: string) => {
-      const contentId = contentIdByArticle.get(articleId);
-      const projectId = [...folderById].find(([, f]) => f === folder)?.[0];
-      return suggestionRows.find(s => s.contentId === contentId && s.projectId === projectId)?.targetFile ?? null;
+
+    const details: RunDetails = {
+      config: config.name, configHash, generatedAt: new Date().toISOString(), k: config.k, threshold: config.threshold,
+      articles: detailArticles,
     };
-
-    // --- metrics
-    const pairs: { expected: VerdictType; predicted: VerdictType }[] = [];
-    const targetChecks: boolean[] = [];
-    const precisions: (number | null)[] = [];
-    const recalls: (number | null)[] = [];
-    let casesWithRelevant = 0;
-    let negativeCases = 0;
-    let falseRetrievals = 0;
-
-    for (const labelCase of cases) {
-      const entries = dataset.projects
-        .map(p => [p.folderPath, effectiveVerdict(labelCase, p.folderPath), labelCase.projects[p.folderPath]] as const)
-        .filter(([, verdict]) => verdict !== null);
-      for (const [folder, verdict, label] of entries) {
-        const expected = verdict as VerdictType;
-        const got = predicted.get(`${labelCase.article}|${folder}`) ?? 'irrelevant'; // not retrieved = irrelevant
-        pairs.push({ expected, predicted: got });
-        if (label?.target_note && expected === 'actionable') {
-          targetChecks.push(got === 'actionable' && noteMatches(label.target_note, targetOf(labelCase.article, folder)));
-        }
-      }
-      const relevant = entries.filter(([, verdict]) => verdict !== 'irrelevant').map(([f]) => f);
-      const retrieved = retrievedByArticle.get(labelCase.article) ?? [];
-      if (relevant.length > 0) {
-        casesWithRelevant++;
-        const { precision, recall } = precisionRecallAtK(retrieved, relevant, config.k);
-        precisions.push(precision);
-        recalls.push(recall);
-      } else {
-        negativeCases++;
-        if (retrieved.length > 0) falseRetrievals++;
-      }
-    }
-
-    const matrix = confusionMatrix(pairs);
-    const { perClass, macroF1 } = classMetrics(matrix);
+    const score = scoreRun({ projects: dataset.projects.map(p => p.folderPath), cases, predictions: predictionsFromDetails(details), k: config.k });
     const triageEntries = sink.filter(e => e.phase === 'triage');
     const allAttempts = sink.flatMap(e => e.attempts);
     const firstProvider = config.providers[0].name;
@@ -302,26 +284,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         labeledBy: labels.labeled_by,
         mode: options.mode,
         embeddingModel: embedModel,
-        cases: cases.length,
-        labeledPairs: pairs.length,
+        cases: score.cases,
+        labeledPairs: score.labeledPairs,
         startedAt: new Date().toISOString(),
       },
-      retrieval: {
-        k: config.k,
-        threshold: config.threshold,
-        precisionAtK: mean(precisions),
-        recallAtK: mean(recalls),
-        casesWithRelevant,
-        falseRetrievalRate: negativeCases > 0 ? falseRetrievals / negativeCases : null,
-        casesWithoutRelevant: negativeCases,
-      },
-      triage: {
-        confusion: matrix,
-        perClass,
-        macroF1,
-        targetNoteAccuracy: targetChecks.length > 0 ? targetChecks.filter(Boolean).length / targetChecks.length : null,
-        targetNoteCases: targetChecks.length,
-      },
+      retrieval: { ...score.retrieval, threshold: config.threshold },
+      triage: score.triage,
       reliability: {
         llmCalls: triageEntries.length,
         attempts: triageEntries.reduce((s, e) => s + e.attempts.length, 0),
@@ -349,6 +317,10 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const stamp = result.meta.startedAt.replace(/[:.]/g, '-');
     const resultFile = path.join(resultsDir, `${stamp}-${result.meta.gitSha}-${config.name}-${result.meta.dataset}.json`);
     await fs.writeFile(resultFile, JSON.stringify(result, null, 2) + '\n', 'utf-8');
+
+    const detailsDir = options.detailsDir ?? path.join(dataset.dir, 'runs');
+    await fs.mkdir(detailsDir, { recursive: true });
+    await fs.writeFile(path.join(detailsDir, `${config.name}.json`), JSON.stringify(details, null, 2), 'utf-8');
 
     await saveCaches();
     await pool.end();

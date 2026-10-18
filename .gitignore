@@ -20,3 +20,4 @@ docs/audit/
 
 # Private eval data: real notes, article texts, labels and caches (never committed)
 evals/private/
+evals/dataset/runs/
