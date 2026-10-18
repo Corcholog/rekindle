@@ -137,6 +137,7 @@ With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), t
 | `pnpm lint` | ESLint (`@typescript-eslint`) |
 | `pnpm test` | Vitest. Offline unit tests run instantly; integration tests need Docker, and most also need Ollama with both models. |
 | `pnpm test:coverage` | Same, with v8 coverage for `src/` |
+| `LOOM_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a cloud LLM |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |

@@ -30,9 +30,11 @@ vi.mock('@langchain/ollama', () => ({
 
 const schema = z.object({ answer: z.string() });
 
-async function loadProvider(geminiKey: string) {
+// Every cloud key is stubbed explicitly: dotenv may have loaded real ones from .env
+async function loadProvider(geminiKey: string, deepseekKey = '') {
   vi.resetModules();
   vi.stubEnv('GEMINI_API_KEY', geminiKey);
+  vi.stubEnv('DEEPSEEK_API_KEY', deepseekKey);
   const { AiProvider } = await import('../src/ai/aiProvider');
   return new AiProvider();
 }
@@ -67,7 +69,21 @@ describe('I2: no outbound LLM traffic without a cloud API key', () => {
     fetchSpy.mockRestore();
   });
 
-  it('control: uses Gemini when a key is set', async () => {
+  it('control: uses DeepSeek first when its key is set', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"answer":"cloud"}' } }], usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }), { status: 200 }));
+    const provider = await loadProvider('test-gemini-key', 'test-deepseek-key');
+    const result = await provider.evaluateContent('sistema', 'texto', schema);
+
+    expect(result.model).toBe('deepseek:deepseek-flash');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(geminiGenerate).not.toHaveBeenCalled();
+    expect(ollamaInvoke).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('control: uses Gemini when it is the only key set', async () => {
     const provider = await loadProvider('test-key');
     const result = await provider.evaluateContent('sistema', 'texto', schema);
 
