@@ -37,7 +37,9 @@ export const env = parseEnv(process.env);
 export const PROJECT_DIR_NAMES = ['Projects', 'Proyectos'] as const;
 
 export const VECTOR_DISTANCE_THRESHOLD = 0.6;
-export const TOP_K_PROJECTS_LIMIT = 10;
+// Closest projects handed to the LLM per article. Chosen with evals/SWEEP.md: 3 keeps 86% of the
+// relevant pairs at 45% fewer calls than 10.
+export const TOP_K_PROJECTS_LIMIT = 3;
 export const STALE_DRIFT_THRESHOLD = 0.04;
 export const PROMOTION_DELTA_THRESHOLD = 0.08;
 export const NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50;

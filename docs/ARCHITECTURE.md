@@ -216,7 +216,7 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 ### Semantic Engine Constants (`src/config.ts`)
 - `PROJECT_DIR_NAMES = ['Projects', 'Proyectos']`: Recognised top-level vault project directories.
 - `VECTOR_DISTANCE_THRESHOLD = 0.6`: Cosine distance cutoff for initial vector pre-filtering in evaluations.
-- `TOP_K_PROJECTS_LIMIT = 10`: Maximum number of candidate project snapshots evaluated per content.
+- `TOP_K_PROJECTS_LIMIT = 3`: Maximum number of candidate projects the LLM evaluates per content (the closest ones). On the owner-labeled eval set, 3 keeps 86% of the relevant pairs at 45% fewer LLM calls than 10 (`evals/SWEEP.md`).
 - `STALE_DRIFT_THRESHOLD = 0.04`: Minimum cosine drift between evaluated snapshot and current snapshot to trigger staleness flagging (`isStale`).
 - `PROMOTION_DELTA_THRESHOLD = 0.08`: Cosine similarity improvement needed to re-evaluate and promote a tentative content after project updates.
 - `NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50`: Absolute note affinity cutoff triggering tentative promotion when a new note is added.
@@ -478,7 +478,7 @@ LEFT JOIN matching_notes mn ON ls.project_id = mn.project_id
 WHERE p.is_active = true
   AND (mn.note_path IS NOT NULL OR (ls.embedding <=> :contentEmbedding::vector) < 0.6)
 ORDER BY best_distance ASC
-LIMIT 10;
+LIMIT 3; -- TOP_K_PROJECTS_LIMIT
 ```
 
 ### Step 2: Unified LLM Synthesis & Note Targeting

@@ -86,7 +86,9 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - Distance separates relevant from irrelevant pairs only moderately: AUC 0.89, median 0.48 for relevant vs 0.56 for irrelevant pairs. A hard distance cutoff loses relevant pairs quickly (< 0.55 keeps 78% of them at 2.4 calls per article, < 0.50 keeps 57%).
   - Sending only the 3 closest projects keeps 86% of relevant pairs at 2.5 calls per article (−45%). Measured by replay: DeepSeek macro-F1 0.74 → 0.79, `actionable` recall 97% → 87% (3 of 31 pairs lost), cost of the triage calls about $0.18 → $0.11; Gemini 0.56 → 0.61; Qwen unchanged at 0.61; target-note accuracy unchanged. With 51 relevant pairs the F1 gain is within noise; the cost reduction is not.
   - The "false retrieval" rate stays at 94% with any rank cutoff, because a rank cutoff always returns something. The retrieval step cannot tell "nothing relevant" from distance alone; the LLM does that. The cutoff's job is cost, not precision.
-  - Not applied to production yet: `TOP_K_PROJECTS_LIMIT` is still 10, pending the owner's decision.
+  - Applied: `TOP_K_PROJECTS_LIMIT` went from 10 to 3 at the owner's request (`tests/top_projects_limit.test.ts`). The owner wants a deeper analysis later of what the LLM should and should not surface (see the open question below).
+
+- **Open question from the owner (for the deeper analysis):** «Que vea cosas donde el usuario no, es importante, pero tampoco debe forzar conexiones (el tentativo muchas veces fuerza conexiones, aunque a veces hay irrelevantes para LLM que uno puede buscar conexión)». In English: the model should notice connections the user would miss, but must not force them. `tentative` often forces a link, yet some pairs the model calls irrelevant are ones a person could still find a connection in. What this means for the `tentative` label, for the prompt, and for what a rank cutoff throws away (the pairs ranked 4th or lower) has not been analyzed yet.
 
 ## Bugs and vulnerabilities found
 

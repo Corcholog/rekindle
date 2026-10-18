@@ -60,7 +60,7 @@ export const ConfigSchema = z.object({
   k: z.number().int().positive().default(3),
   /** Cosine-distance threshold for retrieval (sweeps override the default 0.6). */
   threshold: z.number().positive().default(0.6),
-  /** Closest projects handed to the LLM per article (production: TOP_K_PROJECTS_LIMIT). */
+  /** Closest projects handed to the LLM per article. The default (10) is "no cap" for the 8-project datasets; production uses TOP_K_PROJECTS_LIMIT (3). */
   maxProjects: z.number().int().positive().default(10),
   /**
    * Evals never fall back on a rate limit: they wait and retry the same provider (honoring the

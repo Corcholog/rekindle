@@ -203,7 +203,7 @@ Loom is a single-user, local-only tool:
 
 ## Known limitations
 
-- **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: sending only the 3 closest projects would cut calls by 45% and keeps 86% of the relevant pairs, but it is not the default yet.
+- **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: only the 3 closest projects now reach the LLM (`TOP_K_PROJECTS_LIMIT = 3`), which cut calls by 45% and keeps 86% of the relevant pairs, but 1 in 8 relevant pairs is never evaluated.
 - **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.18–0.38 and the right target note is chosen in 32–42% of cases (small samples: 20 and 19 pairs).
 - **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts and target notes are scored, against one person's labels.
 - **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the error is logged and that pair is skipped until the project changes.
