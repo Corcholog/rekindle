@@ -43,6 +43,10 @@ export class GeminiProvider implements ChatProvider {
           quotaExhausted: /PerDay|per day|daily/i.test(message),
         });
       }
+      const status = Number(err?.status);
+      if (status >= 500 || /UNAVAILABLE|high demand/i.test(message)) {
+        throw new ProviderError('unavailable', `Gemini no está disponible (HTTP ${err?.status ?? '?'}): ${message.slice(0, 200)}`);
+      }
       const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
       // Google's error bodies describe the problem (model, quota, safety) and carry no credentials
       throw new ProviderError(timedOut ? 'timeout' : 'http', timedOut

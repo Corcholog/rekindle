@@ -329,6 +329,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         fallbacks: triageEntries.filter(e => e.ok && e.attempts.at(-1)!.provider !== firstProvider).length,
         failures: triageEntries.filter(e => !e.ok).length,
         rateLimitHits: triageEntries.flatMap(e => e.attempts).filter(a => a.errorKind === 'rate_limit').length,
+        unavailableHits: triageEntries.flatMap(e => e.attempts).filter(a => a.errorKind === 'unavailable').length,
         rateLimitWaitMs: triageEntries.flatMap(e => e.attempts).reduce((s, a) => s + (a.waitedMs ?? 0), 0),
         latencyMsP50: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 50),
         latencyMsP95: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 95),

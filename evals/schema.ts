@@ -117,6 +117,8 @@ export const ResultSchema = z.object({
     failures: z.number(),
     /** Attempts answered with HTTP 429, and the total time spent waiting because of them. */
     rateLimitHits: z.number(),
+    /** Attempts that found the provider overloaded or down (HTTP 5xx). */
+    unavailableHits: z.number(),
     rateLimitWaitMs: z.number(),
     latencyMsP50: NullableNumber,
     latencyMsP95: NullableNumber,

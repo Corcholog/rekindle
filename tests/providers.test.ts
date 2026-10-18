@@ -75,6 +75,8 @@ describe('DeepSeekProvider', () => {
     replies.push(completion('{"verdict":"maybe","score":1}'));
     expect(await kind()).toBe('schema');
     replies.push({ status: 503, body: { error: 'high demand' } });
+    expect(await kind()).toBe('unavailable');
+    replies.push({ status: 401, body: { error: 'bad key' } });
     expect(await kind()).toBe('http');
   });
 

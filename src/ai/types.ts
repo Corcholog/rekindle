@@ -5,7 +5,8 @@ export interface Usage {
   completionTokens?: number;
 }
 
-export type ErrorKind = 'timeout' | 'http' | 'rate_limit' | 'empty' | 'invalid_json' | 'schema' | 'other';
+/** unavailable = the provider's servers are overloaded or down (HTTP 5xx); transient, unlike a spent quota. */
+export type ErrorKind = 'timeout' | 'http' | 'rate_limit' | 'unavailable' | 'empty' | 'invalid_json' | 'schema' | 'other';
 
 /** Malformed model output is worth one retry; transport errors go straight to the next provider. */
 export const RETRYABLE_KINDS: ReadonlySet<ErrorKind> = new Set(['empty', 'invalid_json', 'schema']);

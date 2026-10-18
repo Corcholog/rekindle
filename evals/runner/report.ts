@@ -58,10 +58,10 @@ export function renderReport(results: EvalResult[]): string {
       out.push(`| ${r.meta.config} | ${r.meta.mode} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} | ${pct(r.triage.targetNoteAccuracy)} (n=${r.triage.targetNoteCases}) |`);
     }
     out.push('', '### Reliability, latency and cost', '');
-    out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate-limit hits (waited) | p50 ms | p95 ms | Tokens in / out | Est. USD |');
+    out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Est. USD |');
     out.push('|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
-      out.push(`| ${r.meta.config} | ${r.reliability.llmCalls} | ${r.reliability.malformedOutputs} | ${r.reliability.fallbacks} | ${r.reliability.failures} | ${r.reliability.rateLimitHits} (${Math.round(r.reliability.rateLimitWaitMs / 1000)} s) | ${num(r.reliability.latencyMsP50)} | ${num(r.reliability.latencyMsP95)} | ${r.cost.promptTokens} / ${r.cost.completionTokens} | ${r.cost.estimatedUsd === null ? 'not measured' : r.cost.estimatedUsd.toFixed(4)} |`);
+      out.push(`| ${r.meta.config} | ${r.reliability.llmCalls} | ${r.reliability.malformedOutputs} | ${r.reliability.fallbacks} | ${r.reliability.failures} | ${r.reliability.rateLimitHits} / ${r.reliability.unavailableHits} (${Math.round(r.reliability.rateLimitWaitMs / 1000)} s) | ${num(r.reliability.latencyMsP50)} | ${num(r.reliability.latencyMsP95)} | ${r.cost.promptTokens} / ${r.cost.completionTokens} | ${r.cost.estimatedUsd === null ? 'not measured' : r.cost.estimatedUsd.toFixed(4)} |`);
     }
     out.push('', ...rows.map(r => `- **${r.meta.config}** (commit \`${r.meta.gitSha}\`${r.meta.gitDirty ? ', dirty tree' : ''}, config \`${r.meta.configHash.slice(0, 8)}\`): ${r.cost.note}`), '');
   }

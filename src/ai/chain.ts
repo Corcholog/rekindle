@@ -31,7 +31,7 @@ export class ChainError extends Error {
 
 export interface RateLimitPolicy {
   /**
-   * fallback (production): a rate limit moves on to the next provider.
+   * fallback (production): a rate limit or an unavailable provider moves on to the next one.
    * wait (evals): sleep and retry the same provider; give up without falling back, so results
    * are never silently produced by a different model.
    */
@@ -75,7 +75,7 @@ export async function runChain<S extends z.ZodTypeAny>(
         attempts.push(attempt);
         console.warn(`[AI] ${provider.name}:${provider.model} falló (${kind}): ${err instanceof Error ? err.message : 'error desconocido'}`);
 
-        if (kind === 'rate_limit' && policy?.onRateLimit === 'wait') {
+        if ((kind === 'rate_limit' || kind === 'unavailable') && policy?.onRateLimit === 'wait') {
           const quotaExhausted = err instanceof ProviderError && err.quotaExhausted === true;
           if (quotaExhausted || rateLimitRetries >= policy.maxRetries) {
             const failure = new ChainError(quotaExhausted ? 'Cuota agotada en el proveedor de IA' : 'Límite de peticiones del proveedor de IA', attempts);

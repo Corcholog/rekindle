@@ -36,6 +36,15 @@ describe('rate limit classification', () => {
     expect(daily.quotaExhausted).toBe(true);
   });
 
+  it('Gemini 503 "high demand" becomes unavailable, a transient server-side condition', async () => {
+    const { GeminiProvider } = await import('../src/ai/providers/gemini');
+    geminiCall = async () => {
+      throw Object.assign(new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand."}}'), { status: 503 });
+    };
+    const err: any = await new GeminiProvider({ apiKey: 'k' }).complete('s', 'u', schema).catch(e => e);
+    expect(err.kind).toBe('unavailable');
+  });
+
   describe('DeepSeek', () => {
     let server: http.Server;
     let baseUrl: string;
@@ -48,6 +57,16 @@ describe('rate limit classification', () => {
       baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     });
     afterAll(async () => { await new Promise(resolve => server.close(resolve)); });
+
+    it('HTTP 5xx is unavailable', async () => {
+      const unavailable = http.createServer((_req, res) => { res.writeHead(503); res.end('{}'); });
+      await new Promise<void>(resolve => unavailable.listen(0, '127.0.0.1', resolve));
+      const url = `http://127.0.0.1:${(unavailable.address() as AddressInfo).port}`;
+      const { DeepSeekProvider } = await import('../src/ai/providers/deepseek');
+      const err: any = await new DeepSeekProvider({ apiKey: 'k', baseUrl: url }).complete('s', 'u', schema).catch(e => e);
+      await new Promise(resolve => unavailable.close(resolve));
+      expect(err.kind).toBe('unavailable');
+    });
 
     it('HTTP 429 honors Retry-After', async () => {
       const { DeepSeekProvider } = await import('../src/ai/providers/deepseek');
@@ -110,6 +129,26 @@ describe('chain policy for rate limits', () => {
     expect(err.rateLimited).toBe(true);
     expect(gemini.calls).toHaveLength(3); // first try + 2 retries
     expect(err.attempts.every((a: any) => a.provider === 'gemini')).toBe(true);
+  });
+
+  it('wait mode: also retries the same provider when it is temporarily unavailable', async () => {
+    const { runChain } = await import('../src/ai/chain');
+    const { ProviderError } = await import('../src/ai/types');
+    let n = 0;
+    const provider = { name: 'gemini', model: 'm', async complete() { if (n++ < 2) throw new ProviderError('unavailable', '503'); return { data: { ok: true } }; } };
+    const result = await runChain([provider, fallbackOk()] as any[], 's', 'u', schema, undefined, {
+      onRateLimit: 'wait', maxRetries: 5, baseDelayMs: 100, maxDelayMs: 1000, sleep,
+    });
+    expect(result.model).toBe('gemini:m');
+    expect(sleeps).toEqual([100, 200]);
+    expect(result.attempts.filter(a => a.errorKind === 'unavailable')).toHaveLength(2);
+  });
+
+  it('production default: an unavailable provider moves to the next one', async () => {
+    const { runChain } = await import('../src/ai/chain');
+    const { ProviderError } = await import('../src/ai/types');
+    const down = { name: 'gemini', model: 'm', async complete() { throw new ProviderError('unavailable', '503'); } };
+    expect((await runChain([down, fallbackOk()] as any[], 's', 'u', schema)).model).toBe('ollama:q');
   });
 
   it('wait mode: uses exponential backoff when the provider gives no delay', async () => {

@@ -74,6 +74,10 @@ export class DeepSeekProvider implements ChatProvider {
       });
     }
 
+    if (response.status >= 500) {
+      throw new ProviderError('unavailable', `DeepSeek no está disponible (HTTP ${response.status})`);
+    }
+
     if (!response.ok) {
       // Status only: the response body is not logged or propagated
       throw new ProviderError('http', `DeepSeek respondió HTTP ${response.status}`);
