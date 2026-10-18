@@ -61,7 +61,10 @@ loom/
 ├─ src/
 │  ├─ config.ts                       Zod-validated environment config (loopback-only HOST) & thresholds
 │  ├─ ai/
-│  │  └─ OllamaProvider.ts            AI provider singleton (Gemini + Ollama fallback, embeddings)
+│  │  ├─ aiProvider.ts                AI facade: structured completions via the provider chain, local embeddings
+│  │  ├─ chain.ts                     Ordered provider chain (LLM_PROVIDERS), one retry on malformed output
+│  │  ├─ types.ts                     ChatProvider interface, error kinds, JSON parsing/validation
+│  │  └─ providers/                   deepseek.ts, gemini.ts, ollama.ts
 │  ├─ api/
 │  │  ├─ server.ts                    Fastify app setup, error handler, lifecycle hooks, boot writeback recovery
 │  │  ├─ requestGuard.ts              Host/Origin guard against DNS rebinding and cross-site writes
@@ -202,7 +205,9 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 | `DATABASE_URL` | `string` | `postgres://loom:loompassword@localhost:5432/loomdb` | PostgreSQL connection URI. |
 | `OLLAMA_URL` | `string` | `http://127.0.0.1:11434` | Ollama service endpoint. |
 | `EMBED_MODEL` | `string` | `'bge-m3'` | Dense embedding model name (must produce 1024-dimensional vectors). |
-| `CHAT_MODEL` | `string` | `'gemini-3.1-flash-lite'` | Gemini model identifier. The Ollama chat model is fixed to `qwen2.5:7b-instruct` in `OllamaProvider.ts`. |
+| `CHAT_MODEL` | `string` | `'gemini-3.1-flash-lite'` | Gemini model identifier. The Ollama chat model is `qwen2.5:7b-instruct`. |
+| `LLM_PROVIDERS` | `string` | `'gemini,ollama'` | Provider order: `deepseek`, `gemini`, `ollama`. Providers needing a key are skipped without one. Malformed output (empty, invalid JSON, schema mismatch) is retried once on the same provider; transport errors go straight to the next. |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | `string?` | – / `'deepseek-flash'` | DeepSeek through its OpenAI-compatible API, JSON mode with the schema in the prompt and thinking requested off (it is on by default at DeepSeek). |
 | `GEMINI_MODEL` | `string?` | *optional* | Overrides `CHAT_MODEL` (read directly from `process.env`). |
 | `GEMINI_API_KEY` | `string?` | *optional* | Google AI Studio API key. If omitted, every LLM call runs locally on Ollama. |
 | `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. `pnpm start/dev` default to `./demo_vault`; the UI can rewrite it in `.env`. |

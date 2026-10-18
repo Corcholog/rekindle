@@ -81,6 +81,8 @@ cp .env.example .env
 | `EMBED_MODEL` | `bge-m3` | Embedding model. The DB column is `vector(1024)`, so the model must output 1024 dims. |
 | `CHAT_MODEL` | `gemini-3.1-flash-lite` | **Gemini** model name. (The Ollama chat model is fixed to `qwen2.5:7b-instruct`.) |
 | `GEMINI_MODEL` | – | Optional override of `CHAT_MODEL`. |
+| `LLM_PROVIDERS` | `gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | – / `deepseek-flash` | Enables DeepSeek when listed in `LLM_PROVIDERS`. Thinking mode is requested off. |
 | `GEMINI_API_KEY` | – | Enables Gemini. Leave empty for 100% local operation. |
 | `VAULT_PATH` | `./demo_vault` (via `pnpm start/dev`) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |
 | `LOG_LEVEL` | `warn` | Fastify log level. |
@@ -123,7 +125,7 @@ Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the followin
 - for each Consultor question, **the summaries of every ready item in your library and a snippet of every active project note**;
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 10,000 characters of project notes.
 
-Leave `GEMINI_API_KEY` empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
+With `LLM_PROVIDERS=deepseek,gemini,ollama` and a `DEEPSEEK_API_KEY`, the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails. Leave both keys empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
 
 ---
 

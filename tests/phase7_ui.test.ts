@@ -415,7 +415,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(backlogIds).toContain(content.id);
 
     // 3. Mock ollama.evaluateContent so it returns an actionable verdict without needing actual LLM network
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const evaluateSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
       data: {
         verdict: 'actionable',
@@ -595,7 +595,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const { actionSuggestions } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
     const { eq } = await import('drizzle-orm');
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
 
     // Accept suggestion
     await drizzleDb.update(actionSuggestions)
@@ -747,7 +747,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const { projects } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
     const { eq } = await import('drizzle-orm');
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
 
     const [projB] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Vector_Databases'));
     expect(projB).toBeDefined();
@@ -818,7 +818,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const { projects } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
     const { eq } = await import('drizzle-orm');
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
 
     const [projB] = await drizzleDb.select().from(projects).where(eq(projects.folderPath, 'Projects/Vector_Databases'));
     expect(projB).toBeDefined();

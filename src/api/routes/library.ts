@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { sql } from 'drizzle-orm';
-import { sharedAiProvider } from '../../ai/OllamaProvider';
+import { sharedAiProvider } from '../../ai/aiProvider';
 
 const ollama = sharedAiProvider;
 

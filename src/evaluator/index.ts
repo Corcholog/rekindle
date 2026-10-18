@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions, projects, llmTelemetry } from '../db/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
-import { sharedAiProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/aiProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
 import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';

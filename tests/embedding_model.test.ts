@@ -47,7 +47,7 @@ describe('Embedding model consistency', () => {
   }
 
   it('never evaluates or backlogs content against a snapshot from another model', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { evaluateContentMatch, findBacklogUnevaluatedContents } = await import('../src/evaluator');
     const llm = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValue({
       data: { verdict: 'irrelevant', confidenceScore: 0.1, triageReasoning: 'x', action: null },
@@ -73,7 +73,7 @@ describe('Embedding model consistency', () => {
   });
 
   it('records the model on new project snapshots', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { reconcileProject } = await import('../src/vault/reconciler');
     const fs = await import('fs/promises');
     const os = await import('os');

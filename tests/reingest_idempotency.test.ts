@@ -80,7 +80,7 @@ describe('Re-ingesting a known URL', () => {
   });
 
   it('evaluating the same content twice yields one evaluation and one suggestion', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { evaluateContentMatch } = await import('../src/evaluator');
     const { eq } = await import('drizzle-orm');
 

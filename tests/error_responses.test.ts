@@ -37,7 +37,7 @@ describe('500 responses do not leak internal error messages', () => {
     }).returning();
     suggestionId = suggestion.id;
 
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     vi.spyOn(sharedAiProvider, 'evaluateContent').mockRejectedValue(new Error(secret));
 
     server = (await import('../src/api/server')).server;

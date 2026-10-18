@@ -25,7 +25,7 @@ Do only the phase the owner names in the current session. Plan first, wait for a
 ## Invariants to preserve (verify, do not assume)
 
 - I1. Only accepted suggestions write to the vault.
-- I2. No outbound LLM traffic when `GEMINI_API_KEY` is unset.
+- I2. No outbound LLM traffic when no cloud API key (`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`) is set.
 - I3. Embeddings are computed only locally.
 - I4. `suggestions.md` never affects project hashes or triggers reconciliation loops.
 - I5. Writeback is idempotent: one callout per accepted suggestion, even after a crash or retry.

@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { OllamaProvider } from '../src/ai/OllamaProvider';
+import { AiProvider } from '../src/ai/aiProvider';
 import { z } from 'zod';
 
 // Skip if Ollama is not actually running locally on 11434 during basic CI
 // Or we can just run it assuming the user has Ollama running as requested.
-describe('OllamaProvider Integration', () => {
-  let provider: OllamaProvider;
+describe('AiProvider Integration', () => {
+  let provider: AiProvider;
 
   beforeAll(() => {
-    provider = new OllamaProvider('http://127.0.0.1:11434');
+    provider = new AiProvider('http://127.0.0.1:11434');
   });
 
   it('debería obtener un vector de embedding (1024D) de bge-m3', async () => {

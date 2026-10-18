@@ -5,7 +5,7 @@ import { actionSuggestions, projects, contents, evaluations, projectSnapshots } 
 import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss } from '../../queue';
-import { sharedAiProvider } from '../../ai/OllamaProvider';
+import { sharedAiProvider } from '../../ai/aiProvider';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 
 const SuggestionItemSchema = z.object({

@@ -182,7 +182,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
   });
 
   it('Fix 2: POST /api/suggestions/:id/reevaluate con keep_or_refine inserta nueva evaluación para latestSnapshot y limpia isStale', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { db: drizzleDb } = await import('../src/db/index');
     const { evaluations, actionSuggestions } = await import('../src/db/schema');
     const { eq } = await import('drizzle-orm');
@@ -234,7 +234,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
   });
 
   it('Fix 2: POST /api/suggestions/:id/reevaluate con already_addressed descarta la sugerencia con prefijo explicativo', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { db: drizzleDb } = await import('../src/db/index');
     const { actionSuggestions } = await import('../src/db/schema');
     const { eq } = await import('drizzle-orm');
@@ -269,7 +269,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
   });
 
   it('Fix 5: POST /api/projects/:id/reevaluate-stale procesa en lote sugerencias pendientes desactualizadas', async () => {
-    const { sharedAiProvider } = await import('../src/ai/OllamaProvider');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { db: drizzleDb } = await import('../src/db/index');
     const { actionSuggestions, projectSnapshots } = await import('../src/db/schema');
     const { eq } = await import('drizzle-orm');

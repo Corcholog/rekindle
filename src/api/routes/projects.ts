@@ -8,7 +8,7 @@ import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
 import { env } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
-import { sharedAiProvider } from '../../ai/OllamaProvider';
+import { sharedAiProvider } from '../../ai/aiProvider';
 
 const ProjectItemSchema = z.object({
   id: z.string().uuid(),

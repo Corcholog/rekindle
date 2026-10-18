@@ -4,7 +4,7 @@ import { contents } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import { sharedAiProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/aiProvider';
 import { env } from '../config';
 import { z } from 'zod';
 import * as net from 'net';

@@ -33,11 +33,11 @@ const schema = z.object({ answer: z.string() });
 async function loadProvider(geminiKey: string) {
   vi.resetModules();
   vi.stubEnv('GEMINI_API_KEY', geminiKey);
-  const { OllamaProvider } = await import('../src/ai/OllamaProvider');
-  return new OllamaProvider();
+  const { AiProvider } = await import('../src/ai/aiProvider');
+  return new AiProvider();
 }
 
-describe('I2: no outbound LLM traffic without GEMINI_API_KEY', () => {
+describe('I2: no outbound LLM traffic without a cloud API key', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ollamaInvoke.mockResolvedValue({ answer: 'local' });
@@ -52,6 +52,19 @@ describe('I2: no outbound LLM traffic without GEMINI_API_KEY', () => {
     expect(result.model).toBe('ollama:qwen2.5:7b-instruct');
     expect(geminiConstructed).not.toHaveBeenCalled();
     expect(geminiGenerate).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing to DeepSeek or Gemini when no cloud key is set, even if both are listed', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    vi.stubEnv('LLM_PROVIDERS', 'deepseek,gemini,ollama');
+    vi.stubEnv('DEEPSEEK_API_KEY', '');
+    const provider = await loadProvider('');
+    const result = await provider.evaluateContent('sistema', 'texto', schema);
+
+    expect(result.model).toBe('ollama:qwen2.5:7b-instruct');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(geminiGenerate).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it('control: uses Gemini when a key is set', async () => {

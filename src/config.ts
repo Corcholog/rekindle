@@ -18,6 +18,13 @@ const EnvSchema = z.object({
   EMBED_MODEL: z.string().default('bge-m3'),
   CHAT_MODEL: z.string().default('gemini-3.1-flash-lite'),
   GEMINI_API_KEY: z.string().optional(),
+  DEEPSEEK_API_KEY: z.string().optional(),
+  DEEPSEEK_MODEL: z.string().optional(),
+  // Order in which LLM providers are tried: deepseek, gemini, ollama (those without a key are skipped)
+  LLM_PROVIDERS: z.string().default('gemini,ollama').refine(
+    (list) => list.split(',').map(n => n.trim()).filter(Boolean).every(n => ['deepseek', 'gemini', 'ollama'].includes(n)),
+    { message: 'LLM_PROVIDERS may only list deepseek, gemini and ollama' },
+  ),
   VAULT_PATH: z.string().optional(),
 });
 

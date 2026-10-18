@@ -5,7 +5,7 @@ import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getDirectoryHash } from './hash';
 import { parseMarkdownFile } from './parser';
-import { sharedAiProvider } from '../ai/OllamaProvider';
+import { sharedAiProvider } from '../ai/aiProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
 import { PROJECT_DIR_NAMES, env } from '../config';
 import { isLoomGeneratedFile } from './generatedNotes';
