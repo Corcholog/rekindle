@@ -702,7 +702,9 @@ ${(content.summary || '').substring(0, 10000)}
 
 Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue abordada en el texto, o si quedó obsoleta.`;
 
-    const { data: evalResult } = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, reevaluationSchema);
+    const { data: evalResult } = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, reevaluationSchema, undefined, {
+      component: 'reevaluate', contentId: sug.contentId, snapshotId: latestSnapshot.id, suggestionId: sug.id,
+    });
 
     let newEvaluationId: string;
 

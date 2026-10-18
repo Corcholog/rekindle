@@ -2,7 +2,11 @@ import { OllamaEmbeddings } from '@langchain/ollama';
 import { z } from 'zod';
 import { env } from '../config';
 import { Attempt, CompletionOptions, Usage } from './types';
-import { buildProviderChain, runChain } from './chain';
+import { buildProviderChain, ChainError, runChain } from './chain';
+import { LlmCallContext, recordLlmCall } from '../observability/llmTelemetry';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('ai');
 
 export interface EvaluationOutput<T> {
   data: T;
@@ -10,6 +14,8 @@ export interface EvaluationOutput<T> {
   usage?: Usage;
   latencyMs?: number;
   attempts?: Attempt[];
+  /** llm_telemetry rows written for this call (only when a call context was given). */
+  telemetryIds?: string[];
 }
 
 /**
@@ -53,25 +59,60 @@ export class AiProvider {
     try {
       return await this.embedder.embedQuery(text);
     } catch (error) {
-      console.error('[AI Provider] Error fetching local embedding from Ollama:', error);
+      log.error({ err: error, chars: text.length }, 'Local embedding with Ollama failed');
       throw error;
     }
   }
 
-  /** Evalúa contenido y fuerza la salida a cumplir con un esquema Zod. */
+  /**
+   * Evalúa contenido y fuerza la salida a cumplir con un esquema Zod. With a call context, every
+   * provider attempt (including failures) is recorded in llm_telemetry.
+   */
   async evaluateContent<T extends z.ZodTypeAny>(
     systemPrompt: string,
     userText: string,
     schema: T,
     options?: CompletionOptions,
+    ctx?: LlmCallContext,
   ): Promise<EvaluationOutput<z.infer<T>>> {
-    if (this.overrides.evaluate) return this.overrides.evaluate(systemPrompt, userText, schema, options);
-    // Read at call time so the key and chain can change without restarting
-    const providers = buildProviderChain({ ...process.env, OLLAMA_URL: this.baseUrl });
-    const result = await runChain(providers, systemPrompt, userText, schema, options);
+    let result: EvaluationOutput<z.infer<T>>;
+    const started = Date.now();
+    try {
+      if (this.overrides.evaluate) {
+        result = await this.overrides.evaluate(systemPrompt, userText, schema, options);
+      } else {
+        // Read at call time so the key and chain can change without restarting
+        const providers = buildProviderChain({ ...process.env, OLLAMA_URL: this.baseUrl });
+        result = await runChain(providers, systemPrompt, userText, schema, options);
+      }
+    } catch (err) {
+      if (ctx) {
+        const attempts: Attempt[] = err instanceof ChainError
+          ? err.attempts
+          : [{ provider: 'unknown', model: 'unknown', ok: false, errorKind: 'other', latencyMs: Date.now() - started }];
+        await recordLlmCall(ctx, systemPrompt, userText, attempts);
+      }
+      throw err;
+    }
     this.lastUsedModel = result.model;
+    if (ctx) {
+      const attempts = result.attempts?.length ? result.attempts : [attemptFromModel(result, Date.now() - started)];
+      result.telemetryIds = await recordLlmCall(ctx, systemPrompt, userText, attempts, result.data);
+    }
     return result;
   }
+}
+
+// Results without attempt details (for example a test double) still get one telemetry row
+function attemptFromModel(result: EvaluationOutput<unknown>, elapsedMs: number): Attempt {
+  const [provider, ...rest] = result.model.split(':');
+  return {
+    provider: rest.length > 0 ? provider : 'unknown',
+    model: rest.length > 0 ? rest.join(':') : result.model,
+    ok: true,
+    usage: result.usage,
+    latencyMs: result.latencyMs ?? elapsedMs,
+  };
 }
 
 export const sharedAiProvider = new AiProvider();

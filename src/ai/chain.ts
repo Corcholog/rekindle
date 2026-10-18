@@ -5,6 +5,9 @@ import {
 import { DeepSeekProvider } from './providers/deepseek';
 import { GeminiProvider } from './providers/gemini';
 import { OllamaChatProvider } from './providers/ollama';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('ai');
 
 export const PROVIDER_NAMES = ['deepseek', 'gemini', 'ollama'] as const;
 export const DEFAULT_PROVIDERS = 'deepseek,gemini,ollama';
@@ -73,7 +76,7 @@ export async function runChain<S extends z.ZodTypeAny>(
         const kind: ErrorKind = err instanceof ProviderError ? err.kind : 'other';
         const attempt: Attempt = { provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started };
         attempts.push(attempt);
-        console.warn(`[AI] ${provider.name}:${provider.model} falló (${kind}): ${err instanceof Error ? err.message : 'error desconocido'}`);
+        log.warn({ provider: provider.name, model: provider.model, errorKind: kind, attempt: attempts.length, err }, 'LLM provider attempt failed');
 
         if ((kind === 'rate_limit' || kind === 'unavailable') && policy?.onRateLimit === 'wait') {
           const quotaExhausted = err instanceof ProviderError && err.quotaExhausted === true;

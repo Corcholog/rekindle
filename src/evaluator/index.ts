@@ -1,5 +1,6 @@
 import { db } from '../db';
-import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions, llmTelemetry } from '../db/schema';
+import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions } from '../db/schema';
+import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss } from '../queue';
@@ -116,11 +117,11 @@ ${cappedSummary}
 
 Por favor, evalúa de manera crítica la afinidad y propuesta constructiva siguiendo las reglas estructuradas.`;
 
-    const startTime = Date.now();
     try {
-      const { data: result, model: modelUsed } = await ollama.evaluateContent(systemPrompt, userMessage, unifiedEvaluationSchema);
-      const latencyMs = Date.now() - startTime;
-      
+      const { data: result, model: modelUsed, telemetryIds = [] } = await ollama.evaluateContent(
+        systemPrompt, userMessage, unifiedEvaluationSchema, undefined, { component: 'triage', contentId, snapshotId },
+      );
+
       // 1. Record Evaluation in DB
       let evalId: string;
       try {
@@ -145,7 +146,6 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
       console.log(`[Evaluator] Result for Project ${projectId} via ${modelUsed}: ${result.verdict} (${Math.round((result.confidenceScore || 0) * 100)}%)`);
 
       // 2. If actionable and action details provided, record Action Suggestion
-      let suggestionId: string | null = null;
       if (result.verdict === 'actionable' && result.action) {
         const actionTextLower = (result.action.suggestedAction || '').toLowerCase().trim();
         const obsLower = (result.action.observation || '').toLowerCase().trim();
@@ -178,24 +178,9 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           targetFile: resolvedTargetFile,
           status: 'pending',
         }).returning({ id: actionSuggestions.id });
-        suggestionId = sugRecord.id;
-        
-        console.log(`[Evaluator] Action suggestion created for Project ${projectId} targeting "${resolvedTargetFile}" (pending user review)`);
-      }
+        await linkTelemetryToSuggestion(telemetryIds, sugRecord.id);
 
-      // 3. Record LLM Telemetry
-      try {
-        await db.insert(llmTelemetry).values({
-          component: 'triage',
-          contentId,
-          snapshotId,
-          suggestionId,
-          modelName: modelUsed,
-          latencyMs,
-          isSuccess: true,
-        });
-      } catch {
-        // Telemetry errors should not fail evaluation
+        console.log(`[Evaluator] Action suggestion created for Project ${projectId} targeting "${resolvedTargetFile}" (pending user review)`);
       }
     } catch (err) {
       console.error(`[Evaluator] Error evaluating snapshot ${snapshotId} against content ${contentId}:`, err);

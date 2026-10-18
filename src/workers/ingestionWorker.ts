@@ -189,7 +189,7 @@ export const setupIngestionWorker = async () => {
           .where(eq(contents.id, contentId));
 
         // 3. Summarize through the LLM provider chain
-        const summary = await summarizeText(ollama, rawText);
+        const summary = await summarizeText(ollama, rawText, { contentId });
 
         await db.update(contents)
           .set({ summary, ingestStatus: 'embedding' })

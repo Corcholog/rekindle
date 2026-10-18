@@ -217,7 +217,7 @@ ${query}
 </CONSULTA_DEL_USUARIO>`;
 
     try {
-      const { data: result } = await ollama.evaluateContent(systemPrompt, userMessage, consultAnswerSchema);
+      const { data: result } = await ollama.evaluateContent(systemPrompt, userMessage, consultAnswerSchema, undefined, { component: 'consult' });
 
       const contentMap = new Map(libraryCatalog.map(c => [c.refId.toUpperCase(), c]));
       const noteMap = new Map(notesCatalog.map(n => [n.refId.toUpperCase(), n]));

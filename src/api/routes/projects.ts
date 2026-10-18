@@ -580,7 +580,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
 
     let result;
     try {
-      const evalResult = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, synergySynthesisSchema);
+      const evalResult = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, synergySynthesisSchema, undefined, { component: 'synergy' });
       result = evalResult.data;
     } catch (err: any) {
       server.log.error({ err }, 'Error in cross-project synergy evaluation');
@@ -760,7 +760,7 @@ ${suggestionsPrompt}
 
     let result;
     try {
-      const evalResult = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, synthesisSchema);
+      const evalResult = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, synthesisSchema, undefined, { component: 'synthesis' });
       result = evalResult.data;
     } catch (err: any) {
       server.log.error({ err }, 'Error generating project synthesis via LLM');

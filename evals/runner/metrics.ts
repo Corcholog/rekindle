@@ -68,12 +68,5 @@ export function noteMatches(expected: string, predicted: string | null): boolean
   return e === p || p.endsWith(`/${e}`) || e.endsWith(`/${p}`);
 }
 
-export interface PriceTable {
-  inputPerM: number;
-  outputPerM: number;
-}
-
-export function estimateCostUsd(usage: { promptTokens?: number; completionTokens?: number } | undefined, price: PriceTable): number {
-  if (!usage) return 0;
-  return ((usage.promptTokens ?? 0) * price.inputPerM + (usage.completionTokens ?? 0) * price.outputPerM) / 1_000_000;
-}
+export { estimateCostUsd } from '../../src/ai/pricing';
+export type { PriceTable } from '../../src/ai/pricing';
