@@ -19,6 +19,11 @@ export const ProjectLabelSchema = z.object({
 
 export const LabelCaseSchema = z.object({
   article: z.string(),
+  /**
+   * Shortcut written by the labeler: the verdict for every project left blank below (usually
+   * "irrelevant"), so only the projects that matter need an explicit answer.
+   */
+  others: VerdictSchema.nullable().optional(),
   projects: z.record(z.string(), ProjectLabelSchema),
   notes: z.string().nullable().optional(),
 });

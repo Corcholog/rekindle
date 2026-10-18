@@ -8,7 +8,7 @@ import { Attempt } from '../../src/ai/types';
 import { ConfigSchema, EvalConfig, EvalResult, ResultSchema } from '../schema';
 import { JsonCache, RecordedCall, roundVector, sha256 } from './cache';
 import { buildChainFromSpecs } from './chainSpec';
-import { loadDataset, validateLabels } from './dataset';
+import { effectiveVerdict, loadDataset, validateLabels } from './dataset';
 import {
   classMetrics, confusionMatrix, estimateCostUsd, mean, noteMatches, percentile, precisionRecallAtK, Verdict as VerdictType,
 } from './metrics';
@@ -53,7 +53,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
   const problems = validateLabels(dataset, { strict: options.strict ?? false });
   if (problems.length > 0) throw new Error(`Etiquetas inválidas:\n- ${problems.join('\n- ')}`);
   const labels = dataset.labels!;
-  const cases = labels.cases.filter(c => Object.values(c.projects).some(p => p.verdict !== null));
+  const cases = labels.cases.filter(c => dataset.projects.some(p => effectiveVerdict(c, p.folderPath) !== null));
   if (cases.length === 0) throw new Error('No hay ningún caso etiquetado: rellena labels.yaml');
 
   const embeddingCache = await new JsonCache<number[]>(path.join(dataset.dir, 'cache', 'embeddings.json')).load();
@@ -252,16 +252,18 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     let falseRetrievals = 0;
 
     for (const labelCase of cases) {
-      const entries = Object.entries(labelCase.projects).filter(([, l]) => l.verdict !== null);
-      for (const [folder, label] of entries) {
-        const expected = label.verdict as VerdictType;
+      const entries = dataset.projects
+        .map(p => [p.folderPath, effectiveVerdict(labelCase, p.folderPath), labelCase.projects[p.folderPath]] as const)
+        .filter(([, verdict]) => verdict !== null);
+      for (const [folder, verdict, label] of entries) {
+        const expected = verdict as VerdictType;
         const got = predicted.get(`${labelCase.article}|${folder}`) ?? 'irrelevant'; // not retrieved = irrelevant
         pairs.push({ expected, predicted: got });
-        if (label.target_note && expected === 'actionable') {
+        if (label?.target_note && expected === 'actionable') {
           targetChecks.push(got === 'actionable' && noteMatches(label.target_note, targetOf(labelCase.article, folder)));
         }
       }
-      const relevant = entries.filter(([, l]) => l.verdict !== 'irrelevant').map(([f]) => f);
+      const relevant = entries.filter(([, verdict]) => verdict !== 'irrelevant').map(([f]) => f);
       const retrieved = retrievedByArticle.get(labelCase.article) ?? [];
       if (relevant.length > 0) {
         casesWithRelevant++;

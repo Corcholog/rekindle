@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import YAML from 'yaml';
 import { Article, ArticleSchema, Labels, LabelsSchema } from '../schema';
-import { noteMatches } from './metrics';
+import { noteMatches, Verdict } from './metrics';
 
 /**
  * A dataset directory:
@@ -81,6 +81,11 @@ export async function loadDataset(dir: string): Promise<Dataset> {
   return { dir, vaultPath, projects, articles, labels, manifestHash: hash.digest('hex') };
 }
 
+/** The labeler's verdict for a pair: the explicit one, else the case-level `others` shortcut. */
+export function effectiveVerdict(labelCase: Labels['cases'][number], projectPath: string): Verdict | null {
+  return labelCase.projects[projectPath]?.verdict ?? labelCase.others ?? null;
+}
+
 const SHEET_HEADER = `# Etiquetas de evaluación — las rellena el dueño del proyecto.
 #
 # Para cada artículo y cada proyecto, indica el veredicto correcto:
@@ -89,6 +94,8 @@ const SHEET_HEADER = `# Etiquetas de evaluación — las rellena el dueño del p
 #   irrelevant  no tiene que ver con el proyecto
 # Si el veredicto es actionable, rellena target_note con la nota donde lo integrarías
 # (ruta dentro del proyecto o nombre de archivo, p. ej. "research/combate.md").
+# Atajo: pon en "others" un veredicto (normalmente irrelevant) y se aplicará a todos los proyectos
+# que dejes en blanco; así solo marcas los proyectos que sí tienen relación.
 # Pon tu nombre en labeled_by al terminar. Valida con: pnpm eval:label --check <dataset>
 `;
 
@@ -101,6 +108,7 @@ export async function generateLabelSheet(dir: string): Promise<void> {
     if (labels.cases.some(c => c.article === article.id)) continue;
     labels.cases.push({
       article: article.id,
+      others: null,
       projects: Object.fromEntries(dataset.projects.map(p => [p.folderPath, { verdict: null, target_note: null }])),
       notes: null,
     });
@@ -133,13 +141,13 @@ export function validateLabels(dataset: Dataset, options: { strict: boolean }): 
         errors.push(`Caso "${c.article}": el proyecto "${projectPath}" no existe en el vault del dataset`);
         continue;
       }
-      if (options.strict && label.verdict === null) {
+      if (options.strict && effectiveVerdict(c, projectPath) === null) {
         errors.push(`Caso "${c.article}" × "${projectPath}": sin veredicto`);
       }
       if (label.target_note && !project.notes.some(n => noteMatches(label.target_note!, n))) {
         errors.push(`Caso "${c.article}" × "${projectPath}": la nota "${label.target_note}" no existe en el proyecto`);
       }
-      if (label.target_note && label.verdict !== 'actionable') {
+      if (label.target_note && effectiveVerdict(c, projectPath) !== 'actionable') {
         errors.push(`Caso "${c.article}" × "${projectPath}": target_note solo aplica si el veredicto es actionable`);
       }
     }

@@ -92,6 +92,29 @@ describe('eval dataset tooling', () => {
     expect(errors.some(e => /tema\.md/.test(e))).toBe(false); // resolves to sub/tema.md
   });
 
+  it('applies the case-level "others" shortcut to blank projects only', async () => {
+    const { loadDataset, validateLabels, effectiveVerdict } = await import('../evals/runner/dataset');
+    const { default: YAML } = await import('yaml');
+    await fs.writeFile(path.join(dir, 'labels.yaml'), YAML.stringify({
+      labeled_by: 'owner',
+      cases: [
+        { article: 'muerte-anime', others: 'irrelevant', projects: { 'Projects/Anime': { verdict: 'actionable', target_note: 'ideas.md' } } },
+        { article: 'pan', others: 'irrelevant', projects: {} },
+      ],
+    }));
+    const dataset = await loadDataset(dir);
+    const [anime, pan] = dataset.labels!.cases;
+
+    expect(effectiveVerdict(anime, 'Projects/Anime')).toBe('actionable');
+    expect(effectiveVerdict(anime, 'Projects/Cocina')).toBe('irrelevant');
+    expect(effectiveVerdict(pan, 'Projects/Anime')).toBe('irrelevant');
+    expect(validateLabels(dataset, { strict: true })).toEqual([]);
+
+    // Without the shortcut a blank project stays unanswered
+    delete (anime as any).others;
+    expect(effectiveVerdict(anime, 'Projects/Cocina')).toBeNull();
+  });
+
   it('strict mode requires a labeler and every verdict', async () => {
     const { loadDataset, generateLabelSheet, validateLabels } = await import('../evals/runner/dataset');
     await generateLabelSheet(dir);
