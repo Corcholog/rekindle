@@ -13,7 +13,6 @@ describe('eval run under rate limiting', () => {
   let tmp: string;
   let limitedFirst = 0; // answer 429 to the next N requests
   let alwaysLimited = false;
-  let requests = 0;
 
   const triage = JSON.stringify({
     choices: [{ message: { content: '{"verdict":"irrelevant","confidenceScore":0.1,"triageReasoning":"x","action":null}' } }],
@@ -22,7 +21,6 @@ describe('eval run under rate limiting', () => {
 
   beforeAll(async () => {
     server = http.createServer((_req, res) => {
-      requests++;
       if (alwaysLimited || limitedFirst > 0) {
         limitedFirst--;
         res.writeHead(429, { 'Content-Type': 'application/json' });
@@ -49,7 +47,7 @@ describe('eval run under rate limiting', () => {
     await new Promise(resolve => server.close(resolve));
     await fs.rm(tmp, { recursive: true, force: true });
   });
-  beforeEach(() => { requests = 0; limitedFirst = 0; alwaysLimited = false; });
+  beforeEach(() => { limitedFirst = 0; alwaysLimited = false; });
 
   async function run() {
     vi.resetModules();
