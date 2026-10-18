@@ -7,7 +7,7 @@ import { GeminiProvider } from './providers/gemini';
 import { OllamaChatProvider } from './providers/ollama';
 
 export const PROVIDER_NAMES = ['deepseek', 'gemini', 'ollama'] as const;
-export const DEFAULT_PROVIDERS = 'gemini,ollama';
+export const DEFAULT_PROVIDERS = 'deepseek,gemini,ollama';
 
 export interface ChainResult<T> {
   data: T;

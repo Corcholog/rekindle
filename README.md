@@ -21,7 +21,7 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 ```
 
 - **Ingestion & Web Clipper**: Ingest links directly from the Web UI or via the **Manifest V3 Web Clipper extension** (`extension/`). The clipper supports offline queueing in `chrome.storage.local` with background auto-sync when Loom reconnects. Web pages (Readability) and YouTube (shorts/embed/live/youtu.be transcripts) are canonicalised, stripped of tracking params, and capped safely.
-- **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Gemini is used when `GEMINI_API_KEY` is set; on any Gemini error it seamlessly falls back to local Ollama (`qwen2.5:7b-instruct`).
+- **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Providers are tried in the order of `LLM_PROVIDERS` (default DeepSeek, then Gemini, then local Ollama `qwen2.5:7b-instruct`); a provider without a key is skipped and a failure moves to the next one.
 - **Living Vault Sync & Staleness**: A watcher (3 s debounce) re-reads project notes recursively, updates immutable snapshots, and computes vector drift (`STALE_DRIFT_THRESHOLD = 0.04`). Stale suggestions are flagged with badges and can be re-evaluated context-aware against updated drafts.
 - **Synergies & Consultor**:
   - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and drafts a bridge note you can save to the vault.
@@ -81,7 +81,7 @@ cp .env.example .env
 | `EMBED_MODEL` | `bge-m3` | Embedding model. The DB column is `vector(1024)`, so the model must output 1024 dims. |
 | `CHAT_MODEL` | `gemini-3.1-flash-lite` | **Gemini** model name. (The Ollama chat model is fixed to `qwen2.5:7b-instruct`.) |
 | `GEMINI_MODEL` | – | Optional override of `CHAT_MODEL`. |
-| `LLM_PROVIDERS` | `gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. |
+| `LLM_PROVIDERS` | `deepseek,gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | – / `deepseek-flash` | Enables DeepSeek when listed in `LLM_PROVIDERS`. Thinking mode is requested off. |
 | `GEMINI_API_KEY` | – | Enables Gemini. Leave empty for 100% local operation. |
 | `VAULT_PATH` | `./demo_vault` (via `pnpm start/dev`) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |
@@ -125,7 +125,7 @@ Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the followin
 - for each Consultor question, **the summaries of every ready item in your library and a snippet of every active project note**;
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 10,000 characters of project notes.
 
-With `LLM_PROVIDERS=deepseek,gemini,ollama` and a `DEEPSEEK_API_KEY`, the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails. Leave both keys empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
+With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails; without that key DeepSeek is skipped. Leave both keys empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
 
 ---
 

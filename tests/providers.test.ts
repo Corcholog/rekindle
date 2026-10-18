@@ -145,7 +145,10 @@ describe('provider chain', () => {
     expect(names({ LLM_PROVIDERS: 'deepseek,gemini,ollama', GEMINI_API_KEY: 'g' })).toEqual(['gemini', 'ollama']);
     expect(names({ LLM_PROVIDERS: 'deepseek,gemini,ollama', DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' }))
       .toEqual(['deepseek', 'gemini', 'ollama']);
-    expect(names({ GEMINI_API_KEY: 'g' })).toEqual(['gemini', 'ollama']); // default order
+    // Default order (evals/REPORT.md: DeepSeek led Gemini on triage F1): DeepSeek, then Gemini, then local Qwen
+    expect(names({ DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' })).toEqual(['deepseek', 'gemini', 'ollama']);
+    expect(names({ GEMINI_API_KEY: 'g' })).toEqual(['gemini', 'ollama']); // no DeepSeek key: unchanged behavior
+    expect(names({})).toEqual(['ollama']);
     expect(() => buildProviderChain({ LLM_PROVIDERS: 'gpt' })).toThrow(/gpt/);
   });
 });
