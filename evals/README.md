@@ -31,6 +31,8 @@ A dataset is a directory:
 4. `pnpm eval run <dataset> --config evals/configs/<config>.json [--record]` runs a config. `--record` also stores each LLM answer so the run can be replayed.
 5. `pnpm eval:report` regenerates `REPORT.md`; `pnpm eval:check --dataset <name>` fails when a metric falls below `configs/thresholds.json`.
 
+**Rate limits (free-tier Gemini).** In an eval, an HTTP 429 never falls back to another model, because that would silently turn a Gemini baseline into Qwen answers. The runner waits for the delay the provider suggests (or backs off exponentially, per the config's `rateLimit`), retries the same provider, and records a failed call if the limit does not lift. The report shows rate-limit hits and time waited. If the daily quota is spent the run stops, the cache keeps everything answered so far, and `--record` resumes later where it left off (failed calls are asked again).
+
 `--replay` runs with no network and no models, using only the dataset's cache; it is deterministic. A run stops before its estimated LLM spend exceeds `--max-usd` (default `EVAL_MAX_USD`, 0.50).
 
 ## What is measured

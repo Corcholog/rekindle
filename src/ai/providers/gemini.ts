@@ -35,6 +35,14 @@ export class GeminiProvider implements ChatProvider {
         },
       });
     } catch (err: any) {
+      const message = String(err?.message ?? '');
+      if (err?.status === 429 || /RESOURCE_EXHAUSTED|\b429\b/.test(message)) {
+        const delay = message.match(/retry(?:Delay)?\D{0,12}?(\d+(?:\.\d+)?)\s*s/i);
+        throw new ProviderError('rate_limit', 'Gemini alcanzó su límite de peticiones', {
+          retryAfterMs: delay ? Math.ceil(Number(delay[1]) * 1000) : undefined,
+          quotaExhausted: /PerDay|per day|daily/i.test(message),
+        });
+      }
       const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
       throw new ProviderError(timedOut ? 'timeout' : 'http', timedOut ? 'Gemini no respondió a tiempo' : 'Gemini devolvió un error');
     }

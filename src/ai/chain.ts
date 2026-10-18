@@ -19,10 +19,30 @@ export interface ChainResult<T> {
 }
 
 export class ChainError extends Error {
+  /** The chain stopped because of rate limiting (waiting did not help). */
+  rateLimited = false;
+  /** A quota that resets later (for example daily) is spent. */
+  quotaExhausted = false;
+
   constructor(message: string, public attempts: Attempt[]) {
     super(message);
   }
 }
+
+export interface RateLimitPolicy {
+  /**
+   * fallback (production): a rate limit moves on to the next provider.
+   * wait (evals): sleep and retry the same provider; give up without falling back, so results
+   * are never silently produced by a different model.
+   */
+  onRateLimit: 'fallback' | 'wait';
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 /**
  * Tries each provider in order. Malformed output (empty, invalid JSON, schema mismatch) is
@@ -34,11 +54,15 @@ export async function runChain<S extends z.ZodTypeAny>(
   user: string,
   schema: S,
   options?: CompletionOptions,
+  policy?: RateLimitPolicy,
 ): Promise<ChainResult<z.infer<S>>> {
   const attempts: Attempt[] = [];
+  const sleep = policy?.sleep ?? defaultSleep;
 
   for (const provider of providers) {
-    for (let tryNumber = 0; tryNumber < 2; tryNumber++) {
+    let malformedTries = 0;
+    let rateLimitRetries = 0;
+    for (;;) {
       const started = Date.now();
       try {
         const { data, usage } = await provider.complete(system, user, schema, options);
@@ -47,9 +71,28 @@ export async function runChain<S extends z.ZodTypeAny>(
         return { data, model: `${provider.name}:${provider.model}`, usage, latencyMs, attempts };
       } catch (err) {
         const kind: ErrorKind = err instanceof ProviderError ? err.kind : 'other';
-        attempts.push({ provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started });
+        const attempt: Attempt = { provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started };
+        attempts.push(attempt);
         console.warn(`[AI] ${provider.name}:${provider.model} falló (${kind}): ${err instanceof Error ? err.message : 'error desconocido'}`);
-        if (!RETRYABLE_KINDS.has(kind)) break;
+
+        if (kind === 'rate_limit' && policy?.onRateLimit === 'wait') {
+          const quotaExhausted = err instanceof ProviderError && err.quotaExhausted === true;
+          if (quotaExhausted || rateLimitRetries >= policy.maxRetries) {
+            const failure = new ChainError(quotaExhausted ? 'Cuota agotada en el proveedor de IA' : 'Límite de peticiones del proveedor de IA', attempts);
+            failure.rateLimited = true;
+            failure.quotaExhausted = quotaExhausted;
+            throw failure;
+          }
+          const suggested = err instanceof ProviderError ? err.retryAfterMs : undefined;
+          const delay = Math.min(suggested ?? policy.baseDelayMs * 2 ** rateLimitRetries, policy.maxDelayMs);
+          attempt.waitedMs = delay;
+          rateLimitRetries++;
+          await sleep(delay);
+          continue;
+        }
+
+        if (RETRYABLE_KINDS.has(kind) && malformedTries++ < 1) continue;
+        break; // next provider
       }
     }
   }

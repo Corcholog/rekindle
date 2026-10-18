@@ -87,6 +87,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const sink: SinkEntry[] = [];
     let spentUsd = 0;
     let budgetExceeded = false;
+    let quotaExhausted = false;
     let replayMiss: string | null = null; // the evaluator swallows per-project errors, so misses are checked per case
 
     // --- embeddings: cached by model + text, always local (I3)
@@ -110,6 +111,9 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         const key = sha256(JSON.stringify({ chain: specs, system, user, options: callOptions ?? null }));
         const recorded = llmCache.get(key);
 
+        // Record mode resumes: answers recorded earlier are reused, failures are retried
+        if (options.mode === 'record' && recorded?.ok) return replayRecorded(recorded, phase);
+
         if (options.mode === 'replay') {
           if (!recorded) {
             replayMiss = `Modo replay: falta una respuesta del LLM en la caché del dataset (clave ${key.slice(0, 12)})`;
@@ -130,7 +134,14 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         }
 
         try {
-          const result = await runChain(providers, system, user, zodSchema, callOptions);
+          const result = await runChain(providers, system, user, zodSchema, callOptions, {
+            onRateLimit: 'wait',
+            ...config.rateLimit,
+            sleep: ms => {
+              log(`    límite de peticiones: esperando ${Math.round(ms / 1000)} s antes de reintentar…`);
+              return new Promise(resolve => setTimeout(resolve, ms));
+            },
+          });
           for (const attempt of result.attempts) {
             const p = priceOf(attempt.provider, attempt.model);
             if (p) spentUsd += estimateCostUsd(attempt.usage, p);
@@ -143,7 +154,9 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         } catch (err) {
           if (err instanceof ChainError) {
             sink.push({ phase, ok: false, attempts: err.attempts, latencyMs: sumLatency(err.attempts), generated: true });
-            if (options.mode === 'record') llmCache.set(key, { ok: false, attempts: err.attempts });
+            if (err.quotaExhausted) quotaExhausted = true;
+            // Rate-limit failures are not cached, so a resumed run asks again
+            if (options.mode === 'record' && !err.rateLimited) llmCache.set(key, { ok: false, attempts: err.attempts });
           }
           throw err;
         }
@@ -175,6 +188,8 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const retrievedByArticle = new Map<string, string[]>();
     let done = 0;
 
+    const saveCaches = () => Promise.all([embeddingCache.save(), summaryCache.save(), llmCache.save()]);
+
     for (const labelCase of cases) {
       const article = articleById.get(labelCase.article)!;
       const summaryKey = sha256(`${article.text}\n${JSON.stringify(config.summaryProviders)}`);
@@ -196,6 +211,10 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       retrievedByArticle.set(article.id, topK.map(c => folderById.get(c.projectId)!));
 
       await evaluateContentMatch(content.id, undefined, { threshold: config.threshold });
+      await saveCaches(); // progress survives an interrupted run
+      if (quotaExhausted) {
+        throw new Error('Cuota agotada en el proveedor de IA (límite diario). El progreso quedó guardado: vuelve a ejecutar con --record más tarde para continuar.');
+      }
       if (replayMiss) throw new Error(replayMiss);
       if (budgetExceeded) throw new BudgetExceededError(`Se alcanzó EVAL_MAX_USD (${options.maxUsd} USD); resultados parciales descartados`);
       log(`  [${++done}/${cases.length}] ${article.id}`);
@@ -307,6 +326,8 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         malformedOutputs: triageEntries.flatMap(e => e.attempts).filter(a => !a.ok && a.errorKind && MALFORMED.has(a.errorKind)).length,
         fallbacks: triageEntries.filter(e => e.ok && e.attempts.at(-1)!.provider !== firstProvider).length,
         failures: triageEntries.filter(e => !e.ok).length,
+        rateLimitHits: triageEntries.flatMap(e => e.attempts).filter(a => a.errorKind === 'rate_limit').length,
+        rateLimitWaitMs: triageEntries.flatMap(e => e.attempts).reduce((s, a) => s + (a.waitedMs ?? 0), 0),
         latencyMsP50: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 50),
         latencyMsP95: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 95),
       },
@@ -326,7 +347,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const resultFile = path.join(resultsDir, `${stamp}-${result.meta.gitSha}-${config.name}-${result.meta.dataset}.json`);
     await fs.writeFile(resultFile, JSON.stringify(result, null, 2) + '\n', 'utf-8');
 
-    await Promise.all([embeddingCache.save(), summaryCache.save(), llmCache.save()]);
+    await saveCaches();
     await pool.end();
     return { result, resultFile };
   } finally {

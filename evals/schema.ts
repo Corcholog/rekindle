@@ -53,6 +53,15 @@ export const ConfigSchema = z.object({
   k: z.number().int().positive().default(3),
   /** Cosine-distance threshold for retrieval (sweeps override the default 0.6). */
   threshold: z.number().positive().default(0.6),
+  /**
+   * Evals never fall back on a rate limit: they wait and retry the same provider (honoring the
+   * provider's suggested delay), then fail the call. Defaults suit free-tier Gemini.
+   */
+  rateLimit: z.object({
+    maxRetries: z.number().int().nonnegative().default(6),
+    baseDelayMs: z.number().int().positive().default(15_000),
+    maxDelayMs: z.number().int().positive().default(120_000),
+  }).default({ maxRetries: 6, baseDelayMs: 15_000, maxDelayMs: 120_000 }),
   /** USD per million tokens, keyed "provider:model". Missing entries mean cost is not measured. */
   prices: z.record(z.string(), PriceSchema).default({}),
 });
@@ -99,6 +108,9 @@ export const ResultSchema = z.object({
     malformedOutputs: z.number(),
     fallbacks: z.number(),
     failures: z.number(),
+    /** Attempts answered with HTTP 429, and the total time spent waiting because of them. */
+    rateLimitHits: z.number(),
+    rateLimitWaitMs: z.number(),
     latencyMsP50: NullableNumber,
     latencyMsP95: NullableNumber,
   }),

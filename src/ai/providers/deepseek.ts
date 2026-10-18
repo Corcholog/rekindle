@@ -67,6 +67,13 @@ export class DeepSeekProvider implements ChatProvider {
       throw new ProviderError(timedOut ? 'timeout' : 'http', timedOut ? 'DeepSeek no respondió a tiempo' : 'No se pudo conectar con DeepSeek');
     }
 
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('retry-after'));
+      throw new ProviderError('rate_limit', 'DeepSeek alcanzó su límite de peticiones', {
+        retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined,
+      });
+    }
+
     if (!response.ok) {
       // Status only: the response body is not logged or propagated
       throw new ProviderError('http', `DeepSeek respondió HTTP ${response.status}`);

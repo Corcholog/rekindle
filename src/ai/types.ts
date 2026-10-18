@@ -5,14 +5,26 @@ export interface Usage {
   completionTokens?: number;
 }
 
-export type ErrorKind = 'timeout' | 'http' | 'empty' | 'invalid_json' | 'schema' | 'other';
+export type ErrorKind = 'timeout' | 'http' | 'rate_limit' | 'empty' | 'invalid_json' | 'schema' | 'other';
 
 /** Malformed model output is worth one retry; transport errors go straight to the next provider. */
 export const RETRYABLE_KINDS: ReadonlySet<ErrorKind> = new Set(['empty', 'invalid_json', 'schema']);
 
+export interface ProviderErrorDetails {
+  /** How long the provider asked us to wait (rate_limit). */
+  retryAfterMs?: number;
+  /** The quota is spent for the day (or longer): waiting a few seconds will not help. */
+  quotaExhausted?: boolean;
+}
+
 export class ProviderError extends Error {
-  constructor(public kind: ErrorKind, message: string) {
+  retryAfterMs?: number;
+  quotaExhausted?: boolean;
+
+  constructor(public kind: ErrorKind, message: string, details: ProviderErrorDetails = {}) {
     super(message);
+    this.retryAfterMs = details.retryAfterMs;
+    this.quotaExhausted = details.quotaExhausted;
   }
 }
 
@@ -45,6 +57,8 @@ export interface Attempt {
   errorKind?: ErrorKind;
   usage?: Usage;
   latencyMs: number;
+  /** Time slept after this attempt before retrying (rate limits). */
+  waitedMs?: number;
 }
 
 export interface JsonSchemaLike {
