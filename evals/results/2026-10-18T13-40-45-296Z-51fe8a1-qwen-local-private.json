@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "gitSha": "51fe8a1",
+    "gitDirty": true,
+    "config": "qwen-local",
+    "configHash": "2a360e0a2a49067fcb6e49350464707fbb789db4605a157253b0d57a2ca99ec3",
+    "dataset": "private",
+    "datasetManifestHash": "e82fad68ff243b2ab13b7df8628c99febce6e9fbf3941d6e505dd19d5c2d9c35",
+    "labeledBy": "Giorgio",
+    "mode": "record",
+    "embeddingModel": "bge-m3",
+    "cases": 47,
+    "labeledPairs": 376,
+    "startedAt": "2026-10-18T13:40:45.296Z"
+  },
+  "retrieval": {
+    "k": 3,
+    "threshold": 0.6,
+    "precisionAtK": 0.41228070175438586,
+    "recallAtK": 0.9298245614035087,
+    "casesWithRelevant": 19,
+    "falseRetrievalRate": 0.9642857142857143,
+    "casesWithoutRelevant": 28
+  },
+  "triage": {
+    "confusion": {
+      "actionable": {
+        "actionable": 11,
+        "tentative": 4,
+        "irrelevant": 3
+      },
+      "tentative": {
+        "actionable": 1,
+        "tentative": 4,
+        "irrelevant": 3
+      },
+      "irrelevant": {
+        "actionable": 0,
+        "tentative": 32,
+        "irrelevant": 318
+      }
+    },
+    "perClass": {
+      "actionable": {
+        "precision": 0.9166666666666666,
+        "recall": 0.6111111111111112,
+        "f1": 0.7333333333333333,
+        "support": 18
+      },
+      "tentative": {
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.16666666666666666,
+        "support": 8
+      },
+      "irrelevant": {
+        "precision": 0.9814814814814815,
+        "recall": 0.9085714285714286,
+        "f1": 0.9436201780415431,
+        "support": 350
+      }
+    },
+    "macroF1": 0.6145400593471809,
+    "targetNoteAccuracy": 0.3333333333333333,
+    "targetNoteCases": 18
+  },
+  "reliability": {
+    "llmCalls": 215,
+    "attempts": 215,
+    "malformedOutputs": 0,
+    "fallbacks": 0,
+    "failures": 0,
+    "rateLimitHits": 0,
+    "unavailableHits": 0,
+    "rateLimitWaitMs": 0,
+    "latencyMsP50": 3421,
+    "latencyMsP95": 7592
+  },
+  "cost": {
+    "promptTokens": 0,
+    "completionTokens": 0,
+    "estimatedUsd": 0,
+    "note": "215 of 215 LLM calls were made in this run (the rest replayed from cache). Local models are counted as $0."
+  }
+}
