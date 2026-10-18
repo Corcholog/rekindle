@@ -689,7 +689,11 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
 
 ---
 
-## 15. Known Considerations & Future Roadmap
+## 15. Evaluation harness (`evals/`)
+
+`pnpm eval run <dataset> --config <file>` measures retrieval and triage quality. It starts a throwaway Postgres, reconciles the dataset's vault with the real reconciler, summarizes and embeds each labeled article, runs `retrieveCandidates` and `evaluateContentMatch`, and compares the verdicts with the owner's `labels.yaml`. Embeddings, summaries and LLM answers are cached per dataset, so a recorded dataset replays offline and deterministically (`--replay`). The runner swaps in its record/replay layer through `AiProvider.setOverrides()`; production code paths are otherwise unchanged. See `evals/README.md` for the workflow, the metrics and the privacy rules. Real notes and labels live only in the git-ignored `evals/private/`.
+
+## 16. Known Considerations & Future Roadmap
 
 | Area | Current Behavior | Future Consideration |
 |---|---|---|

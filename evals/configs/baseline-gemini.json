@@ -1,0 +1,11 @@
+{
+  "name": "baseline-gemini",
+  "description": "Production chain today: Gemini, then local Qwen. Summaries by DeepSeek (identical across configs).",
+  "providers": [{ "name": "gemini" }, { "name": "ollama" }],
+  "summaryProviders": [{ "name": "deepseek", "thinking": false }],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": { "inputPerM": 0.3, "outputPerM": 1.2 }
+  }
+}
