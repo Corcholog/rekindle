@@ -43,6 +43,13 @@
       "when": 1792277633041,
       "tag": "0005_embedding_model_on_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792367217411,
+      "tag": "0006_observability",
+      "breakpoints": true
     }
   ]
 }

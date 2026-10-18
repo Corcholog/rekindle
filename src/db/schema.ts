@@ -35,7 +35,8 @@ export const ingestStatusEnum = pgEnum('ingest_status', ['pending', 'extracting'
 export const verdictEnum = pgEnum('verdict', ['irrelevant', 'tentative', 'actionable']);
 export const actionTypeEnum = pgEnum('action_type', ['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']);
 export const suggestionStatusEnum = pgEnum('suggestion_status', ['pending', 'accepted', 'discarded']);
-export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action']);
+export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action', 'consult', 'synergy', 'synthesis', 'reevaluate']);
+export const pipelineStageEnum = pgEnum('pipeline_stage', ['fetch', 'extract', 'summarize', 'embed', 'retrieve', 'evaluate', 'ingest_job', 'evaluate_job']);
 
 // 1. Contents Table
 export const contents = pgTable('contents', {
@@ -51,6 +52,8 @@ export const contents = pgTable('contents', {
   consumptionSeq: integer('consumption_seq').default(1).notNull(),
   ingestStatus: ingestStatusEnum('ingest_status').default('pending').notNull(),
   ingestStatusReason: text('ingest_status_reason'),
+  // Correlation ID of the ingestion that produced this row (Phase 4)
+  traceId: uuid('trace_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('contents_consumed_at_idx').on(table.consumedAt),
@@ -111,6 +114,9 @@ export const evaluations = pgTable('evaluations', {
   triageReasoning: text('triage_reasoning'),
   evaluatedAt: timestamp('evaluated_at').defaultNow().notNull(),
   consumptionSeq: integer('consumption_seq').notNull(),
+  traceId: uuid('trace_id'),
+  // The retrieval step that selected this project for the content
+  retrievalEventId: uuid('retrieval_event_id').references(() => pipelineEvents.id, { onDelete: 'set null' }),
 }, (table) => [
   unique('evaluations_idempotency_idx').on(table.contentId, table.projectSnapshotId, table.consumptionSeq)
 ]);
@@ -153,5 +159,37 @@ export const llmTelemetry = pgTable('llm_telemetry', {
   costUsd: real('cost_usd'),
   isSuccess: boolean('is_success').default(true).notNull(),
   errorMessage: text('error_message'),
+  // One row per provider attempt. Only lengths and a hash of the prompt are kept, never its text.
+  traceId: uuid('trace_id'),
+  provider: text('provider'),
+  attemptNo: integer('attempt_no'),
+  errorKind: text('error_kind'),
+  isFallback: boolean('is_fallback').default(false).notNull(),
+  waitedMs: integer('waited_ms'),
+  promptChars: integer('prompt_chars'),
+  completionChars: integer('completion_chars'),
+  promptHash: varchar('prompt_hash', { length: 16 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('llm_telemetry_created_at_idx').on(table.createdAt),
+  index('llm_telemetry_trace_id_idx').on(table.traceId)
+]);
+
+// 7. Pipeline Events Table: one row per pipeline stage of a trace (Phase 4).
+// attrs holds IDs, counts, lengths and distances only, never note or article text.
+export const pipelineEvents = pgTable('pipeline_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  traceId: uuid('trace_id').notNull(),
+  stage: pipelineStageEnum('stage').notNull(),
+  contentId: uuid('content_id').references(() => contents.id, { onDelete: 'set null' }),
+  snapshotId: uuid('snapshot_id').references(() => projectSnapshots.id, { onDelete: 'set null' }),
+  durationMs: integer('duration_ms'),
+  ok: boolean('ok').default(true).notNull(),
+  errorKind: text('error_kind'),
+  attempt: integer('attempt'),
+  attrs: jsonb('attrs').$type<Record<string, unknown>>(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('pipeline_events_trace_id_idx').on(table.traceId),
+  index('pipeline_events_created_at_idx').on(table.createdAt)
+]);
