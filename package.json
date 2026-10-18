@@ -11,7 +11,13 @@
     "db:reset": "tsx src/db/reset.ts",
     "start": "tsx scripts/run_server.ts",
     "dev": "tsx watch scripts/run_server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx evals/runner/cli.ts run",
+    "eval:snapshot": "tsx evals/runner/cli.ts snapshot",
+    "eval:fetch": "tsx evals/runner/cli.ts fetch",
+    "eval:label": "tsx evals/runner/cli.ts label",
+    "eval:check": "tsx evals/runner/cli.ts check",
+    "eval:report": "tsx evals/runner/cli.ts report"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.2.0",

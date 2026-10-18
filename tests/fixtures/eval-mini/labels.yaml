@@ -1,0 +1,24 @@
+# MACHINERY FIXTURE: these labels exist only so the harness can be tested end to end. They are not
+# a person judging relevance, and results on this dataset say nothing about quality.
+labeled_by: test-fixture
+cases:
+  - article: muerte-anime
+    projects:
+      Projects/Anime:
+        verdict: actionable
+        target_note: muerte-de-personajes.md
+      Projects/Cocina:
+        verdict: irrelevant
+  - article: pan-masa-madre
+    projects:
+      Projects/Anime:
+        verdict: irrelevant
+      Projects/Cocina:
+        verdict: actionable
+        target_note: recetas.md
+  - article: futbol-liga
+    projects:
+      Projects/Anime:
+        verdict: irrelevant
+      Projects/Cocina:
+        verdict: irrelevant

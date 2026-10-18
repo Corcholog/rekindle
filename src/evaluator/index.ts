@@ -4,7 +4,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
-import { retrieveCandidates } from './retrieval';
+import { retrieveCandidates, RetrievalOptions } from './retrieval';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 
 const ollama = sharedAiProvider;
@@ -30,7 +30,7 @@ const unifiedEvaluationSchema = z.object({
  * Step 1: Spatial Semantic Pre-filter (pgvector cosine distance < 0.6 in Postgres)
  * Step 2: Unified LLM Synthesis & Action Formulation (Single LLM invocation)
  */
-export async function evaluateContentMatch(contentId: string, targetProjectId?: string) {
+export async function evaluateContentMatch(contentId: string, targetProjectId?: string, retrieval: RetrievalOptions = {}) {
   console.log(`[Evaluator] Starting unified evaluation for content ${contentId}${targetProjectId ? ` (target project: ${targetProjectId})` : ''}`);
   
   // 1. Fetch content
@@ -51,7 +51,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
   }
 
   // Step 1: Vector Search: Find relevant project snapshots of active projects using distance threshold (< 0.6)
-  const candidates = await retrieveCandidates(content.embedding, { targetProjectId, embedModel });
+  const candidates = await retrieveCandidates(content.embedding, { ...retrieval, targetProjectId, embedModel });
 
   if (candidates.length === 0) {
     console.log(`[Evaluator] [Step 1 Filtered] No matching active projects within distance threshold for content ${contentId}.`);

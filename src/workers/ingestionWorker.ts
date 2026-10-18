@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { env } from '../config';
-import { z } from 'zod';
+import { summarizeText } from '../ai/summarize';
 import * as net from 'net';
 import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
 
@@ -111,10 +111,6 @@ export async function extractYouTubeContent(url: string): Promise<{ title: strin
   return { title, rawText, author };
 }
 
-const summarySchema = z.object({
-  summary: z.string().describe('Un resumen estructurado del contenido extraído'),
-});
-
 export const setupIngestionWorker = async () => {
   const workerId = await boss.work(QUEUE_NAME, async (jobs: any) => {
     const jobArray = Array.isArray(jobs) ? jobs : [jobs];
@@ -192,16 +188,15 @@ export const setupIngestionWorker = async () => {
           .set({ rawText, title, channelOrDomain, ingestStatus: 'summarizing' })
           .where(eq(contents.id, contentId));
 
-        // 3. Summarize using Ollama
-        const systemPrompt = "Eres un analista experto. Resume el texto proporcionado de manera concisa enfocándote en los puntos clave. Importante: Escribe el resumen siempre en Español, incluso si el texto original está en Inglés u otro idioma.";
-        const { data: summaryResult } = await ollama.evaluateContent(systemPrompt, rawText, summarySchema);
-        
+        // 3. Summarize through the LLM provider chain
+        const summary = await summarizeText(ollama, rawText);
+
         await db.update(contents)
-          .set({ summary: summaryResult.summary, ingestStatus: 'embedding' })
+          .set({ summary, ingestStatus: 'embedding' })
           .where(eq(contents.id, contentId));
 
         // 4. Generate Embedding
-        const embedding = await ollama.getEmbedding(summaryResult.summary);
+        const embedding = await ollama.getEmbedding(summary);
 
         // 5. Save everything and mark ready
         await db.update(contents)

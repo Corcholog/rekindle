@@ -16,8 +16,16 @@ export interface EvaluationOutput<T> {
  * Single entry point for model calls: structured completions go through the provider chain
  * (LLM_PROVIDERS, default gemini -> ollama); embeddings are ALWAYS local with Ollama (I3).
  */
+export type EvaluateFn = (
+  system: string,
+  user: string,
+  schema: z.ZodTypeAny,
+  options?: CompletionOptions,
+) => Promise<EvaluationOutput<any>>;
+
 export class AiProvider {
   private embedder: OllamaEmbeddings;
+  private overrides: { evaluate?: EvaluateFn; embed?: (text: string) => Promise<number[]> } = {};
   public lastUsedModel: string = 'unknown';
 
   constructor(
@@ -31,8 +39,17 @@ export class AiProvider {
     });
   }
 
+  /**
+   * Replaces the model calls. Used by the eval harness to record/replay LLM responses and cache
+   * embeddings while the real evaluator, reconciler and prompts run unchanged.
+   */
+  setOverrides(overrides: { evaluate?: EvaluateFn; embed?: (text: string) => Promise<number[]> }): void {
+    this.overrides = overrides;
+  }
+
   /** Obtiene el embedding (vector 1024D) con el modelo local de Ollama (bge-m3). */
   async getEmbedding(text: string): Promise<number[]> {
+    if (this.overrides.embed) return this.overrides.embed(text);
     try {
       return await this.embedder.embedQuery(text);
     } catch (error) {
@@ -48,6 +65,7 @@ export class AiProvider {
     schema: T,
     options?: CompletionOptions,
   ): Promise<EvaluationOutput<z.infer<T>>> {
+    if (this.overrides.evaluate) return this.overrides.evaluate(systemPrompt, userText, schema, options);
     // Read at call time so the key and chain can change without restarting
     const providers = buildProviderChain({ ...process.env, OLLAMA_URL: this.baseUrl });
     const result = await runChain(providers, systemPrompt, userText, schema, options);

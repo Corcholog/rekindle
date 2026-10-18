@@ -1,0 +1,7 @@
+{
+  "checks": [
+    { "path": "retrieval.recallAtK", "min": 0.8 },
+    { "path": "triage.macroF1", "min": 0.5 },
+    { "path": "reliability.failures", "max": 0 }
+  ]
+}

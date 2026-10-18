@@ -1,0 +1,9 @@
+{
+  "name": "mini-ollama",
+  "description": "Fixture config: local Ollama for summaries and triage (machinery test).",
+  "providers": [{ "name": "ollama" }],
+  "summaryProviders": [{ "name": "ollama" }],
+  "k": 2,
+  "threshold": 0.6,
+  "prices": {}
+}

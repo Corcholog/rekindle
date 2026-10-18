@@ -17,3 +17,6 @@ Thumbs.db
 
 # Audit report stays local until its findings are fixed (docs/agent/01-audit.md)
 docs/audit/
+
+# Private eval data: real notes, article texts, labels and caches (never committed)
+evals/private/
