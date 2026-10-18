@@ -47,6 +47,9 @@ importers:
       pg-boss:
         specifier: ^12.37.1
         version: 12.37.1(@opentelemetry/api@1.9.1)
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
       undici:
         specifier: ^7.30.1
         version: 7.30.1
