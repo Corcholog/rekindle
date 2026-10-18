@@ -1,10 +1,11 @@
 import { db } from '../db';
-import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions, projects, llmTelemetry } from '../db/schema';
+import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions, llmTelemetry } from '../db/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
-import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
+import { retrieveCandidates } from './retrieval';
+import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 
 const ollama = sharedAiProvider;
 
@@ -50,65 +51,22 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
   }
 
   // Step 1: Vector Search: Find relevant project snapshots of active projects using distance threshold (< 0.6)
-  const targetVector = `[${content.embedding.join(',')}]`;
-  const projectFilter = targetProjectId ? sql`AND p.id = ${targetProjectId}` : sql``;
+  const candidates = await retrieveCandidates(content.embedding, { targetProjectId, embedModel });
 
-  const topSnapshots = await db.execute(sql`
-    WITH latest_snapshots AS (
-      SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, embedding_model, captured_at
-      FROM ${projectSnapshots}
-      ORDER BY project_id, captured_at DESC
-    ),
-    matching_notes AS (
-      SELECT DISTINCT ON (pns.project_id)
-        pns.project_id,
-        pns.note_path,
-        pns.note_title,
-        pns.content_snippet,
-        (pns.embedding <=> ${targetVector}::vector) AS note_distance
-      FROM ${projectNoteSnapshots} pns
-      JOIN latest_snapshots ls ON pns.project_snapshot_id = ls.id
-      WHERE pns.embedding IS NOT NULL
-        AND pns.embedding_model = ${embedModel}
-        AND (pns.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD}
-      ORDER BY pns.project_id, (pns.embedding <=> ${targetVector}::vector) ASC
-    )
-    SELECT 
-      ls.id AS snapshot_id,
-      ls.project_id,
-      ls.thesis_text,
-      ls.notes_content,
-      mn.note_path AS matched_note_path,
-      mn.note_title AS matched_note_title,
-      mn.content_snippet AS matched_note_snippet,
-      COALESCE(mn.note_distance, (ls.embedding <=> ${targetVector}::vector)) AS best_distance
-    FROM latest_snapshots ls
-    JOIN ${projects} p ON ls.project_id = p.id
-    LEFT JOIN matching_notes mn ON ls.project_id = mn.project_id
-    WHERE p.is_active = true
-      ${projectFilter}
-      AND (
-        mn.note_path IS NOT NULL 
-        OR (ls.embedding IS NOT NULL AND ls.embedding_model = ${embedModel} AND (ls.embedding <=> ${targetVector}::vector) < ${VECTOR_DISTANCE_THRESHOLD})
-      )
-    ORDER BY best_distance ASC
-    LIMIT ${TOP_K_PROJECTS_LIMIT}
-  `);
-
-  if (topSnapshots.rows.length === 0) {
+  if (candidates.length === 0) {
     console.log(`[Evaluator] [Step 1 Filtered] No matching active projects within distance threshold for content ${contentId}.`);
     return;
   }
 
   // Step 2: Unified Synthesis for each matching project (Single LLM Call)
-  for (const row of topSnapshots.rows) {
-    const snapshotId = (row.snapshot_id || row.id) as string;
-    const projectId = row.project_id as string;
-    const thesisText = row.thesis_text as string;
-    const notesContent = (row.notes_content as string) || '';
-    const matchedNotePath = (row.matched_note_path as string) || null;
-    const matchedNoteTitle = (row.matched_note_title as string) || null;
-    const matchedNoteSnippet = (row.matched_note_snippet as string) || null;
+  for (const candidate of candidates) {
+    const snapshotId = candidate.snapshotId;
+    const projectId = candidate.projectId;
+    const thesisText = candidate.thesisText;
+    const notesContent = candidate.notesContent;
+    const matchedNotePath = candidate.notePath;
+    const matchedNoteTitle = candidate.noteTitle;
+    const matchedNoteSnippet = candidate.noteSnippet;
 
     // Idempotency: Check if evaluation already exists before invoking LLM
     const [existing] = await db.select({ id: evaluations.id })
