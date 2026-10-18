@@ -1,0 +1,409 @@
+# Etiquetas de evaluación — las rellena el dueño del proyecto.
+#
+# Para cada artículo y cada proyecto, indica el veredicto correcto:
+#   actionable  el artículo aporta algo concreto que se puede usar en ese proyecto
+#   tentative   tiene relación temática, pero sin una aportación clara
+#   irrelevant  no tiene que ver con el proyecto
+# Si el veredicto es actionable, rellena target_note con la nota donde lo integrarías
+# (ruta dentro del proyecto o nombre de archivo, p. ej. "research/combate.md").
+# Atajo: pon en "others" un veredicto (normalmente irrelevant) y se aplicará a todos los proyectos
+# que dejes en blanco; así solo marcas los proyectos que sí tienen relación.
+# Pon tu nombre en labeled_by al terminar. Valida con: pnpm eval:label --check <dataset>
+labeled_by: null
+cases:
+  - article: aaa-juegos-servicio
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: anime-finales-tragicos
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: anime-muerte-duelo
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: bolsa-semana
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: cuerda-afinacion-vibrato
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: futuro-retro-2000
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: guardar-para-leer-despues
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: ia-promesas-fallidas
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: indie-vs-aaa-presupuestos
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: magia-con-reglas
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: nietzsche-nihilismo
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: sartre-libertad
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: scifi-fantasia-frontera
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: scroll-infinito-fatiga
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: tortilla-patatas
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: viento-limites-aliento
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: youtube-2010-creadores
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
+  - article: youtube-algoritmo-retencion
+    others: null
+    projects:
+      Projects/Ciencia ficción y fantasía:
+        verdict: null
+        target_note: null
+      "Projects/El futuro imaginado: la IA de ayer y la de hoy":
+        verdict: null
+        target_note: null
+      Projects/Existencialismo y nihilismo:
+        verdict: null
+        target_note: null
+      Projects/Instrumentos de viento y cuerda:
+        verdict: null
+        target_note: null
+      Projects/La era dorada de YouTube:
+        verdict: null
+        target_note: null
+      Projects/Videojuegos indie vs AAA:
+        verdict: null
+        target_note: null
+    notes: null
