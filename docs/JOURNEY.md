@@ -213,6 +213,18 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `evals/results/*-private.json` with `mode: rescore`, `evals/REPORT.md`, `tests/eval_rescore.test.ts`, `tests/eval_metrics.test.ts`, `tests/eval_scoring.test.ts`.
 - **Outcome / lesson:** relabeling after reading a model's answers favors that model, so the README says so. Whether to turn thinking on (more connections found, more invented, twice the latency and cost) is the owner's call; macro-F1 still favors thinking off.
 
+### 2026-10-19 — UI: a hearth palette, readable verdicts in Reading, and publication cleanup
+- **Context:** before publishing, the owner asked for a livelier UI, then judged the first attempt too colourful and pointed out that projects edited 3–5 days earlier showed as grey ash.
+- **What happened:**
+  - A first pass gave each project one of 8 colours and each verdict its own hue (`233054b`). The owner found it too many colours for the brand.
+  - Replaced by a hearth palette where heat is the only colour (`7066a31`). The heat scale had been backwards: recent projects were ash and dormant ones glowed. Now a project burns while worked on (0–6 days), cools to embers (7–13) and turns to ash once dormant, with a spark on ash that has suggestions to review. Card edges show the project's heat; verdicts differ by shape (lit chip, dashed outline).
+  - In Reading, each project's verdict opens in place to show the full reasoning (`c46ac61`), and actionable or tentative ones link to their suggestion, opening that project and tab with the card outlined (`dc085c7`, API in `4122de9`).
+  - Screenshot review of the link found a race: a slower, older suggestions request could overwrite the newer list and show another project's cards (`70d28b0`). A link built against an older server pointed at `project=undefined` and broke the list; ids from the URL are now validated (`bc8875f`).
+  - Publication cleanup: a full-history secret scan (gitleaks, 139 commits, no findings), Apache-2.0 with `NOTICE` and `CITATION.cff` (`11326b4`), the user-test guide and tooling removed and the agent's working plan kept local at the owner's request (`f10e1f3`, `81331ff`).
+- **Alternatives considered:** per-project colours (rejected by the owner: they compete with the one colour that carries meaning); a stronger tint (more vivid, but busier with many cards).
+- **Evidence:** `tests/ui_contrast.test.ts` (text AA, card edges and the spark 3:1), `tests/ui_dormancy.test.ts` (heat scale), `tests/ui_xss.test.ts` (reasoning rows, the link, the race with a deliberately slow response, an invalid link; each new check confirmed to fail on the old code), `tests/phase7_ui.test.ts` (API fields).
+- **Outcome / lesson:** the visual metaphor has to match what the product does; a palette that looks rich can still say the wrong thing. Screenshots against seeded data caught a bug that the fast, in-process tests had not.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -246,6 +258,10 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | — | The ingestion worker decided which failures not to retry by matching Spanish error text, so translating a message would silently enable retries | Translating the messages | Low | `f30371b` (matches both) | none (regex over messages) |
 | — | Eval caches of paid-for model answers were rewritten in place; a crash mid-write would lose them | A machine crash during a live run | Low | `c878b19` | `tests/eval_cache.test.ts` |
 | — | The extension guide showed the owner's home path, and the vault placeholder showed a username | Translating the UI | Low | `54c3e7f` | `tests/ui_i18n.test.ts` (static page) |
+| — | The project heat scale ran backwards: projects edited in the last week showed as grey ash and dormant ones glowed | Owner, using the new UI on their vault | Low | `7066a31` | `tests/ui_dormancy.test.ts` |
+| — | A slower, older suggestions request could overwrite the newer list, showing another project's cards under the selected one | Screenshot review of the Reading → Suggestions link | Medium | `70d28b0` | `tests/ui_xss.test.ts` (slow all-projects response) |
+| — | A suggestions link with a non-UUID id (from a server older than the UI) made the list fail with "Invalid UUID" | Owner, after rebuilding only the UI | Low | `bc8875f` | `tests/ui_xss.test.ts` (invalid link) |
+| — | An empty file from an interrupted shell command was committed (`scripts_tmp_labeldiff.mjs`) | Pre-publication repo check | Low | `f10e1f3` | not tested (housekeeping) |
 
 ## Dead code and legacy removed
 
