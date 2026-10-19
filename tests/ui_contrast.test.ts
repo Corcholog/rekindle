@@ -30,7 +30,31 @@ describe('theme contrast', () => {
         }
       }
       expect(contrast(t['ember-ink'], t.ember), 'primary button').toBeGreaterThanOrEqual(4.5);
-      expect(contrast(t.surface, t.ok), 'accept button').toBeGreaterThanOrEqual(4.5);
+      // The Integrate button is a gradient from ember to ember-2: both ends must hold
+      expect(contrast(t['ember-ink'], t['ember-2']), 'integrate button, light end').toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${name}: verdict colours read on their badges and on cards`, () => {
+      const t = block(selector);
+      for (const [fg, soft] of [['act', 'act-soft'], ['tent', 'tent-soft'], ['ok', 'ok-soft']]) {
+        expect(contrast(t[fg], t[soft]), `${fg} on ${soft}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t[fg], t.surface), `${fg} on surface`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+
+    it(`${name}: every project colour reads, and its stripe stands out from the card`, () => {
+      const t = block(selector);
+      for (let i = 0; i < 8; i++) {
+        const [ink, soft, stripe] = [t[`p${i}-ink`], t[`p${i}-soft`], t[`p${i}`]];
+        expect(ink && soft && stripe, `p${i} tokens`).toBeTruthy();
+        // The project's name is written in its ink on the card header (soft) and on plain surfaces
+        expect(contrast(ink, soft), `p${i}-ink on its header`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(ink, t.surface), `p${i}-ink on surface`).toBeGreaterThanOrEqual(4.5);
+        // The header also holds the date and badges in secondary ink
+        expect(contrast(t['ink-2'], soft), `ink-2 on p${i}-soft`).toBeGreaterThanOrEqual(4.5);
+        // Stripes and swatches are graphics: WCAG 1.4.11 asks 3:1 against what is next to them
+        expect(contrast(stripe, t.surface), `p${i} stripe on surface`).toBeGreaterThanOrEqual(3);
+      }
     });
   }
 });

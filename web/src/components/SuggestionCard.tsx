@@ -7,6 +7,7 @@ import { cn, safeHref } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
 import { rekindles as rekindlesProject } from '@/lib/dormancy';
+import { useProjectHue } from '@/lib/projectHues';
 
 // Fixed reasons offered when discarding; the values match DISCARD_REASONS in src/db/schema.ts
 // and each has a "reason.<value>" label in the dictionaries
@@ -30,6 +31,12 @@ export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Sugg
       : s.status === 'accepted' ? t('sug.accepted')
         : ACTION_TYPES.includes(s.actionType) ? t(`action.${s.actionType}`) : s.actionType;
   const target = s.targetFile && !['discarded', 'tentative', 'unknown'].includes(s.targetFile) ? s.targetFile : 'suggestions.md';
+  const hue = useProjectHue(s.projectTitle);
+  // The badge wears the verdict's colour: actionable amber, tentative violet, accepted green, discarded ash
+  const chipColor = s.status === 'tentative' ? 'bg-tent-soft text-tent'
+    : s.status === 'discarded' ? 'bg-surface-2 text-ink-3'
+      : s.status === 'accepted' ? 'bg-ok-soft text-ok'
+        : 'bg-act-soft text-act';
 
   const resolve = async (status: 'accepted' | 'discarded') => {
     setBusy(true);
@@ -69,35 +76,39 @@ export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Sugg
   return (
     <article
       className={cn(
-        'suggestion-card rounded-lg border bg-surface p-5',
+        'suggestion-card overflow-hidden rounded-lg border border-l-4 bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.04)]',
         rekindles ? 'rekindled border-ember/50' : 'border-line',
+        'border-l-proj',
         s.status === 'discarded' && 'opacity-80',
       )}
       data-id={s.id}
+      data-proj={hue}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      {/* Header strip in the project's colour: which project this is for, before anything else */}
+      <div className="flex flex-wrap items-center gap-2 bg-proj-soft px-5 py-2.5 text-xs">
+        <span className="font-semibold text-proj-ink">{s.projectTitle || t('sug.project')}</span>
         {rekindles && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-ember-soft px-2 py-0.5 font-medium text-ember">
+          <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-medium text-ember">
             <Flame size={13} aria-hidden="true" />{t('rekindle.badge', { n: s.projectIdleDays! })}
           </span>
         )}
-        <span className="rounded-full border border-line px-2 py-0.5 text-ink-2">{chip}</span>
-        <span className="text-ink-3">{s.projectTitle || t('sug.project')}</span>
+        <span className={cn('rounded-full px-2 py-0.5 font-medium', chipColor)}>{chip}</span>
         {s.isStale && s.status === 'pending' && (
-          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-ink-2" title={t('sug.staleTitle')}>{t('sug.stale')}</span>
+          <span className="rounded-full bg-surface px-2 py-0.5 text-ink-2" title={t('sug.staleTitle')}>{t('sug.stale')}</span>
         )}
-        <span className="ml-auto text-ink-3">{new Date(s.createdAt).toLocaleDateString(locale)}</span>
+        <span className="ml-auto text-ink-2">{new Date(s.createdAt).toLocaleDateString(locale)}</span>
       </div>
+      <div className="p-5 pt-4">
 
       {tentative ? (
         // A tentative item has no action yet: lead with the article, the model's reasoning below
         <>
-          <h4 className="prose-read mt-3 text-lg leading-snug text-ink">{s.contentTitle || s.contentUri}</h4>
+          <h4 className="prose-read text-lg leading-snug text-ink">{s.contentTitle || s.contentUri}</h4>
           <p className="prose-read mt-2 line-clamp-4 text-[0.95rem] text-ink-2">{s.suggestedAction}</p>
         </>
       ) : (
         <>
-          <h4 className="prose-read mt-3 text-lg leading-snug text-ink">{s.suggestedAction}</h4>
+          <h4 className="prose-read text-lg leading-snug text-ink">{s.suggestedAction}</h4>
           <p className="prose-read mt-2 text-[0.95rem] text-ink-2">{s.observation}</p>
         </>
       )}
@@ -156,6 +167,7 @@ export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Sugg
           {s.status === 'accepted' ? t('sug.integratedObsidian') : s.targetFile === 'discarded' ? t('sug.discardedAuto') : t('sug.discardedManual')}
         </p>
       )}
+      </div>
     </article>
   );
 }

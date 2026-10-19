@@ -4,6 +4,7 @@ import { ExternalLink, Loader2, Search } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type ConsultAnswer } from '@/lib/api';
 import { safeHref } from '@/lib/utils';
+import { ProjectItem, ProjectLabel } from '@/components/ProjectSwatch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
 import { ContentDetailDialog } from '@/views/Reading';
@@ -147,10 +148,10 @@ export function Consultant() {
               {answer.matchedNotes.length === 0 && <p className="text-sm text-ink-3">{t('consult.noNotes')}</p>}
               <ul className="grid gap-3">
                 {answer.matchedNotes.map(note => (
-                  <li key={note.refId} id={`consult-ref-${note.refId}`} className="consultant-match-card rounded-md border border-line bg-surface p-4">
+                  <ProjectItem key={note.refId} title={note.projectTitle} id={`consult-ref-${note.refId}`} className="consultant-match-card rounded-md border border-line bg-surface p-4">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
                       <span className="font-semibold text-ember">[{note.refId}]</span>
-                      <span>{note.projectTitle}</span>
+                      <ProjectLabel title={note.projectTitle} />
                       <code>{note.notePath || note.noteTitle}</code>
                     </div>
                     <p className="mt-1 font-serif text-ink">{note.noteTitle || note.notePath}</p>
@@ -161,7 +162,7 @@ export function Consultant() {
                         <pre className="mt-1 whitespace-pre-wrap font-serif text-ink-2">{note.contentSnippet.slice(0, 700)}{note.contentSnippet.length > 700 ? '…' : ''}</pre>
                       </details>
                     )}
-                  </li>
+                  </ProjectItem>
                 ))}
               </ul>
             </section>

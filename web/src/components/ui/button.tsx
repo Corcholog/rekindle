@@ -13,7 +13,8 @@ const buttonVariants = cva(
         secondary: 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
         ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
         danger: 'border border-line-strong bg-surface text-danger hover:bg-danger-soft',
-        accept: 'bg-ok text-surface hover:opacity-90',
+        // Integrate: the one ember-gradient element, since it rekindles the project
+        accept: 'bg-gradient-to-r from-ember to-ember-2 text-ember-ink shadow-sm hover:opacity-90',
       },
       size: {
         sm: 'h-8 px-3 text-sm',

@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
 import { EmberMeter } from '@/components/EmberMeter';
+import { ProjectSwatch } from '@/components/ProjectSwatch';
 
 function Card({ title, description, children, aside }: { title: string; description?: string; children: ReactNode; aside?: ReactNode }) {
   return (
@@ -135,7 +136,7 @@ export function Settings({ refreshKey, onChange, vault }: { refreshKey: number; 
                   const info = byId.get(p.id);
                   return (
                     <tr key={p.id} className="border-b border-line last:border-0">
-                      <td className="py-2 pr-4 font-medium text-ink">{p.title}</td>
+                      <td className="py-2 pr-4 text-ink"><span className="inline-flex items-center gap-2 font-medium"><ProjectSwatch title={p.title} />{p.title}</span></td>
                       <td className="py-2 pr-4"><code>{p.folderPath}</code></td>
                       <td className="py-2 pr-4 text-ink-2">
                         <span className="inline-flex items-center gap-2">

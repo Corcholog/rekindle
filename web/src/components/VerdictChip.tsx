@@ -8,10 +8,10 @@ export function VerdictChip({ verdict, score }: { verdict: Verdict | null; score
   const pct = Math.round((score ?? 0) * 100);
   return (
     <span className={cn(
-      'rounded-full px-2 py-0.5 text-xs',
-      v === 'actionable' && 'bg-ok-soft text-ok',
-      v === 'tentative' && 'bg-surface-2 text-ink-2',
-      v === 'irrelevant' && 'text-ink-3',
+      'rounded-full px-2 py-0.5 text-xs font-medium',
+      v === 'actionable' && 'bg-act-soft text-act',
+      v === 'tentative' && 'bg-tent-soft text-tent',
+      v === 'irrelevant' && 'font-normal text-ink-3',
     )}>
       {t(`verdict.${v}`)}{v !== 'irrelevant' && score !== undefined && score !== null ? ` · ${pct}%` : ''}
     </span>

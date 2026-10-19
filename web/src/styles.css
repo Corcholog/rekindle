@@ -5,30 +5,46 @@
 
 /*
   Rekindle palette. Ember is reserved for heat: dormant projects, the suggestions that rekindle
-  them, and the one primary action per view. Everything else stays in ash and ink.
-  Light is a cool ash-grey paper; dark is warm coal. Every text token reaches WCAG AA (4.5:1) on
+  them, and the one primary action per view. Each project has its own colour (never orange), and
+  verdicts have theirs: actionable amber, tentative violet, accepted green, discarded ash.
+  Light is warm stone; dark is warm coal. Every text token reaches WCAG AA (4.5:1) on
   the backgrounds it is used on (tests/ui_contrast.test.ts).
 */
 :root {
-  --bg: #e7eaec;
-  --surface: #f6f7f8;
-  --surface-2: #dde1e4;
-  --line: rgb(29 33 36 / 0.13);
-  --line-strong: rgb(29 33 36 / 0.24);
-  --ink: #1b1e21;
-  --ink-2: #4b5258;
-  --ink-3: #5a6268;
-  --ash: #8b949b;
+  --bg: #ebe9e4;
+  --surface: #f9f8f6;
+  --surface-2: #e2dfd9;
+  --line: rgb(40 34 28 / 0.13);
+  --line-strong: rgb(40 34 28 / 0.24);
+  --ink: #1c1b19;
+  --ink-2: #4a4741;
+  --ink-3: #57534c;
+  --ash: #8f8a82;
   --ember: #a83b0d;
+  --ember-2: #bf4a12;
   --ember-ink: #ffffff;
   --ember-hot: #e2731c;
   --ember-soft: rgb(184 65 15 / 0.09);
   --ember-glow: rgb(226 115 28 / 0.35);
-  --ok: #2c7046;
-  --ok-soft: rgb(44 112 70 / 0.1);
+  --glow: rgb(226 115 28 / 0.13);
+  --ok: #2a6b43;
+  --ok-soft: #e0ebe2;
   --danger: #a8281c;
   --danger-soft: rgb(168 40 28 / 0.08);
+  --act: #8a4b00;
+  --act-soft: #ece3d8;
+  --tent: #6447b0;
+  --tent-soft: #e7e3ee;
   --focus: #a83b0d;
+  /* Project colours: one per project (lib/projectHues.ts); never orange, which means heat */
+  --p0: #2a9d8f; --p0-ink: #1b665d; --p0-soft: #d8e9e6; /* teal */
+  --p1: #5468d4; --p1-ink: #3946a6; --p1-soft: #dfe1f1; /* indigo */
+  --p2: #a0559b; --p2-ink: #7a3576; --p2-soft: #ebdee7; /* plum */
+  --p3: #6a9a3a; --p3-ink: #45661f; --p3-soft: #e2e9d8; /* moss */
+  --p4: #2e8bc0; --p4-ink: #1c638c; --p4-soft: #d9e7ed; /* sky */
+  --p5: #cc5580; --p5-ink: #9c3259; --p5-soft: #f2dee3; /* rose */
+  --p6: #9a8424; --p6-ink: #6a5a12; --p6-soft: #eae5d4; /* olive */
+  --p7: #64748b; --p7-ink: #45526a; --p7-soft: #e1e3e5; /* slate */
 }
 
 .dark {
@@ -42,16 +58,40 @@
   --ink-3: #a39689;
   --ash: #7e868c;
   --ember: #f07a30;
+  --ember-2: #ff9a4a;
   --ember-ink: #1a1714;
   --ember-hot: #ffb35c;
   --ember-soft: rgb(240 122 48 / 0.12);
   --ember-glow: rgb(255 140 60 / 0.45);
+  --glow: rgb(240 122 48 / 0.11);
   --ok: #86b894;
-  --ok-soft: rgb(134 184 148 / 0.12);
+  --ok-soft: #2e3a2e;
   --danger: #e6786b;
   --danger-soft: rgb(230 120 107 / 0.12);
+  --act: #f2b45a;
+  --act-soft: #443725;
+  --tent: #b9a3f0;
+  --tent-soft: #3b343d;
   --focus: #ffb35c;
+  --p0: #4fc1b2; --p0-ink: #7fd6ca; --p0-soft: #2d433c; /* teal */
+  --p1: #8c9cf0; --p1-ink: #aab6f5; --p1-soft: #3a3a4a; /* indigo */
+  --p2: #d08acb; --p2-ink: #e0a9dc; --p2-soft: #493742; /* plum */
+  --p3: #9cc06a; --p3-ink: #b6d38c; --p3-soft: #3e422c; /* moss */
+  --p4: #6bb8e6; --p4-ink: #95cdee; --p4-soft: #334148; /* sky */
+  --p5: #ec88a8; --p5-ink: #f2a7bf; --p5-soft: #4f363a; /* rose */
+  --p6: #cfb75a; --p6-ink: #ddc97d; --p6-soft: #494029; /* olive */
+  --p7: #9aa8bf; --p7-ink: #b7c2d4; --p7-soft: #3d3d3f; /* slate */
 }
+
+/* A data-proj attribute picks the project colour for everything inside it (bg-proj, text-proj-ink, bg-proj-soft) */
+[data-proj="0"] { --proj: var(--p0); --proj-ink: var(--p0-ink); --proj-soft: var(--p0-soft); }
+[data-proj="1"] { --proj: var(--p1); --proj-ink: var(--p1-ink); --proj-soft: var(--p1-soft); }
+[data-proj="2"] { --proj: var(--p2); --proj-ink: var(--p2-ink); --proj-soft: var(--p2-soft); }
+[data-proj="3"] { --proj: var(--p3); --proj-ink: var(--p3-ink); --proj-soft: var(--p3-soft); }
+[data-proj="4"] { --proj: var(--p4); --proj-ink: var(--p4-ink); --proj-soft: var(--p4-soft); }
+[data-proj="5"] { --proj: var(--p5); --proj-ink: var(--p5-ink); --proj-soft: var(--p5-soft); }
+[data-proj="6"] { --proj: var(--p6); --proj-ink: var(--p6-ink); --proj-soft: var(--p6-soft); }
+[data-proj="7"] { --proj: var(--p7); --proj-ink: var(--p7-ink); --proj-soft: var(--p7-soft); }
 
 @theme inline {
   --color-bg: var(--bg);
@@ -71,6 +111,14 @@
   --color-ok-soft: var(--ok-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-ember-2: var(--ember-2);
+  --color-act: var(--act);
+  --color-act-soft: var(--act-soft);
+  --color-tent: var(--tent);
+  --color-tent-soft: var(--tent-soft);
+  --color-proj: var(--proj, var(--ash));
+  --color-proj-ink: var(--proj-ink, var(--ink-2));
+  --color-proj-soft: var(--proj-soft, var(--surface-2));
   --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
   --font-serif: "Literata Variable", Georgia, serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -85,7 +133,8 @@
   }
   body {
     min-height: 100vh;
-    background: var(--bg);
+    /* The page is lit from the top left, where the logo's coal sits */
+    background: radial-gradient(70rem 26rem at 10% -8rem, var(--glow), transparent 70%) no-repeat, var(--bg);
   }
   :focus-visible {
     outline: 2px solid var(--focus);
@@ -101,6 +150,17 @@
   ::selection {
     background: var(--ember-soft);
   }
+}
+
+/* A coal-bright line under the header that cools to nothing */
+.ember-rule {
+  height: 2px;
+  background: linear-gradient(90deg, var(--ember) 0%, var(--ember-hot) 14%, transparent 62%);
+}
+
+/* All projects: every project colour at once */
+.swatch-all {
+  background: conic-gradient(var(--p0), var(--p1), var(--p2), var(--p3), var(--p4), var(--p5), var(--p6), var(--p7), var(--p0));
 }
 
 /* Reading text: whatever Rekindle writes for the person to read is set in Literata. */

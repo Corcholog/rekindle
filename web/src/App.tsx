@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster } from 'sonner';
 import { BookOpen, Flame, MessagesSquare, Settings as SettingsIcon, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, type VaultSettings } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { assignHues, ProjectHuesContext } from '@/lib/projectHues';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Reading } from '@/views/Reading';
@@ -38,6 +39,8 @@ export function App() {
   const [vault, setVault] = useState<VaultSettings | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [activeCount, setActiveCount] = useState(0);
+  const [projectTitles, setProjectTitles] = useState<string[]>([]);
+  const hues = useMemo(() => assignHues(projectTitles), [projectTitles]);
   const wasProcessing = useRef(false);
 
   useEffect(() => {
@@ -48,7 +51,10 @@ export function App() {
   useEffect(() => {
     api.vault().then(setVault).catch(() => setVault(null));
     api.projects()
-      .then(d => setActiveCount(d.projects.reduce((sum, p) => sum + (p.counts.active ?? p.counts.pending + (p.counts.tentative ?? 0)), 0)))
+      .then(d => {
+        setActiveCount(d.projects.reduce((sum, p) => sum + (p.counts.active ?? p.counts.pending + (p.counts.tentative ?? 0)), 0));
+        setProjectTitles(d.projects.map(p => p.title));
+      })
       .catch(() => {});
   }, [refreshKey]);
 
@@ -89,8 +95,9 @@ export function App() {
   ];
 
   return (
+    <ProjectHuesContext.Provider value={hues}>
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur">
+      <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <Logo size={30} />
@@ -109,7 +116,7 @@ export function App() {
                 onClick={() => setView(item.id)}
                 className={cn(
                   'inline-flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink',
-                  view === item.id && 'bg-surface text-ink shadow-sm ring-1 ring-line',
+                  view === item.id && 'bg-surface font-medium text-ink shadow-sm ring-1 ring-line',
                 )}
               >
                 <item.icon size={16} aria-hidden="true" />
@@ -123,6 +130,7 @@ export function App() {
             <span>{activity ?? (healthy ? t('status.connected') : t('status.noVault'))}</span>
           </div>
         </div>
+        <div className="ember-rule" aria-hidden="true" />
       </header>
 
       {!healthy && (
@@ -140,5 +148,6 @@ export function App() {
       </main>
       <Toaster position="bottom-right" richColors closeButton theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'} />
     </div>
+    </ProjectHuesContext.Provider>
   );
 }
