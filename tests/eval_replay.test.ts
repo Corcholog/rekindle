@@ -46,7 +46,7 @@ describe('eval harness replay', () => {
     expect(result.meta).toMatchObject({ mode: 'replay', labeledBy: 'test-fixture', cases: 3, labeledPairs: 6, embeddingModel: 'bge-m3' });
     expect(result.retrieval).toMatchObject({ k: 2, precisionAtK: 1, recallAtK: 1, casesWithRelevant: 2, casesWithoutRelevant: 1 });
     expect(result.triage.macroF1).toBe(1);
-    expect(result.triage).toMatchObject({ targetNoteAccuracy: 0.5, targetNoteCases: 2 }); // recorded: one of two target notes was right
+    expect(result.triage).not.toHaveProperty('targetNoteAccuracy');
     expect(result.reliability).toMatchObject({ llmCalls: 3, failures: 0, fallbacks: 0, malformedOutputs: 0 });
     expect(result.cost.estimatedUsd).toBe(0);
 

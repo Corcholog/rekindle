@@ -89,7 +89,6 @@ function renderMetrics() {
     ['Accionable: precisión', m => m.triage.perClass.actionable.precision, pct, true],
     ['Accionable: exhaustividad', m => m.triage.perClass.actionable.recall, pct, true],
     ['Irrelevante marcado accionable', m => m.triage.confusion.irrelevant.actionable, String, false],
-    ['Nota destino acertada', m => m.triage.targetNoteAccuracy, pct, true],
   ];
   for (const name of runNames()) {
     const now = state.data.metrics[name];

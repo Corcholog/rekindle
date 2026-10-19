@@ -51,11 +51,11 @@ export function renderReport(results: EvalResult[]): string {
       out.push('', '> **Machinery check only.** These labels belong to a test fixture, not to a person judging relevance. The numbers prove the harness runs; they say nothing about quality.');
     }
     out.push('', '### Retrieval and triage', '');
-    out.push('| Config | Mode | P@K | R@K | False retrieval | Macro F1 | F1 actionable | F1 tentative | F1 irrelevant | Target note |');
-    out.push('|---|---|---|---|---|---|---|---|---|---|');
+    out.push('| Config | Mode | P@K | R@K | False retrieval | Macro F1 | F1 actionable | F1 tentative | F1 irrelevant |');
+    out.push('|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
       const f1 = (c: string) => pct(r.triage.perClass[c]?.f1 ?? null);
-      out.push(`| ${r.meta.config} | ${r.meta.mode} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} | ${pct(r.triage.targetNoteAccuracy)} (n=${r.triage.targetNoteCases}) |`);
+      out.push(`| ${r.meta.config} | ${r.meta.mode} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} |`);
     }
     out.push('', '### Reliability, latency and cost', '');
     out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Est. USD |');

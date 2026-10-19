@@ -179,12 +179,12 @@ Three choices, because they matter for different reasons:
 
 The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below; one run each, with run-to-run variance **not measured**):
 
-| Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / recall | Target note | Retrieval recall@3 / unrelated articles that still retrieve a project |
-|---|---|---|---|---|
-| Baseline: Spanish instructions, summaries and output | 0.78 | 96% / 26 of 31 | 8 of 19 | 91% / 94% |
-| E1: English output | 0.76 | 96% / 26 of 31 | 8 of 19 | 91% / 94% (same summaries) |
-| E2: English summaries compared with the Spanish notes | 0.73 | 96% / 24 of 31 | 7 of 19 | 88% / 83% |
-| E3: English instructions | 0.73 | 95% / 21 of 31 | 7 of 19 | 91% / 94% (same summaries) |
+| Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / recall | Retrieval recall@3 / unrelated articles that still retrieve a project |
+|---|---|---|---|
+| Baseline: Spanish instructions, summaries and output | 0.78 | 96% / 26 of 31 | 91% / 94% |
+| E1: English output | 0.76 | 96% / 26 of 31 | 91% / 94% (same summaries) |
+| E2: English summaries compared with the Spanish notes | 0.73 | 96% / 24 of 31 | 88% / 83% |
+| E3: English instructions | 0.73 | 95% / 21 of 31 | 91% / 94% (same summaries) |
 
 What this supports: English output costs nothing measurable (the actionable verdicts were identical), so it is safe to offer. English instructions made the model more reluctant to call an article actionable, so instructions stay Spanish. Summaries in a different language from the notes lose relevant matches (and also filter more, since cross-language distances are larger), so summaries follow the notes. These are single runs on one person's labels; the English-output and English-notes combinations other than these three were **not measured**, and an English vault with English labels was **not measured**. Full tables: [`evals/REPORT.md`](evals/REPORT.md).
 
@@ -254,13 +254,12 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ## Evaluation
 
-`pnpm eval` runs Rekindle's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, with the current setup (the 3 closest projects per article reach the LLM, Phase 5 prompts, target notes validated): one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (31 actionable, 20 tentative, 325 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
+`pnpm eval` runs Rekindle's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, with the current setup (the 3 closest projects per article reach the LLM, Phase 5 prompts): one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (31 actionable, 20 tentative, 325 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | Qwen 2.5 7B (local) |
 |---|---|---|---|
 | Triage macro-F1 | 0.67 | **0.78** | 0.63 |
 | `actionable` precision / recall | 56% / 90% | **96% / 84%** | 100% / 39% |
-| Target-note accuracy (19 pairs) | 47% | 42% | 32% |
 | Latency p50 / p95 | 4.4 / 11.7 s | **2.3 / 4.4 s** | 3.8 / 8.3 s |
 | Cost of 118 triage calls | free tier | about $0.12 at list price | $0 |
 
@@ -286,8 +285,8 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 ## Known limitations
 
 - **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: only the 3 closest projects now reach the LLM (`TOP_K_PROJECTS_LIMIT = 3`), which cut calls by 45% and keeps 86% of the relevant pairs, but 1 in 8 relevant pairs is never evaluated.
-- **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.36–0.48 and the right target note is chosen in 32–47% of cases (small samples: 20 and 19 pairs).
-- **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts and target notes are scored, against one person's labels.
+- **`tentative` judgements are weak for every model tried.** `tentative` F1 is 0.36–0.48 (a small sample: 20 pairs).
+- **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts are scored, against one person's labels. Whether a suggestion names the note the owner would have picked is **not measured**: the labeled projects' notes were not good enough to judge it ([`evals/README.md`](evals/README.md)).
 - **A failed evaluation is invisible in the UI.** If the LLM fails while evaluating an article for a project, the job is retried three times (after 30 s, 60 s and 120 s); after that the pair waits until the project changes. Only `pnpm telemetry:report` shows the failure.
 - **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
 - **Synergies may include deleted notes**, because they compare notes from older project snapshots too.

@@ -1,7 +1,7 @@
 import { Labels, RunDetails } from '../schema';
 import { effectiveVerdict } from './dataset';
 import {
-  classMetrics, confusionMatrix, mean, noteMatches, precisionRecallAtK, Verdict,
+  classMetrics, confusionMatrix, mean, precisionRecallAtK, Verdict,
 } from './metrics';
 
 export interface PairPrediction {
@@ -30,7 +30,6 @@ export interface ScoreInput {
  */
 export function scoreRun({ projects, cases, predictions, k }: ScoreInput) {
   const pairs: { expected: Verdict; predicted: Verdict }[] = [];
-  const targetChecks: boolean[] = [];
   const precisions: (number | null)[] = [];
   const recalls: (number | null)[] = [];
   let scoredCases = 0;
@@ -40,20 +39,14 @@ export function scoreRun({ projects, cases, predictions, k }: ScoreInput) {
 
   for (const labelCase of cases) {
     const entries = projects
-      .map(folder => [folder, effectiveVerdict(labelCase, folder), labelCase.projects[folder]] as const)
+      .map(folder => [folder, effectiveVerdict(labelCase, folder)] as const)
       .filter(([, verdict]) => verdict !== null);
     if (entries.length === 0) continue;
     scoredCases++;
 
     const prediction = predictions[labelCase.article] ?? { retrieved: [], pairs: {} };
-    for (const [folder, verdict, label] of entries) {
-      const expected = verdict as Verdict;
-      const answered = prediction.pairs[folder];
-      const got: Verdict = answered?.verdict ?? 'irrelevant';
-      pairs.push({ expected, predicted: got });
-      if (label?.target_note && expected === 'actionable') {
-        targetChecks.push(got === 'actionable' && noteMatches(label.target_note, answered?.targetFile ?? null));
-      }
+    for (const [folder, verdict] of entries) {
+      pairs.push({ expected: verdict as Verdict, predicted: prediction.pairs[folder]?.verdict ?? 'irrelevant' });
     }
 
     const relevant = entries.filter(([, verdict]) => verdict !== 'irrelevant').map(([folder]) => folder);
@@ -86,8 +79,6 @@ export function scoreRun({ projects, cases, predictions, k }: ScoreInput) {
       confusion,
       perClass,
       macroF1,
-      targetNoteAccuracy: targetChecks.length > 0 ? targetChecks.filter(Boolean).length / targetChecks.length : null,
-      targetNoteCases: targetChecks.length,
     },
   };
 }

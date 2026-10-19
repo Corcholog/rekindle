@@ -165,8 +165,12 @@ export const ResultSchema = z.object({
       precision: NullableNumber, recall: NullableNumber, f1: NullableNumber, support: z.number(),
     })),
     macroF1: NullableNumber,
-    targetNoteAccuracy: NullableNumber,
-    targetNoteCases: z.number(),
+    /**
+     * No longer scored: the labeled projects' notes were not good enough to judge which note a
+     * suggestion belongs in (evals/README.md). Kept optional so results recorded before 2026-10-19 still load.
+     */
+    targetNoteAccuracy: NullableNumber.optional(),
+    targetNoteCases: z.number().optional(),
   }),
   reliability: z.object({
     llmCalls: z.number(),

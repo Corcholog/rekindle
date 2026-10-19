@@ -32,7 +32,7 @@ describe('scoreRun', () => {
     a3: { retrieved: [], pairs: {} },
   };
 
-  it('computes retrieval, triage and target-note numbers', async () => {
+  it('computes retrieval and triage numbers', async () => {
     const { scoreRun } = await import('../evals/runner/scoring');
     const score = scoreRun({ projects, cases, predictions, k: 2 });
 
@@ -52,15 +52,12 @@ describe('scoreRun', () => {
     // actionable: tp1 fp1 fn0 -> F1 2/3; tentative: tp0 fp1 fn1 -> 0; irrelevant: tp3 fp0 fn1 -> 6/7
     expect(score.triage.macroF1).toBeCloseTo((2 / 3 + 0 + 6 / 7) / 3, 10);
 
-    // one labeled target note (a.md); the prediction notes/a.md matches it by file name
-    expect(score.triage).toMatchObject({ targetNoteAccuracy: 1, targetNoteCases: 1 });
+    // Target notes are labeled but no longer scored (evals/README.md)
+    expect(score.triage).not.toHaveProperty('targetNoteAccuracy');
   });
 
-  it('treats a non-retrieved project as irrelevant and a wrong target as a miss', async () => {
+  it('treats a non-retrieved project as irrelevant', async () => {
     const { scoreRun } = await import('../evals/runner/scoring');
-    const wrong = { ...predictions, a1: { ...predictions.a1, pairs: { ...predictions.a1.pairs, 'Projects/A': { verdict: 'actionable' as const, targetFile: 'other.md' } } } };
-    expect(scoreRun({ projects, cases, predictions: wrong, k: 2 }).triage.targetNoteAccuracy).toBe(0);
-
     const missing = { ...predictions, a1: { retrieved: [], pairs: {} } };
     const score = scoreRun({ projects, cases, predictions: missing, k: 2 });
     expect(score.triage.confusion.actionable).toEqual({ actionable: 0, tentative: 0, irrelevant: 1 });
