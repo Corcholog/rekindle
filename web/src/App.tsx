@@ -99,7 +99,7 @@ export function App() {
               <p className="hidden text-xs text-ink-3 sm:block">{t('brand.tagline')}</p>
             </div>
           </div>
-          <nav aria-label={t('nav.aria')} className="order-3 flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto">
+          <nav aria-label={t('nav.aria')} className="order-3 flex w-full gap-1 overflow-x-auto [scrollbar-width:none] sm:order-none sm:w-auto">
             {nav.map(item => (
               <button
                 key={item.id}
