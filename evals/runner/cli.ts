@@ -39,7 +39,8 @@ const USAGE = `Uso: pnpm eval <comando>
   rescore <dataset> [--config <nombre>]...   vuelve a puntuar las últimas ejecuciones con las etiquetas actuales, sin llamar a ningún modelo
   review <dataset> [--port N]          página local para ver las respuestas de los modelos y corregir etiquetas
   sweep <dataset> [--thresholds 0.3,0.4] [--ranks 1,2] [--write]   barrido de umbral de recuperación sin llamar a ningún modelo
-  report                               regenera evals/REPORT.md`;
+  report                               regenera evals/REPORT.md
+  chart [--dataset private]            regenera docs/images/eval-connections.svg`;
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
@@ -126,6 +127,13 @@ async function main() {
       const markdown = renderSweep(path.basename(path.resolve(dir)), result, Object.keys(runs).sort());
       if (flags.write) { await fs.writeFile('evals/SWEEP.md', markdown, 'utf-8'); console.log('evals/SWEEP.md actualizado.'); }
       else console.log(markdown);
+      break;
+    }
+    case 'chart': {
+      const { chartPoints, renderChart } = await import('./chart');
+      const svg = renderChart(chartPoints(await loadResults('evals/results'), String(flags.dataset ?? 'private')));
+      await fs.writeFile('docs/images/eval-connections.svg', svg, 'utf-8');
+      console.log('docs/images/eval-connections.svg actualizado.');
       break;
     }
     case 'report': {
