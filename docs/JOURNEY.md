@@ -125,6 +125,15 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - **The prompt change has an eval cost.** Recorded answers are keyed by the exact prompt, so the private Phase 3 recordings no longer replay at the current commit, and the published eval numbers describe the earlier prompts. Before changing the prompts, a free replay measured the target-note validation alone: Gemini's target-note accuracy went from 7/19 to 9/19 (invented paths now fall back to the retrieved note); DeepSeek, Qwen and every verdict metric were unchanged. Re-measuring with the new prompts needs a paid DeepSeek run and has not been done.
   - Production advisories went from 4 (1 high, 3 moderate, all in `@fastify/static`) to 0 (`pnpm audit --prod`).
 
+### 2026-10-18 — Phase 5 follow-up: re-measuring with the new prompts
+- **Context:** Phase 5 changed every prompt, so the published eval numbers described the old ones. The owner asked to reword the appended data-not-instructions rule (it named two specific tags, which read oddly in prompts that use other tags) and to re-run the eval.
+- **What happened:** the rule now speaks of text between tags in general (`ce14538`). The three top-3 configs were re-recorded live on the private set, reusing the cached DeepSeek summaries so retrieval stayed identical and only the triage prompts differed.
+- **Evidence:** result files `*ce14538*` in `evals/results/`; `evals/REPORT.md` regenerated.
+- **Outcome / lesson:**
+  - DeepSeek Flash: macro-F1 0.79 → 0.78, `actionable` recall 27/31 → 26/31, target note 8/19 unchanged, about $0.12 at list price. Gemini Flash Lite: 0.61 → 0.67 (`tentative` F1 0.23 → 0.36). Qwen: 0.61 → 0.63. No failed or malformed calls. The models' run-to-run variance is not measured, so these differences may be noise; the safe reading is that the injection defenses did not hurt triage quality.
+  - DeepSeek spend so far, at list price: about $0.36 of the $2 credit (estimate from token counts, not a billed amount).
+  - The run's output exposed a logging bug: a log field named `level` (note- or project-level match) repeated pino's own `level` key, so those lines parsed with the level `note`. Log fields that collide with pino's keys are now renamed, and the eval CLI only shows warnings from the pipeline.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -188,6 +197,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-18 | DeepSeek spend | Estimated list-price cost, 215 triage calls | not measured | about $0.18 (summaries about $0.06 more) | token counts in the result files; not a billed amount |
 | 2026-10-18 | Phase 3 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 123 / 1 | 186 / 2 | `pnpm test:coverage`; lines 84.06% → 85.28% |
 | 2026-10-18 | Phase 4 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 186 / 2 | 210 / 2 | `pnpm test:coverage`; lines 85.28% → 86.44% (branches 71.84%, functions 84.53%) |
+| 2026-10-18 | Phase 5 prompts (live re-run, top-3) | Triage macro-F1, DeepSeek / Gemini / Qwen | 0.79 / 0.61 / 0.61 (replay, Phase 3 prompts) | 0.78 / 0.67 / 0.63 | `pnpm eval run evals/private --config evals/configs/<config>-top3.json --replay` at `ce14538` or later |
 | 2026-10-18 | Phase 5 tests | Tests passed / skipped / line coverage | 210 / 2 / 86.44% (with live Ollama) | 241 / 4 / 88.37% (no Ollama, no keys; branches 74.89%, functions 86.55%) | `pnpm test:coverage`; the skipped tests are the opt-in live checks |
 | 2026-10-18 | Phase 5 | Test files that need a live model (without `LOOM_LIVE_TESTS`) | 5 (`evaluation`, `ingestion`, `phase7_ui`, `settings_vault`, `ollama`) | 0 | `OLLAMA_URL=http://127.0.0.1:9 pnpm test` |
 | 2026-10-18 | Phase 5 | Production dependency advisories | 4 (1 high, 3 moderate) | 0 | `pnpm audit --prod` |
