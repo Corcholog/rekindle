@@ -6,6 +6,8 @@ Stack: TypeScript (strict), Node 22, Fastify 5 + Zod, PostgreSQL 16 + pgvector, 
 
 ## How work is organized
 
+The files under `docs/agent/` are kept locally and are not published.
+
 - Goals and definition of "done": `docs/agent/00-goals-and-context.md`
 - Phase 0, read-only audit: `docs/agent/01-audit.md`
 - Phased plan with acceptance criteria: `docs/agent/02-roadmap.md`

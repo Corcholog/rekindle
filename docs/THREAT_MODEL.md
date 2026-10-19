@@ -59,7 +59,7 @@ Last reviewed: 2026-10-19 (Phase 6.5, languages).
 
 ## Audit failure scenarios
 
-`docs/agent/01-audit.md` lists eight failure scenarios. Each has a test:
+The Phase 0 audit (kept locally) listed eight failure scenarios. Each has a test:
 
 | # | Scenario | Test |
 |---|---|---|

@@ -35,7 +35,7 @@ export const ingestStatusEnum = pgEnum('ingest_status', ['pending', 'extracting'
 export const verdictEnum = pgEnum('verdict', ['irrelevant', 'tentative', 'actionable']);
 export const actionTypeEnum = pgEnum('action_type', ['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']);
 export const suggestionStatusEnum = pgEnum('suggestion_status', ['pending', 'accepted', 'discarded']);
-// Why the owner discarded a suggestion (optional); counted by `pnpm usertest:stats`
+// Why the owner discarded a suggestion (optional), from a fixed list
 export const DISCARD_REASONS = ['unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other'] as const;
 export const discardReasonEnum = pgEnum('discard_reason', DISCARD_REASONS);
 export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action', 'consult', 'synergy', 'synthesis', 'reevaluate']);

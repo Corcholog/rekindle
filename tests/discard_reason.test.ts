@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 
-// Discarding can carry one of a fixed set of reasons. `pnpm usertest:stats` counts them, so they
+// Discarding can carry one of a fixed set of reasons. They feed later analysis, so they
 // must be stored only for discards and only when valid.
 describe('Discard reasons', () => {
   let container: StartedPostgreSqlContainer;

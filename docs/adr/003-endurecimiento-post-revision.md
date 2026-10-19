@@ -46,4 +46,4 @@ Checked against the code during the Phase 0 audit:
 - **D2:** private and loopback hosts are now rejected, but by hostname string matching only. Redirects are followed and DNS is not checked (scheduled for Phase 2).
 - **D4:** the hash is now recursive over the project folder, not limited to the first level.
 - **D6:** accepting a tentative item is idempotent for sequential requests only. Concurrent requests can insert two suggestions, because `evaluation_id` has no uniqueness constraint (Phase 2). Writeback still has a crash window between the claim and the file append (Phase 2). A reconcile requested while another one is running is now queued as a follow-up pass, not dropped.
-- The open items under *Consecuencias* are tracked in `docs/agent/02-roadmap.md`.
+- The open items under *Consecuencias* are tracked in the project's roadmap (kept locally) and listed as residual risks in `docs/THREAT_MODEL.md`.

@@ -1,7 +1,7 @@
 # Rekindle — Architecture & Technical Reference
 
 > **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Rekindle.  
-> **State described:** git `master` after Phase 2 (security and integrity fixes; see `docs/agent/02-roadmap.md`). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
+> **State described:** git `master` after Phase 2 (security and integrity fixes). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
 > **Verification:** run `pnpm typecheck`, `pnpm lint` and `pnpm test`; per-phase results are recorded in `docs/JOURNEY.md`.
 
 ---
@@ -116,7 +116,7 @@ rekindle/
 ├─ drizzle/                           SQL migrations (never edited once applied)
 ├─ tests/                             Automated test suites (unit + integration + e2e)
 ├─ demo_vault/                        Sample Obsidian vault with project structures
-├─ docs/                              Architecture reference, ADRs, agent workflow (docs/agent), build log (JOURNEY.md)
+├─ docs/                              Architecture reference, ADRs, threat model, demo script, build log (JOURNEY.md)
 ├─ start.bat / start.sh               One-click launch scripts (Linux & Windows)
 ├─ reset_db.bat / reset_db.sh         Database reset scripts
 └─ docker-compose.yml                 PostgreSQL 16 + pgvector container definition
@@ -713,7 +713,6 @@ pnpm telemetry:report      # Latency, failure/fallback rates and cost over a per
 pnpm telemetry:trace <id>  # One suggestion or content back through retrieval and ingestion
 pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline events
 pnpm preflight             # Install check: Node, .env, Postgres, migrations, Ollama models, vault, providers (start.sh runs it)
-pnpm usertest:stats        # Counts only for user-test sessions: acceptance rate, discard reasons, time to first suggestion
 ```
 
 ### Automated Test Suites (`tests/`)
@@ -740,7 +739,7 @@ pnpm usertest:stats        # Counts only for user-test sessions: acceptance rate
   - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`REKINDLE_LIVE_TESTS=1`); skipped otherwise.
   - `tests/pipeline_trace.test.ts`: Phase 4 acceptance. The real ingest route, queue and workers with stubbed models and fetch: one trace links a suggestion to its content and retrieval event, and a sentinel planted in notes, articles, model output, error messages and URLs never reaches the logs or the telemetry tables.
   - `tests/first_suggestion.test.ts`: the README path offline: demo vault indexed, article ingested and evaluated, one pending suggestion, one callout after accepting, no suggestion for a control article.
-  - `tests/doctor.test.ts`, `tests/demo_vault.test.ts`, `tests/discard_reason.test.ts`, `tests/usertest_stats.test.ts`: the preflight checks and probes, the shape of the demo vault, discard reasons, and the user-test counts (no text in the output).
+  - `tests/doctor.test.ts`, `tests/demo_vault.test.ts`, `tests/discard_reason.test.ts`: the preflight checks and probes, the shape of the demo vault, discard reasons, and the user-test counts (no text in the output).
   - `tests/observability_schema.test.ts`, `tests/llm_telemetry.test.ts`, `tests/telemetry_report.test.ts`: migration 0006, per-attempt telemetry rows, and the report math on hand-built rows.
 - Under Vitest the default `DATABASE_URL` and `OLLAMA_URL` point at closed ports and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`, and no test reaches a model unless `REKINDLE_LIVE_TESTS=1`.
 - **CI** (`.github/workflows/ci.yml`): on every push and pull request, frozen-lockfile install, typecheck, lint, the full suite and `pnpm audit --prod --audit-level high`, on Node 22 with Actions pinned to commit SHAs.

@@ -205,7 +205,6 @@ What this supports: English output costs nothing measurable (the actionable verd
 | `REKINDLE_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against local Ollama and the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a model |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm preflight` | Checks the install (Node, Postgres, migrations, Ollama models, vault, active providers) and prints the fix for each problem |
-| `pnpm usertest:stats` | Counts only, from your local database: acceptance rate, discard reasons, time to the first suggestion |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |

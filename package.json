@@ -27,7 +27,6 @@
     "telemetry:report": "tsx src/observability/cli.ts report",
     "telemetry:trace": "tsx src/observability/cli.ts trace",
     "telemetry:prune": "tsx src/observability/cli.ts prune",
-    "usertest:stats": "tsx src/usertest/cli.ts",
     "build:icons": "tsx scripts/build-icons.ts",
     "serve": "tsx scripts/run_server.ts"
   },
