@@ -28,7 +28,7 @@ describe('Concurrent accept of a tentative evaluation', () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
     vi.stubEnv('DATABASE_URL', container.getConnectionUri());
 
-    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-tentative-'));
+    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-tentative-'));
     await fs.mkdir(path.join(vaultPath, 'Projects', 'Ensayo'), { recursive: true });
     vi.stubEnv('VAULT_PATH', vaultPath);
 

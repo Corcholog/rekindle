@@ -1,4 +1,4 @@
-// Languages Loom reads and writes. Three choices, read at call time so a settings change applies
+// Languages Rekindle reads and writes. Three choices, read at call time so a settings change applies
 // without a restart:
 // - output language: text the user reads (reasoning, actions, answers, callouts, saved notes);
 // - notes language: the language of the owner's notes. Summaries are written in it, because the

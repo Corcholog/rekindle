@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { fakeEmbedding } from './helpers/fakeAi';
 
-// Audit failure scenario 4: Obsidian changes a note while Loom reconciles the project. The
+// Audit failure scenario 4: Obsidian changes a note while Rekindle reconciles the project. The
 // watcher calls reconcileProject again on the change; the per-project lock queues a follow-up
 // pass, and the final snapshot must match the files on disk.
 
@@ -25,7 +25,7 @@ describe('Failure scenario 4: a note changes during reconciliation', () => {
     await dbModule.pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await migrate(db, { migrationsFolder: './drizzle' });
     schema = await import('../src/db/schema');
-    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-reconcile-'));
+    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-reconcile-'));
   }, 120000);
 
   afterAll(async () => {
@@ -89,7 +89,7 @@ describe('Failure scenario 4: a note changes during reconciliation', () => {
   // Threat model: a symlink inside a project must not pull files from outside the vault into
   // prompts or the database
   it('skips symlinked notes and folders inside a project', async () => {
-    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-outside-'));
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-outside-'));
     await fs.writeFile(path.join(outside, 'secreto.md'), '# Secreto\n\nTEXTO-FUERA-DEL-VAULT');
     const projectDir = path.join(vault, 'Projects', 'Enlaces');
     await fs.mkdir(projectDir, { recursive: true });

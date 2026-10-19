@@ -16,7 +16,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   beforeAll(async () => {
     // 1. Setup Test DB
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_phase7')
+      .withDatabase('rekindledb_phase7')
       .withUsername('tester')
       .withPassword('testpass')
       .start();
@@ -121,7 +121,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
-    expect(res.payload).toContain('Loom');
+    expect(res.payload).toContain('Rekindle');
     expect(res.payload).toContain('Consumo');
     expect(res.payload).toContain('Sugerencias');
   });
@@ -483,7 +483,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     });
 
     expect(res.statusCode).toBe(202);
-    // The extension calls Loom through its host_permissions, so no CORS header is needed
+    // The extension calls Rekindle through its host_permissions, so no CORS header is needed
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
     const body = JSON.parse(res.payload);
     expect(body.contentId).toBeDefined();

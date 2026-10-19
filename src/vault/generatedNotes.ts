@@ -9,7 +9,7 @@ import { serverText } from '../i18n/serverText';
 const GENERATED_FRONTMATTER = /^---\r?\n[\s\S]*?^((?:rekindle|loom)_generated:\s*true|type:\s*(research_brief|cross_project_synergy))\s*$/m;
 const MAX_BODY_LENGTH = 20000;
 
-/** True if the note was written by Loom; such notes are excluded from hashes and snapshots. */
+/** True if the note was written by Rekindle; such notes are excluded from hashes and snapshots. */
 export async function isGeneratedNote(fullPath: string): Promise<boolean> {
   let handle: fs.FileHandle | undefined;
   try {

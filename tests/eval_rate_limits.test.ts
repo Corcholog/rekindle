@@ -32,7 +32,7 @@ describe('eval run under rate limiting', () => {
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evalrl-'));
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalrl-'));
     await fs.cp('tests/fixtures/eval-mini', tmp, { recursive: true });
     await fs.rm(path.join(tmp, 'cache', 'llm.json'));
     await fs.writeFile(path.join(tmp, 'config.json'), JSON.stringify({

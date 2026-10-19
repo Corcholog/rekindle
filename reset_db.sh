@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "===================================================================="
-echo "          LOOM - RESET THE DATABASE TO A CLEAN STATE"
+echo "          REKINDLE - RESET THE DATABASE TO A CLEAN STATE"
 echo "===================================================================="
 echo ""
 

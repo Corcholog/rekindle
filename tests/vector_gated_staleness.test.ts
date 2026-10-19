@@ -25,7 +25,7 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
   beforeAll(async () => {
     // 1. Setup Test DB
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_staleness_test')
+      .withDatabase('rekindledb_staleness_test')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

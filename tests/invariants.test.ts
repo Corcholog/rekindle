@@ -115,7 +115,7 @@ describe('I4: suggestions.md never affects hashes or triggers reconciliation', (
   let projectDir: string;
 
   beforeEach(async () => {
-    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-i4-'));
+    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-i4-'));
     projectDir = path.join(vault, 'Projects', 'Novela');
     await fs.mkdir(path.join(projectDir, 'capitulos'), { recursive: true });
     await fs.writeFile(path.join(projectDir, 'ideas.md'), '# Ideas\nTexto');

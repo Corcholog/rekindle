@@ -37,7 +37,7 @@ describe('eval language configs', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', '');
     vi.stubEnv('OUTPUT_LANGUAGE', 'es');
     const config = JSON.parse(await fs.readFile('tests/fixtures/eval-mini/config.json', 'utf-8'));
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evallang-'));
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evallang-'));
     dirs.push(tmp);
     const configPath = path.join(tmp, 'config.json');
     await fs.writeFile(configPath, JSON.stringify({ ...config, name: 'mini-ollama-output-en', languages: { output: 'en' } }));

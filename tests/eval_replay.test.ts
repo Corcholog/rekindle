@@ -19,7 +19,7 @@ describe('eval harness replay', () => {
     // runEval binds the config and the DB pool at first import, so each run needs fresh modules
     vi.resetModules();
     const { runEval } = await import('../evals/runner/run');
-    const resultsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evalresults-'));
+    const resultsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalresults-'));
     dirs.push(resultsDir);
     const run = await runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', maxUsd: 0, resultsDir, detailsDir: resultsDir });
     return { ...run, detailsFile: path.join(resultsDir, 'mini-ollama.json') };
@@ -94,7 +94,7 @@ describe('eval harness replay', () => {
   it('refuses to replay when the cache lacks an entry', async () => {
     vi.resetModules();
     const { runEval } = await import('../evals/runner/run');
-    const copy = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evalcopy-'));
+    const copy = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalcopy-'));
     dirs.push(copy);
     await fs.cp(DATASET, copy, { recursive: true });
     await fs.rm(path.join(copy, 'cache', 'llm.json'));

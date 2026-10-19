@@ -16,14 +16,14 @@ describe.skipIf(!hasGeminiKey)('Full E2E Flow (real LLM)', () => {
   beforeAll(async () => {
     // 1. Setup Test DB
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_e2e')
+      .withDatabase('rekindledb_e2e')
       .withUsername('tester')
       .withPassword('testpass')
       .start();
     vi.stubEnv('DATABASE_URL', container.getConnectionUri());
 
     // 2. Create Dummy Vault in a unique temp dir (avoids leftovers between runs)
-    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-e2e-vault-'));
+    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-e2e-vault-'));
     await fs.mkdir(path.join(vaultPath, 'Projects', 'AI_Agents'), { recursive: true });
 
     const projectMd = `---

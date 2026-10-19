@@ -14,7 +14,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
   beforeAll(async () => {
     // 1. Setup Postgres Test Container
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_settings_test')
+      .withDatabase('rekindledb_settings_test')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

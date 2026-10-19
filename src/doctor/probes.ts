@@ -66,7 +66,7 @@ export async function realProbes(env: NodeJS.ProcessEnv, root = process.cwd()): 
     env,
     envFileExists: await fs.access(path.join(root, '.env')).then(() => true, () => false),
     expectedMigrations: await expectedMigrations(root),
-    database: () => probeDatabase(env.DATABASE_URL || 'postgres://loom:loompassword@localhost:5432/loomdb'),
+    database: () => probeDatabase(env.DATABASE_URL || 'postgres://rekindle:rekindlepassword@localhost:5432/rekindledb'),
     ollamaModels: () => probeOllamaModels(env.OLLAMA_URL || 'http://127.0.0.1:11434'),
     vaultProjects: probeVaultProjects,
     demoVaultPath: demoVaultPath(env, root),

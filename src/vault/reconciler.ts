@@ -35,7 +35,7 @@ async function getProjectMarkdownFiles(projectPath: string): Promise<{ fullPath:
         await walk(full);
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
-        // Loom's own output (suggestions.md, generated briefs) never feeds back into project context
+        // Rekindle's own output (suggestions.md, generated briefs) never feeds back into project context
         if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isGeneratedNote(full))) {
           const rel = path.relative(projectPath, full).replace(/\\/g, '/');
           result.push({ fullPath: full, relPath: rel, name: entry.name });

@@ -56,7 +56,7 @@ describe('formatAcceptedCallout', () => {
     for (const line of lines) expect(line.startsWith('>')).toBe(true);
     expect(callout).not.toMatch(/(^|[^\\])```/);
     expect(callout).not.toContain('![[');
-    expect(callout.match(/(^|[^\\])\[!/g)?.length).toBe(1); // only Loom's own [!tip]
+    expect(callout.match(/(^|[^\\])\[!/g)?.length).toBe(1); // only Rekindle's own [!tip]
   });
 
   it('drops non-http source links', async () => {

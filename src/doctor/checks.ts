@@ -51,7 +51,7 @@ export async function runChecks(probes: Probes): Promise<CheckResult[]> {
   const major = Number(probes.nodeVersion.replace(/^v/, '').split('.')[0]);
   add(major >= MIN_NODE_MAJOR
     ? { id: 'node', label: 'Node.js', status: 'ok', detail: probes.nodeVersion }
-    : { id: 'node', label: 'Node.js', status: 'fail', detail: `${probes.nodeVersion} is too old; Loom needs ${MIN_NODE_MAJOR} or newer`, fix: 'Install Node.js 22 or newer (https://nodejs.org)' });
+    : { id: 'node', label: 'Node.js', status: 'fail', detail: `${probes.nodeVersion} is too old; Rekindle needs ${MIN_NODE_MAJOR} or newer`, fix: 'Install Node.js 22 or newer (https://nodejs.org)' });
 
   add(probes.envFileExists
     ? { id: 'env', label: '.env file', status: 'ok', detail: 'found' }
@@ -100,7 +100,7 @@ export async function runChecks(probes: Probes): Promise<CheckResult[]> {
   const projects = await probes.vaultProjects(vaultPath);
   const usingDemo = !probes.env.VAULT_PATH;
   if (projects === null) {
-    add({ id: 'vault', label: 'Obsidian vault', status: 'fail', detail: 'folder not found', fix: usingDemo ? 'Run Loom from the repository root' : 'Fix VAULT_PATH in .env, or remove it to use the demo vault' });
+    add({ id: 'vault', label: 'Obsidian vault', status: 'fail', detail: 'folder not found', fix: usingDemo ? 'Run Rekindle from the repository root' : 'Fix VAULT_PATH in .env, or remove it to use the demo vault' });
   } else if (projects.length === 0) {
     add({ id: 'vault', label: 'Obsidian vault', status: 'warn', detail: 'no project folders under Projects/ or Proyectos/', fix: 'Create a folder per project inside Projects/' });
   } else {

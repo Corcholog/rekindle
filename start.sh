@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "===================================================================="
-echo "          LOOM - SERVICE AND SERVER LAUNCHER"
+echo "          REKINDLE - SERVICE AND SERVER LAUNCHER"
 echo "===================================================================="
 echo ""
 
@@ -71,7 +71,7 @@ else
   echo "[4/6] Starting PostgreSQL with pgvector..."
   docker compose up -d postgres
   for i in {1..30}; do
-    if docker compose exec -T postgres pg_isready -U loom -d loomdb &> /dev/null; then
+    if docker compose exec -T postgres pg_isready -U rekindle -d rekindledb &> /dev/null; then
       echo "[OK] PostgreSQL with pgvector is ready on port 5432."
       break
     fi
@@ -121,7 +121,7 @@ echo ""
 echo "===================================================================="
 echo "          ALL SERVICES READY"
 echo "===================================================================="
-echo "  * Loom web server:     http://127.0.0.1:3000"
+echo "  * Rekindle web server:     http://127.0.0.1:3000"
 echo "  * Database:            PostgreSQL + pgvector (port 5432)"
 echo "  * Local LLM:           Ollama (port 11434)"
 echo "===================================================================="
@@ -132,6 +132,6 @@ if command -v xdg-open &> /dev/null; then
   (sleep 2 && xdg-open http://127.0.0.1:3000 &> /dev/null) &
 fi
 
-echo "Starting the Loom server (Ctrl+C to stop)..."
+echo "Starting the Rekindle server (Ctrl+C to stop)..."
 echo ""
 $PKG_CMD run dev

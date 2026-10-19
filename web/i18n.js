@@ -1,5 +1,5 @@
 // ==========================================================================
-// Loom — UI strings in Spanish and English
+// Rekindle — UI strings in Spanish and English
 // A classic script loaded before app.js; exposes window.LoomI18n. Values are plain text unless
 // the key ends in "Html" (static markup written here, never data). "{name}" is replaced by
 // params.name; a function value receives params (plurals).
@@ -9,7 +9,7 @@
 
   const DICT = {
     es: {
-      'meta.title': 'Loom — Asistente de Escritura Contextual',
+      'meta.title': 'Rekindle — Asistente de Escritura Contextual',
       'meta.description': 'Taller de escritura local y triaje inteligente que conecta tus lecturas con tus notas en Obsidian.',
       'brand.subtitle': 'Asistente de Escritura Contextual',
       'nav.aria': 'Navegación principal',
@@ -33,7 +33,7 @@
       'inbox.urlLabel': 'URL del enlace a procesar',
       'inbox.urlPlaceholder': 'https://ejemplo.com/ensayo o enlace de YouTube...',
       'inbox.submit': 'Guardar y analizar',
-      'inbox.clipperText': 'Captura desde el navegador con la extensión local de Loom.',
+      'inbox.clipperText': 'Captura desde el navegador con la extensión local de Rekindle.',
       'inbox.clipperTitle': 'Ver guía de instalación de la Extensión Chrome',
       'inbox.clipperButton': 'Extensión Chrome',
       'inbox.queued': 'Enlace enviado para análisis y extracción.',
@@ -241,7 +241,7 @@
       'ext.step3Html': 'Elige <strong>Cargar descomprimida</strong> y selecciona la carpeta <code>extension/</code> de este repositorio.',
 
       'settings.vaultTitle': 'Vault de Obsidian',
-      'settings.vaultDescription': 'Loom lee y sincroniza directamente las notas Markdown dentro de tu bóveda local.',
+      'settings.vaultDescription': 'Rekindle lee y sincroniza directamente las notas Markdown dentro de tu bóveda local.',
       'settings.checking': 'Verificando...',
       'settings.pathLabel': 'Ruta absoluta del Vault',
       'settings.pathPlaceholder': 'Ej: /home/tu-usuario/Documentos/Obsidian Vault',
@@ -320,7 +320,7 @@
     },
 
     en: {
-      'meta.title': 'Loom — Contextual Writing Assistant',
+      'meta.title': 'Rekindle — Contextual Writing Assistant',
       'meta.description': 'A local writing workshop and smart triage that connects what you read with your notes in Obsidian.',
       'brand.subtitle': 'Contextual Writing Assistant',
       'nav.aria': 'Main navigation',
@@ -344,7 +344,7 @@
       'inbox.urlLabel': 'Link to process',
       'inbox.urlPlaceholder': 'https://example.com/essay or a YouTube link...',
       'inbox.submit': 'Save and analyze',
-      'inbox.clipperText': 'Clip from the browser with Loom\'s local extension.',
+      'inbox.clipperText': 'Clip from the browser with Rekindle\'s local extension.',
       'inbox.clipperTitle': 'How to install the Chrome extension',
       'inbox.clipperButton': 'Chrome extension',
       'inbox.queued': 'Link sent for extraction and analysis.',
@@ -552,7 +552,7 @@
       'ext.step3Html': 'Choose <strong>Load unpacked</strong> and select the <code>extension/</code> folder of this repository.',
 
       'settings.vaultTitle': 'Obsidian vault',
-      'settings.vaultDescription': 'Loom reads and syncs the Markdown notes inside your local vault directly.',
+      'settings.vaultDescription': 'Rekindle reads and syncs the Markdown notes inside your local vault directly.',
       'settings.checking': 'Checking...',
       'settings.pathLabel': 'Absolute path of the vault',
       'settings.pathPlaceholder': 'e.g. /home/your-user/Documents/Obsidian Vault',

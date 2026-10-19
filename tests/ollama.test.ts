@@ -3,8 +3,8 @@ import { AiProvider } from '../src/ai/aiProvider';
 import { z } from 'zod';
 
 // Live check against a local Ollama with bge-m3 and qwen2.5:7b-instruct. Opt-in, like the cloud
-// checks: LOOM_LIVE_TESTS=1 pnpm test. The rest of the suite uses tests/helpers/fakeAi.ts.
-describe.skipIf(process.env.LOOM_LIVE_TESTS !== '1')('AiProvider Integration (live Ollama)', () => {
+// checks: REKINDLE_LIVE_TESTS=1 pnpm test. The rest of the suite uses tests/helpers/fakeAi.ts.
+describe.skipIf(process.env.REKINDLE_LIVE_TESTS !== '1')('AiProvider Integration (live Ollama)', () => {
   let provider: AiProvider;
 
   beforeAll(() => {

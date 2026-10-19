@@ -9,7 +9,7 @@ describe('eval dataset tooling', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-evalset-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalset-'));
     await fs.mkdir(path.join(dir, 'vault', 'Projects', 'Anime', 'sub'), { recursive: true });
     await fs.mkdir(path.join(dir, 'vault', 'Projects', 'Cocina'), { recursive: true });
     await fs.mkdir(path.join(dir, 'articles'), { recursive: true });

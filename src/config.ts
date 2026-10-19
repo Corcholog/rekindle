@@ -16,7 +16,7 @@ const EnvSchema = z.object({
     { message: 'HOST must be a loopback address (127.0.0.1, localhost or ::1): the API has no authentication' },
   ),
   PORT: z.coerce.number().default(3000),
-  DATABASE_URL: z.string().default('postgres://loom:loompassword@localhost:5432/loomdb'),
+  DATABASE_URL: z.string().default('postgres://rekindle:rekindlepassword@localhost:5432/rekindledb'),
   OLLAMA_URL: z.string().default('http://127.0.0.1:11434'),
   EMBED_MODEL: z.string().default('bge-m3'),
   CHAT_MODEL: z.string().default('gemini-3.1-flash-lite'),

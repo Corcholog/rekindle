@@ -16,7 +16,7 @@ describe('Phase 6: Suggestion Lifecycle & Feedback API', () => {
   beforeAll(async () => {
     // 1. Setup Test DB
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_phase6')
+      .withDatabase('rekindledb_phase6')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

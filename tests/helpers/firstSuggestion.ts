@@ -68,7 +68,7 @@ export function defineFirstSuggestionSuite(c: DemoCase) {
 
     beforeAll(async () => {
       container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
-      vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-first-'));
+      vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-first-'));
       await fs.cp(c.vaultDir, vault, { recursive: true });
       vi.stubEnv('DATABASE_URL', container.getConnectionUri());
       vi.stubEnv('EMBED_MODEL', 'bge-m3');

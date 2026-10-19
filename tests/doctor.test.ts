@@ -101,7 +101,7 @@ describe('doctor probes', () => {
     });
     await new Promise<void>(resolve => ollama.listen(0, '127.0.0.1', resolve));
     ollamaUrl = `http://127.0.0.1:${(ollama.address() as { port: number }).port}`;
-    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-doctor-'));
+    tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-doctor-'));
   }, 120000);
 
   afterAll(async () => {

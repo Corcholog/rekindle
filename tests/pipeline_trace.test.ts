@@ -222,7 +222,7 @@ describe('Pipeline trace', () => {
     expect(failedIngest.attrs).toMatchObject({ retryable: false });
 
     // 3. Reconcile a vault whose folder, note names and text carry the sentinel
-    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-trace-'));
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-trace-'));
     const projectDir = path.join(vault, 'Projects', `Proyecto ${SENTINEL}`);
     await fs.mkdir(projectDir, { recursive: true });
     await fs.writeFile(path.join(projectDir, `nota ${SENTINEL}.md`), `# Título ${SENTINEL}\n\nTexto privado ${SENTINEL} #project`);

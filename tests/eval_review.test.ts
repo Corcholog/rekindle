@@ -19,7 +19,7 @@ describe('label review server', () => {
   });
 
   beforeAll(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-review-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-review-'));
     await fs.cp('tests/fixtures/eval-mini', dir, { recursive: true });
     await fs.rm(path.join(dir, 'cache'), { recursive: true, force: true });
     await fs.mkdir(path.join(dir, 'runs'));

@@ -161,7 +161,7 @@ async function copyMarkdown(from: string, to: string): Promise<number> {
   return count;
 }
 
-/** Downloads <dataset>/sources.yaml ({id, url, title?}[]) into articles/<id>.json using Loom's own ingestion code. */
+/** Downloads <dataset>/sources.yaml ({id, url, title?}[]) into articles/<id>.json using Rekindle's own ingestion code. */
 async function fetchSources(dir: string): Promise<void> {
   const { default: YAML } = await import('yaml');
   const { z } = await import('zod');

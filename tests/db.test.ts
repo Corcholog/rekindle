@@ -14,7 +14,7 @@ describe('Database Integration Tests', () => {
   beforeAll(async () => {
     // Usamos la imagen de pgvector
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_test')
+      .withDatabase('rekindledb_test')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

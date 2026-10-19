@@ -58,7 +58,7 @@ describe('web UI dictionaries', () => {
     api.applyStatic();
     const doc = dom.window.document;
     expect(doc.documentElement.lang).toBe('en');
-    expect(doc.title).toBe('Loom — Contextual Writing Assistant');
+    expect(doc.title).toBe('Rekindle — Contextual Writing Assistant');
     const text = doc.body.textContent!.replace(/\s+/g, ' ');
     // Words that only appear in the Spanish strings
     for (const word of ['Sugerencias', 'Configuración', 'Guardar', 'Proyectos registrados', 'Cargando', 'Extensión']) {

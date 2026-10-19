@@ -26,7 +26,7 @@ describe('.env writer', () => {
 
   it('writes atomically and leaves the file readable by the owner only', async () => {
     const { writeEnvValue } = await import('../src/vault/config');
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-env-'));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-env-'));
     const envPath = path.join(dir, '.env');
     await fs.writeFile(envPath, 'PORT=3000\n', { mode: 0o755 });
 

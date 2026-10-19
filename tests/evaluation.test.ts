@@ -12,7 +12,7 @@ describe('Evaluation Pipeline Integration', () => {
   
   beforeAll(async () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_test_eval')
+      .withDatabase('rekindledb_test_eval')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

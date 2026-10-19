@@ -13,7 +13,7 @@ describe('Ingestion Pipeline Integration', () => {
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-      .withDatabase('loomdb_test')
+      .withDatabase('rekindledb_test')
       .withUsername('tester')
       .withPassword('testpass')
       .start();

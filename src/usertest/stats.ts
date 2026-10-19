@@ -77,7 +77,7 @@ const REASON_LABELS: Record<string, string> = {
 export function renderUserTestStats(s: UserTestStats): string {
   const pct = (value: number | null) => (value === null ? 'not measured (nothing resolved yet)' : `${(value * 100).toFixed(0)}%`);
   const lines = [
-    'Loom user-test counts (no text, titles or URLs)',
+    'Rekindle user-test counts (no text, titles or URLs)',
     '',
     `Articles: ${s.articlesReady} ready, ${s.articlesFailed} failed`,
     `Suggestions: ${s.suggestions.total} (${s.suggestions.accepted} accepted, ${s.suggestions.discarded} discarded, ${s.suggestions.pending} pending)`,

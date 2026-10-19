@@ -80,7 +80,7 @@ describe('Embedding model consistency', () => {
     const path = await import('path');
 
     const embed = vi.spyOn(sharedAiProvider, 'getEmbedding').mockResolvedValue(vector);
-    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-model-'));
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-model-'));
     const projectDir = path.join(vault, 'Projects', 'Nuevo');
     await fs.mkdir(projectDir, { recursive: true });
     await fs.writeFile(path.join(projectDir, 'idea.md'), '# Idea\nTexto');

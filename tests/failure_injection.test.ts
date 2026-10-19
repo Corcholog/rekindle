@@ -54,7 +54,7 @@ describe('Failure scenario 6: prompt injection in retrieved content', () => {
     schema = await import('../src/db/schema');
     const { sharedAiProvider } = await import('../src/ai/aiProvider');
     fake = installFakeAi(sharedAiProvider);
-    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-injection-'));
+    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-injection-'));
   }, 120000);
 
   afterAll(async () => {
@@ -120,7 +120,7 @@ describe('Failure scenario 6: prompt injection in retrieved content', () => {
     expect(written).not.toContain('```'); // fences are escaped (\`\`\`)
     expect(written).not.toContain('![[');
     expect(written).not.toContain('<script>');
-    expect(written.match(/(?<!\\)\[!/g)).toHaveLength(1); // only Loom's own callout header
+    expect(written.match(/(?<!\\)\[!/g)).toHaveLength(1); // only Rekindle's own callout header
     expect(written.match(/%% rekindle:/g)).toHaveLength(1); // only Rekindle's own marker
     await expect(fs.access(path.join(vault, '.obsidian'))).rejects.toThrow();
   });

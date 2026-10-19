@@ -13,7 +13,7 @@ const DEBOUNCE_MS = 3000;
 
 let activeWatcher: ReturnType<typeof chokidar.watch> | null = null;
 
-/** Paths the watcher never reacts to: hidden entries and Loom's own suggestions.md (invariant I4). */
+/** Paths the watcher never reacts to: hidden entries and Rekindle's own suggestions.md (invariant I4). */
 export function shouldIgnoreVaultPath(vaultRoot: string, targetPath: string): boolean {
   const rel = path.relative(vaultRoot, targetPath).replace(/\\/g, '/');
   if (!rel || rel === '.') return false;

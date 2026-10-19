@@ -44,7 +44,7 @@ describe('Web UI renders untrusted text as text', () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
     vi.stubEnv('DATABASE_URL', container.getConnectionUri());
     vi.stubEnv('EMBED_MODEL', 'bge-m3');
-    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-xss-'));
+    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-xss-'));
     vi.stubEnv('VAULT_PATH', vaultPath);
 
     const { pool, db } = await import('../src/db/index');

@@ -51,7 +51,7 @@ function expandIPv6(ip: string): number[] {
   return groups.map(g => parseInt(g, 16));
 }
 
-/** True for any address Loom must never fetch from (private, loopback, link-local, reserved). */
+/** True for any address Rekindle must never fetch from (private, loopback, link-local, reserved). */
 export function isBlockedAddress(ip: string): boolean {
   const version = net.isIP(ip);
   if (version === 4) return blockList.check(ip, 'ipv4');
@@ -171,7 +171,7 @@ export async function fetchPublicPage(rawUrl: string, options: FetchPublicPageOp
           redirect: 'manual',
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; LoomBot/1.0)',
+            'User-Agent': 'Mozilla/5.0 (compatible; RekindleBot/1.0)',
             'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
           },
           dispatcher: agent,

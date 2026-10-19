@@ -1,5 +1,5 @@
 // ==========================================================================
-// Loom — Client Application Logic (Phase 7 Web UI)
+// Rekindle — Client Application Logic (Phase 7 Web UI)
 // ==========================================================================
 
 // State Management

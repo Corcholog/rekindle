@@ -3,14 +3,14 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-// Audit F-03 and invariant I4: notes Loom generates must never overwrite user files,
+// Audit F-03 and invariant I4: notes Rekindle generates must never overwrite user files,
 // must stay inside the vault, and must not feed back into project hashes or snapshots.
 describe('generated vault notes', () => {
   let vault: string;
   let projectDir: string;
 
   beforeEach(async () => {
-    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-generated-'));
+    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-generated-'));
     projectDir = path.join(vault, 'Projects', 'Novela');
     await fs.mkdir(projectDir, { recursive: true });
     await fs.writeFile(path.join(projectDir, 'ideas.md'), '# Ideas\nTexto del usuario.');

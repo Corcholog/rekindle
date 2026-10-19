@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo ====================================================================
-echo           LOOM - SERVICE AND SERVER LAUNCHER
+echo           REKINDLE - SERVICE AND SERVER LAUNCHER
 echo ====================================================================
 echo.
 
@@ -137,7 +137,7 @@ set /a PG_WAIT=0
 
 :WAIT_PG_LOOP
 ping 127.0.0.1 -n 2 >nul
-docker compose exec -T postgres pg_isready -U loom -d loomdb >nul 2>&1
+docker compose exec -T postgres pg_isready -U rekindle -d rekindledb >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] PostgreSQL with pgvector is ready on port 5432.
     goto PG_READY
@@ -187,7 +187,7 @@ if %ERRORLEVEL% equ 0 (
 
 :OLLAMA_NOT_FOUND
 echo [WARNING] Ollama is not available on port 11434.
-echo               Loom will start, but summaries and AI triage need Ollama.
+echo               Rekindle will start, but summaries and AI triage need Ollama.
 goto OLLAMA_DONE
 
 :CHECK_MODELS
@@ -225,7 +225,7 @@ REM --------------------------------------------------------------------
 echo ====================================================================
 echo           ALL SERVICES READY
 echo ====================================================================
-echo   * Loom web server:     http://127.0.0.1:3000
+echo   * Rekindle web server:     http://127.0.0.1:3000
 echo   * Database:            PostgreSQL + pgvector (port 5432)
 echo   * Local LLM:           Ollama (port 11434)
 echo ====================================================================
@@ -234,7 +234,7 @@ echo Opening the browser at http://127.0.0.1:3000 shortly...
 start "" cmd /c "ping 127.0.0.1 -n 5 >nul & start http://127.0.0.1:3000"
 
 echo.
-echo Starting the Loom server (Ctrl+C to stop)...
+echo Starting the Rekindle server (Ctrl+C to stop)...
 echo.
 call !PKG_CMD! run dev
 if %ERRORLEVEL% neq 0 (

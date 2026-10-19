@@ -16,7 +16,7 @@ export function estimateCostUsd(usage: { promptTokens?: number; completionTokens
  * - DeepSeek Flash: list price at peak hours with a cache miss (api-docs.deepseek.com, checked
  *   2026-10-18), so estimates are an upper bound.
  * - Ollama runs locally: no cloud cost.
- * - Gemini is left out on purpose: the free tier costs nothing, a paid key does, and Loom cannot
+ * - Gemini is left out on purpose: the free tier costs nothing, a paid key does, and Rekindle cannot
  *   tell which one is configured. Its calls are reported as "not priced".
  */
 export const DEFAULT_PRICES: Record<string, PriceTable> = {

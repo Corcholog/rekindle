@@ -11,7 +11,7 @@ describe('JsonCache', () => {
   afterAll(() => fs.rm(dir, { recursive: true, force: true }));
 
   it('saves atomically and leaves no temp file', async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-cache-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-cache-'));
     const file = path.join(dir, 'cache', 'llm.json');
     const cache = await new JsonCache<string>(file).load();
     cache.set('b', '2');

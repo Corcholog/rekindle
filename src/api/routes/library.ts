@@ -196,7 +196,7 @@ export default async function (server: FastifyInstance) {
       : 'No hay notas de proyectos activas en el Vault de Obsidian.';
 
     const lang = outputLanguage();
-    const systemPrompt = `Eres el Consultor de Investigación de Loom, un compañero intelectual que conoce a fondo tanto la Biblioteca de contenidos guardados por el usuario (videos, artículos, ensayos) como las Notas de sus Proyectos activos en su Vault de Obsidian.
+    const systemPrompt = `Eres el Consultor de Investigación de Rekindle, un compañero intelectual que conoce a fondo tanto la Biblioteca de contenidos guardados por el usuario (videos, artículos, ensayos) como las Notas de sus Proyectos activos en su Vault de Obsidian.
 
 Tu objetivo es responder con precisión, criterio analítico y honestidad a preguntas como:
 - "¿Tenemos contenido relacionado a X, Y, Z?"

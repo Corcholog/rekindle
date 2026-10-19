@@ -54,7 +54,7 @@ describe('Failure scenario 8: target paths from the model', () => {
     schema = await import('../src/db/schema');
     const { sharedAiProvider } = await import('../src/ai/aiProvider');
     fake = installFakeAi(sharedAiProvider);
-    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-target-'));
+    vault = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-target-'));
   }, 120000);
 
   afterAll(async () => {

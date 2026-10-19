@@ -68,7 +68,7 @@ describe('Writeback idempotency and recovery', () => {
   });
 
   beforeEach(async () => {
-    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-writeback-'));
+    vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-writeback-'));
     await fs.mkdir(path.join(vaultPath, projectFolder), { recursive: true });
   });
 

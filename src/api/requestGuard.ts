@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-// Only the Manifest V3 clipper may call Loom from a non-UI origin, and only to ingest.
+// Only the Manifest V3 clipper may call Rekindle from a non-UI origin, and only to ingest.
 const EXTENSION_ROUTES = new Set(['/api/ingest']);
 
 export interface GuardedRequest {
@@ -35,7 +35,7 @@ function isUiOrigin(origin: string, port: number): boolean {
 /**
  * Host check blocks DNS rebinding (a page whose domain re-resolves to 127.0.0.1).
  * Origin check blocks cross-site writes; cross-origin reads are already blocked by the
- * browser because Loom sends no CORS headers.
+ * browser because Rekindle sends no CORS headers.
  */
 export function isRequestAllowed(req: GuardedRequest, port: number): boolean {
   if (!req.host || !LOOPBACK_HOSTNAMES.has(hostnameOf(req.host.toLowerCase()))) {

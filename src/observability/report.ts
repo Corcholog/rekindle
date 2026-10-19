@@ -193,7 +193,7 @@ function table(header: string[], rows: string[][]): string[] {
 export function renderReport(r: TelemetryReport): string {
   const t = r.totals;
   const out: string[] = [
-    `# Loom telemetry, ${r.since.toISOString()} to ${r.until.toISOString()}`,
+    `# Rekindle telemetry, ${r.since.toISOString()} to ${r.until.toISOString()}`,
     '',
     `LLM calls: ${t.calls} · failure rate ${pct(t.failedCalls, t.calls)} · fallback rate ${pct(t.fallbackCalls, t.calls - t.failedCalls)} · malformed attempts ${pct(t.malformedAttempts, t.attempts)} · estimated cost ${usd(t.costUsd)}${t.unpricedAttempts > 0 ? ` (+ ${t.unpricedAttempts} attempts not priced)` : ''}`,
     `Failed queue jobs: ${t.failedJobs}`,

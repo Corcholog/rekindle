@@ -19,7 +19,7 @@ export async function getFileHash(filePath: string): Promise<string> {
 
 /**
  * Calculates deterministic hash of a project directory.
- * Hashes the *.md files the reconciler parses (recursively), ignoring suggestions.md and Loom-generated notes.
+ * Hashes the *.md files the reconciler parses (recursively), ignoring suggestions.md and Rekindle-generated notes.
  * Incorporates file names so renaming a file triggers reconciliation.
  */
 export async function getDirectoryHash(dirPath: string): Promise<string> {

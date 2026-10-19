@@ -77,7 +77,7 @@ export interface ReviewServer {
 
 /**
  * Local page to compare every model answer with the owner's labels and correct the labels.
- * It binds to 127.0.0.1 only and applies the same Host/Origin rules as the Loom API.
+ * It binds to 127.0.0.1 only and applies the same Host/Origin rules as the Rekindle API.
  */
 export async function startReviewServer(datasetDir: string, options: { port?: number } = {}): Promise<ReviewServer> {
   const dir = path.resolve(datasetDir);
