@@ -4,8 +4,8 @@ Purpose: find out whether other people can install Loom, get a first useful sugg
 
 ## Who
 
-- People who keep notes or write projects (Obsidian or plain Markdown), can read Spanish, and can follow a README. They are not asked to review the code.
-- Each tester uses either the synthetic `demo_vault/` or their own notes. Own notes stay on their machine: they are never copied, uploaded or pasted into this repository. Without cloud keys, nothing leaves their machine either.
+- People who keep notes or write projects (Obsidian or plain Markdown) and can follow a README. Loom runs in English or Spanish (`LANGUAGE`); record which one each tester used, and the language of their notes. They are not asked to review the code.
+- Each tester uses either a synthetic demo vault (`demo_vault_en/` or `demo_vault/`) or their own notes. Own notes stay on their machine: they are never copied, uploaded or pasted into this repository. Without cloud keys, nothing leaves their machine either.
 - Before starting, tell them what is recorded (the counts below plus your notes on what they said) and that they can stop at any time.
 
 ## Session (about 45 minutes)

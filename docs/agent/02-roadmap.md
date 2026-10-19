@@ -11,6 +11,7 @@ Order rationale: less code first (cleanup) makes every later step cheaper; secur
 - [x] **Phase 4 — AI observability**
 - [x] **Phase 5 — CI, integration and failure-scenario tests, threat model**
 - [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test** (code and docs done 2026-10-19; open: demo recording, user sessions, Windows check)
+- [x] **Phase 6.5 — Bilingual Loom (Spanish / English)** (added and done 2026-10-19)
 - [ ] **Phase 7 — Publication package**
 - [ ] **Optional — Evidence-driven improvements** (only if Phase 3 shows the need)
 
@@ -137,6 +138,23 @@ evals/
 **Acceptance criteria**
 - A new machine reaches a first suggestion following only the README.
 - User-test results are recorded only from real sessions; otherwise the README says "not measured".
+
+---
+
+## Phase 6.5 — Bilingual Loom (Spanish / English)
+
+**Goal:** an English-speaking reader can run the demo end to end in English, and the language the model is instructed in is chosen by measurement.
+
+**Deliverables**
+- Interface, generated text and vault callouts in Spanish or English (`LANGUAGE`, `OUTPUT_LANGUAGE`, `NOTES_LANGUAGE`), with a Settings card.
+- Summaries in the notes' language; instruction language fixed by the evals.
+- An English demo vault; a fresh clone starts in English.
+- Three measured experiments on the labeled set: English output (E1), English summaries against Spanish notes (E2), English instructions (E3).
+
+**Acceptance criteria**
+- With everything Spanish, prompts are byte-identical to the measured ones (replay test).
+- A clean clone with `LANGUAGE=en` and no cloud key reaches an English suggestion and an English callout.
+- E1–E3 results are committed and the defaults follow them; unmeasured combinations are written "not measured".
 
 ---
 

@@ -13,7 +13,7 @@ Loom is a **local-first, human-in-the-loop intelligence layer** that connects wh
 The workflow centers on writer agency:
 1. **Writing projects as folders in Obsidian**: You maintain projects as collections of Markdown notes under `Projects/<ProjectName>/` (or `Proyectos/<ProjectName>/`).
 2. **Seamless link capture**: You ingest web articles, essays, and YouTube videos via the web UI or the **Manifest V3 Web Clipper extension** (which queues clippings locally when offline and auto-syncs on reconnect).
-3. **Structured summarization & local embedding**: Loom extracts the readable article text or video transcript, synthesizes a structured summary (in Spanish), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
+3. **Structured summarization & local embedding**: Loom extracts the readable article text or video transcript, synthesizes a structured summary (in the notes language, Spanish by default), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
 4. **Hierarchical semantic matching**: Loom compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL using `pgvector` cosine distance.
 5. **Constructive triage & action proposal**: When cosine distance indicates semantic affinity (< 0.6), Loom prompts an LLM (Gemini with automatic local Ollama fallback) to formulate a concrete, constructive action targeting a specific note in your project (e.g., *"Citar evidencia en research/combat.md"*, *"Contraargumento para Acto 2"*).
 6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`. Synergy bridge notes and research briefs are only written when you click **Guardar en Obsidian** (§11).
@@ -27,7 +27,7 @@ The workflow centers on writer agency:
 - **Obsidian is the primary source of truth**: The filesystem holds your creative writing. PostgreSQL holds derived vector index state, immutable snapshots, and triage history.
 - **Zero unapproved mutations** (invariant I1): AI cannot write or edit notes without your explicit action. Suggestions are written only after **Aceptar**; generated notes only after **Guardar en Obsidian**, as new files that never overwrite anything. Model text is sanitized before it reaches the vault (`src/vault/sanitize.ts`).
 - **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. Without `GEMINI_API_KEY`, every LLM call (summaries, evaluations, re-evaluations, Consultor, synergies, synthesis) runs locally with Ollama. Non-LLM outbound traffic remains: fetching the pages and YouTube metadata/transcripts you ingest, and the web fonts the UI loads from Google Fonts.
-- **Language separation**: User-facing copy, prompts, generated summaries, callouts, and UI strings are strictly in **Spanish**. Source code, variables, developer documentation, and commits are strictly in **English**.
+- **Two languages, chosen by measurement**: the interface, generated text and vault callouts come in Spanish or English (section 18). Prompt instructions stay Spanish because the evals measured them that way; summaries follow the language of the notes they are compared with. Source code, API messages, developer documentation and commits are in **English**.
 
 ---
 
@@ -217,7 +217,10 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | `string?` | – / `'deepseek-flash'` | DeepSeek through its OpenAI-compatible API, JSON mode with the schema in the prompt and thinking requested off (it is on by default at DeepSeek). |
 | `GEMINI_MODEL` | `string?` | *optional* | Overrides `CHAT_MODEL` (read directly from `process.env`). |
 | `GEMINI_API_KEY` | `string?` | *optional* | Google AI Studio API key. If omitted, every LLM call runs locally on Ollama. |
-| `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. `pnpm start/dev` default to `./demo_vault`; the UI can rewrite it in `.env`. |
+| `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. `pnpm start/dev` default to the demo vault of the notes language (`./demo_vault` or `./demo_vault_en`); the UI can rewrite it in `.env`. |
+| `LANGUAGE` | `es \| en` | `es` (`.env.example` ships `en`) | Preset for the interface default and the two below. |
+| `OUTPUT_LANGUAGE` | `es \| en` | `LANGUAGE` | Language of reasoning, actions, Consultor answers, synergies, briefs and callouts. Read at call time; editable in Settings. |
+| `NOTES_LANGUAGE` | `es \| en` | `LANGUAGE` | Language of the owner's notes. Summaries are written in it, since they are embedded and compared with the notes. Editable in Settings. |
 | `LOG_LEVEL` | `string?` | `'info'` (`'silent'` under `NODE_ENV=test`) | Level of the server's structured logger, shared with Fastify (read directly from `process.env`). |
 | `LOG_FORMAT` | `string?` | `'pretty'` (`'json'` under `NODE_ENV=production`) | `pretty` prints one readable line per record; `json` prints raw pino JSON lines. |
 
@@ -687,7 +690,8 @@ The Loom frontend is a responsive single-page application built with modern vani
   - Extension Guide Modal (how to load the Manifest V3 clipper).
   - Synergy Bridge Modal (cross-project bridge note, written to the vault).
   - Synthesis Result Modal (research brief summary and next steps).
-- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only). `tests/ui_xss.test.ts` runs the real page against the real API with hostile data.
+- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only). `tests/ui_xss.test.ts` runs the real page against the real API with hostile data, in both interface languages.
+- **Languages**: `web/i18n.js` (a classic script loaded before `app.js`) holds the Spanish and English dictionaries and `t()`. Static markup carries `data-i18n`, `data-i18n-attrs` or `data-i18n-html` (markup from the dictionary only, never data). The interface language is stored per browser in `localStorage` and defaults to the server's `LANGUAGE`; API errors are shown through their `code`. `tests/ui_i18n.test.ts` checks that both dictionaries have the same keys and that every key used exists.
 
 ---
 
@@ -756,6 +760,18 @@ Model behavior is measured from IDs, counts, lengths, hashes and durations; note
 - **Logs** (`logger.ts`): one pino logger for the workers, evaluator, vault code and Fastify (per-request logging off: request URLs can carry search text). Keys such as `text`, `prompt`, `summary`, `url`, `title`, `notePath`, `message` and `stack` are censored at any depth; errors keep only `{type, kind, status, code}`. Folder and note paths appear as a 10-hex `pathKey` hash.
 - **Commands** (`report.ts`, `trace.ts`, `cli.ts`): `pnpm telemetry:report [--since 7d] [--json]`, `pnpm telemetry:trace <suggestionId|contentId>` and `pnpm telemetry:prune --older-than <N>d` (no default age; nothing is pruned automatically). Calls are counted by their first attempt; latency is that of the answering attempt; p50/p95 use `percentile_cont`.
 - **Evals.** The harness runs the real pipeline on its own database, so each eval result carries a `telemetry` block built by the same report code, and each article in the run details carries its trace ID.
+
+## 18. Languages (`src/ai/language.ts`)
+
+Three choices, read at call time so a change in Settings applies to the next model call without a restart:
+
+| Choice | Setting | What it changes | Why |
+|---|---|---|---|
+| Output language | `OUTPUT_LANGUAGE` (default `LANGUAGE`) | The "answer in X" line of every prompt and the schema descriptions of the text fields; fixed texts Loom writes itself (`src/i18n/serverText.ts`): callout labels and dates, generated-note headings, placeholder observations | What the user reads |
+| Notes language | `NOTES_LANGUAGE` (default `LANGUAGE`) | The language of summaries | The summary is what gets embedded and compared with the note embeddings. Summarizing every article into the notes' language, whatever the article's language, keeps the comparison within one language |
+| Instruction language | `PROMPT_LANGUAGE` (internal, eval-only) | Spanish or English instructions for the summary and triage prompts (`src/ai/summarize.ts`, `src/evaluator/triagePrompt.ts`) | Kept on whatever measures best (`evals/REPORT.md`) |
+
+With all three in Spanish the prompts are byte-identical to the ones measured before languages were configurable; `tests/eval_replay.test.ts`, whose recordings are keyed by exact prompt, proves it. Logic that used to read the model's Spanish (the disguised-discard filter, the parser of saved synergy notes) accepts both languages. API messages are English with a stable `code` for the errors a user can hit. Text already stored keeps the language it was written in.
 
 ## 17. Known Considerations & Future Roadmap
 

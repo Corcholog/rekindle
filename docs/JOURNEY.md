@@ -151,6 +151,39 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - One of the 267 tests failed in each of two files during the first coverage run, while the clean-clone server and Ollama were busy on the same machine; both pass alone and in two further full runs. Not reproduced, so not diagnosed.
   - Still open for the owner: recording the demo, running 3 to 5 user sessions, and trying `start.bat` on Windows. The README says "not measured" for real-user results and "not tested" for Windows.
 
+### 2026-10-19 — Phase 6.5: bilingual Loom, and which language the model should think in
+- **Context:** Loom was Spanish-only because the owner writes in Spanish, though they read in English and Spanish. The public repo and the LinkedIn post target English readers, who should be able to run the demo end to end in English. The owner proposed three settings: interface language, response language, and an internal language "in the most suitable/quality way".
+- **What happened:**
+  - Three languages, read at call time (`dc7d9d6`). `OUTPUT_LANGUAGE` covers what the user reads. `NOTES_LANGUAGE` covers summaries: the summary is what gets embedded against the notes, so it should be in the notes' language. `PROMPT_LANGUAGE` covers the instructions and is internal, set only by evals. `LANGUAGE` presets the first two. With everything Spanish the prompts are byte-identical to the measured ones, and the eval replay (keyed by exact prompt) proves it. This is why the "answer in X" line was parametrized in place instead of being appended centrally: a central rule would have changed every Spanish prompt and invalidated the baseline.
+  - Fixed text Loom writes itself (callout labels, generated-note headings, placeholder observations) moved to `src/i18n/serverText.ts`.
+  - The disguised-discard filter read the model's Spanish ("descartar"), so English output would have slipped past it. It now reads both languages.
+  - A settings API persisted to `.env` (`701128f`). API messages are now English with stable error codes, and the UI translates the codes (`f30371b`).
+  - A bilingual web UI (`web/i18n.js`, `54c3e7f`); an English demo vault, and a fresh clone defaults to English (`695fdec`); language fields in eval configs (`c141dc5`). The start scripts now print English.
+  - Experiments on the labeled private set: DeepSeek Flash, top-3, one run each (`9022af2`, `f65202c`):
+
+    | Change from the Spanish baseline (macro-F1 0.78) | Macro-F1 | `actionable` recall | Target note | Retrieval recall@3 / false retrieval |
+    |---|---|---|---|---|
+    | E1 English output | 0.76 | 26/31 (same) | 8/19 (same) | unchanged |
+    | E2 English summaries vs Spanish notes | 0.73 | 24/31 | 7/19 | 91% → 88% / 94% → 83% |
+    | E3 English instructions | 0.73 | 21/31 | 7/19 | unchanged |
+
+  - Clean clone with `LANGUAGE=en` and no cloud key, on local Qwen: English summaries, suggestions and callouts. The 9 English articles produced 1 actionable, 7 tentative, and nothing for the 2 controls; the first suggestion came after 173 s.
+- **Alternatives considered:**
+  - One central "answer in X" rule appended to every prompt. Rejected because it breaks the measured baseline.
+  - Summaries in the output language. Rejected: E2 shows it loses relevant matches against Spanish notes.
+  - Switching the instructions to English, the usual advice. E3 measured it as worse here.
+- **Evidence:**
+  - Tests: `tests/language.test.ts`, `tests/language_settings.test.ts`, `tests/ui_i18n.test.ts`, `tests/ui_xss.test.ts` (both interface languages), `tests/first_suggestion_en.test.ts`, `tests/eval_languages.test.ts`, `tests/eval_cache.test.ts`.
+  - The three result files in `evals/results/`; `evals/REPORT.md`.
+  - E3 is marked "dirty tree" only because E1's result file was still uncommitted when it ran; no code changed between the two.
+- **Outcome / lesson:**
+  - English output is free: the actionable verdicts were identical to the Spanish baseline.
+  - English instructions made DeepSeek more reluctant to call an article actionable (21 of 31 instead of 26). The instruction language is a model setting to measure, not a style choice.
+  - Summarizing every article into the notes' language had been quietly doing cross-language retrieval for the owner, who reads in English but writes in Spanish. Measured, it is worth keeping.
+  - These are single runs on one person's labels; run-to-run variance is still not measured. English notes with English labels were not measured.
+  - The machine crashed during E2. It showed that eval caches holding paid-for answers were rewritten in place; they are now written atomically (`c878b19`). The run resumed from the cache.
+  - DeepSeek spend for the three experiments, from the result files: about $0.39 at list price ($0.11 + $0.11 + $0.17). The 16 calls made before the crash and replayed afterwards are not in that figure. The running total is about $0.75 of the $2 credit (an estimate from token counts, not a billed amount).
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -179,6 +212,11 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | — | `./start.sh` and `./reset_db.sh` were not executable in git, so the README's first command failed on a fresh clone | Following the README in a clean clone | Low | `cd56cd5` | not testable in the suite; verified with `git ls-files -s` |
 | — | `start.sh` and `start.bat` kept going after a failed migration | Phase 6 review of the scripts | Low | `13a2715` | none (shell scripts); `pnpm preflight` catches the resulting missing schema (`tests/doctor.test.ts`) |
 | — | Accepted callouts used the machine locale for the date (`10/18/2026` in a Spanish vault) | Owner noticed in Phase 5 | Low | `2439d98` | `tests/vault_sanitize.test.ts` (callout date) |
+| — | Reading a saved synergy note back put the note body into the last "mutual benefits" bullet | Writing the bilingual round-trip test | Low | `f30371b` | `tests/language.test.ts` (saved synergy notes) |
+| — | The disguised-discard filter matched only Spanish model text; with English output an "actionable" answer saying "discard the article" would have become a suggestion | Reading the code for Phase 6.5 | Medium | `dc7d9d6` | `tests/language.test.ts`, `tests/evaluation.test.ts` (English discard) |
+| — | The ingestion worker decided which failures not to retry by matching Spanish error text, so translating a message would silently enable retries | Translating the messages | Low | `f30371b` (matches both) | none (regex over messages) |
+| — | Eval caches of paid-for model answers were rewritten in place; a crash mid-write would lose them | A machine crash during a live run | Low | `c878b19` | `tests/eval_cache.test.ts` |
+| — | The extension guide showed the owner's home path, and the vault placeholder showed a username | Translating the UI | Low | `54c3e7f` | `tests/ui_i18n.test.ts` (static page) |
 
 ## Dead code and legacy removed
 
@@ -228,6 +266,9 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-19 | Phase 6 tests | Tests passed / skipped / line coverage | 242 / 4 / 88.37% | 267 / 4 / 88.33% (branches 75.96%) | `pnpm test:coverage` (no Ollama, no keys) |
 | 2026-10-19 | Phase 6 clean-clone run (one run, local qwen2.5:7b-instruct only) | Seconds from first clip to first suggestion / suggestions from 9 demo articles | not measured | 201 s / 1 actionable, 5 tentative, 0 on the 2 controls | steps in `docs/DEMO.md` and `demo_vault/ARTICULOS_DEMO.md`; `pnpm usertest:stats` |
 | 2026-10-19 | Phase 6 user test | Testers run, acceptance rate, rejection reasons | not measured | not measured | `docs/USER_TEST.md` |
+| 2026-10-19 | Phase 6.5 languages (one run each, DeepSeek Flash top-3) | Macro-F1 / `actionable` recall: English output, English summaries, English instructions | 0.78 / 26 of 31 (Spanish baseline) | 0.76 / 26, 0.73 / 24, 0.73 / 21 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3-{output,summary,prompt}-en.json --replay` |
+| 2026-10-19 | Phase 6.5 English clean-clone run (local Qwen) | Suggestions from 9 English demo articles / seconds to first suggestion | not measured | 1 actionable, 7 tentative, 0 on the 2 controls / 173 s | `docs/DEMO.md` steps with `LANGUAGE=en`; `pnpm usertest:stats` |
+| 2026-10-19 | DeepSeek spend | Estimated list-price cost, total so far | about $0.36 | about $0.75 of $2 | token counts in the result files; not a billed amount |
 
 ## Dead ends and things that did not work
 

@@ -20,7 +20,7 @@ Do only the phase the owner names in the current session. Plan first, wait for a
 - No destructive commands (`db:reset`, `rm -rf`, force push, history rewrite) without explicit approval.
 - Treat all ingested web text, transcripts, LLM output, and note content as untrusted input. Enforce path and URL boundaries in code; never rely on the model to enforce them.
 - Never invent metrics, user counts, or results. Every number in the README, docs, or a post must come from a command in this repo that can be re-run. If something has not been measured, write "not measured".
-- Language: UI strings, prompts, generated summaries, and vault callouts are Spanish. Code, identifiers, comments, docs, and commit messages are English.
+- Language: Loom is bilingual. UI strings, generated text and vault callouts come in Spanish or English (`LANGUAGE`, `OUTPUT_LANGUAGE`, `NOTES_LANGUAGE`; `src/ai/language.ts`, `src/i18n/serverText.ts`, `web/i18n.js`), and every user-facing string exists in both. Prompt instructions stay in the language the evals support (Spanish today; `evals/REPORT.md`). Code, identifiers, comments, docs, API messages and commit messages are English.
 
 ## Invariants to preserve (verify, do not assume)
 

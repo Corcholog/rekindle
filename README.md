@@ -4,7 +4,7 @@
 
 Loom is a **local-first** assistant that connects what you read with what you write. You keep your writing projects as Markdown notes in an Obsidian vault; you clip web articles or YouTube videos into Loom; Loom summarises them, compares them semantically against your active projects and individual notes, and proposes concrete actions ("cite this in Act 2", "counter-argument for combat mechanics"). Only the suggestions **you accept** are written back to your vault.
 
-> The product UI, AI prompts and generated text are in **Spanish**. Code and developer documentation are in English.
+> Loom runs in **English or Spanish**: the interface, the suggestions and the notes it writes follow `LANGUAGE` (a fresh clone starts in English; change it any time in Settings). The model's instructions stay in Spanish, because that measured best ([Languages](#languages)). Code and developer documentation are in English.
 
 📘 **Deep technical documentation:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -28,12 +28,12 @@ Loom is a **local-first** assistant that connects what you read with what you wr
 - **Synergies & Consultor**:
   - **Cross-Project Thematic Synergies**: Discovers conceptual bridges between different projects via note-to-note vector distance and drafts a bridge note you can save to the vault.
   - **Archive & Vault Research Partner ("Consultor")**: Answers natural language research questions by reasoning across your entire saved library and all active Obsidian project notes simultaneously, citing sources as `[C1]` (library) and `[N1]` (notes). The cited cards are checked against the catalog; inline references in the answer text are not yet verified.
-- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault. Synergy notes and research briefs are saved only when you click **Guardar en Obsidian**.
+- **Explicit Writeback**: Accepting a suggestion appends a native Obsidian `> [!tip]` callout to `<project>/suggestions.md`. Pending, tentative, and discarded suggestions never touch the vault. Synergy notes and research briefs are saved only when you click **Save to Obsidian** (*Guardar en Obsidian*).
 - **Web UI**: 4 focused views:
-  1. **Consumo**: Ingestion input card and chronological reading history feed.
-  2. **Sugerencias**: Project-scoped triage with staleness pills, backlog synthesis, and accept/discard/reevaluate actions.
-  3. **Consultor**: Full-catalog research consultant with interactive prompt chips.
-  4. **Configuración**: Vault directory configuration, disk mount status, and forced rescan.
+  1. **Reading** (*Consumo*): Ingestion input card and chronological reading history feed.
+  2. **Suggestions** (*Sugerencias*): Project-scoped triage with staleness pills, backlog synthesis, and accept/discard/reevaluate actions.
+  3. **Consultant** (*Consultor*): Full-catalog research consultant with interactive prompt chips.
+  4. **Settings** (*Configuración*): Vault directory configuration, languages, disk mount status, and forced rescan.
 
 ### Vault layout
 
@@ -75,11 +75,18 @@ corepack enable && pnpm install
 ./start.sh        # copies .env.example, starts Postgres, migrates, runs `pnpm preflight`, starts the server
 ```
 
-Open <http://127.0.0.1:3000>. Loom uses the synthetic [`demo_vault/`](demo_vault) (4 Spanish projects, 15 notes) until you set `VAULT_PATH`. Paste the links from [`demo_vault/ARTICULOS_DEMO.md`](demo_vault/ARTICULOS_DEMO.md) into **Consumo**, wait for the summaries, and open **Sugerencias**.
+Open <http://127.0.0.1:3000>. Until you set `VAULT_PATH`, Loom uses a synthetic demo vault in your language: [`demo_vault_en/`](demo_vault_en) (English, the default of a fresh clone) or [`demo_vault/`](demo_vault) (Spanish, with `LANGUAGE=es`). Each has 4 projects and 15 notes. Paste the links from [`demo_vault_en/ARTICLES.md`](demo_vault_en/ARTICLES.md) (or [`demo_vault/ARTICULOS_DEMO.md`](demo_vault/ARTICULOS_DEMO.md)) into **Reading** (**Consumo**), wait for the summaries, and open **Suggestions** (**Sugerencias**).
 
 `pnpm preflight` is the same check `start.sh` runs: it verifies Node, `.env`, Postgres, migrations, Ollama and its models, the vault, and which LLM providers are active, and prints the command that fixes each problem. `start.bat` does the same on Windows but **has not been tested** on a real Windows machine.
 
-**What a first run looked like** (one run, a fresh clone, no cloud keys, so everything on local `qwen2.5:7b-instruct`; not a benchmark): the nine articles in the list produced 1 `actionable` suggestion, 5 `tentative` ones, and nothing for the two control articles. The first suggestion appeared about 3.5 minutes after the first clip. Other models and machines will differ; the quality numbers that matter are under [Evaluation](#evaluation).
+**What a first run looked like** (a fresh clone, no cloud keys, so everything on local `qwen2.5:7b-instruct`; one run per language on one Linux machine, not a benchmark):
+
+| Demo vault | Suggestions from the 9 listed articles | Control articles | First suggestion after the first clip |
+|---|---|---|---|
+| English (`demo_vault_en`) | 1 `actionable`, 7 `tentative` | nothing | 173 s |
+| Spanish (`demo_vault`) | 1 `actionable`, 5 `tentative` | nothing | 201 s |
+
+Some `tentative` links are weak (in the English run the attention-economy article was marked tentative for the lighthouse novel too). Other models and machines will differ; the quality numbers that matter are under [Evaluation](#evaluation).
 
 ---
 
@@ -103,7 +110,9 @@ cp .env.example .env
 | `LLM_PROVIDERS` | `deepseek,gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | – / `deepseek-flash` | Enables DeepSeek when listed in `LLM_PROVIDERS`. Thinking mode is requested off. |
 | `GEMINI_API_KEY` | – | Enables Gemini. Leave empty for 100% local operation. |
-| `VAULT_PATH` | `./demo_vault` (via `pnpm start/dev`) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |
+| `VAULT_PATH` | `./demo_vault_en` or `./demo_vault` (via `pnpm start/dev`, by notes language) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |
+| `LANGUAGE` | `en` in `.env.example`, `es` if unset | Interface default, language of suggestions and answers, and language of your notes. See [Languages](#languages). |
+| `OUTPUT_LANGUAGE` / `NOTES_LANGUAGE` | `LANGUAGE` | Override either half of the preset (also editable in Settings). |
 | `LOG_LEVEL` | `info` | Server log level (structured logs shared with Fastify). |
 | `LOG_FORMAT` | `pretty` | `pretty` for one readable line per record, `json` for raw JSON lines (default in production). |
 
@@ -146,6 +155,29 @@ Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the followin
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 10,000 characters of project notes.
 
 With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails; without that key DeepSeek is skipped. Leave both keys empty and every LLM call runs on local Ollama. Loom still contacts the sites you ingest (and YouTube for transcripts), and the web UI loads its fonts from Google Fonts.
+
+---
+
+## Languages
+
+Three choices, because they matter for different reasons:
+
+| Setting | What it controls | Why it is separate |
+|---|---|---|
+| Interface language | Every label, button and message in the web UI | Stored per browser; defaults to `LANGUAGE` |
+| `OUTPUT_LANGUAGE` | What the model writes for you to read: reasoning, suggested actions, Consultor answers, synergies, briefs, and the callouts written to your vault | What you read should be in your language |
+| `NOTES_LANGUAGE` | The language article summaries are written in | The summary is what gets embedded and compared with your notes, so it should be in the notes' language whatever the article's language |
+
+The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below; one run each, with run-to-run variance **not measured**):
+
+| Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / recall | Target note | Retrieval recall@3 / unrelated articles that still retrieve a project |
+|---|---|---|---|---|
+| Baseline: Spanish instructions, summaries and output | 0.78 | 96% / 26 of 31 | 8 of 19 | 91% / 94% |
+| E1: English output | 0.76 | 96% / 26 of 31 | 8 of 19 | 91% / 94% (same summaries) |
+| E2: English summaries compared with the Spanish notes | 0.73 | 96% / 24 of 31 | 7 of 19 | 88% / 83% |
+| E3: English instructions | 0.73 | 95% / 21 of 31 | 7 of 19 | 91% / 94% (same summaries) |
+
+What this supports: English output costs nothing measurable (the actionable verdicts were identical), so it is safe to offer. English instructions made the model more reluctant to call an article actionable, so instructions stay Spanish. Summaries in a different language from the notes lose relevant matches (and also filter more, since cross-language distances are larger), so summaries follow the notes. These are single runs on one person's labels; the English-output and English-notes combinations other than these three were **not measured**, and an English vault with English labels was **not measured**. Full tables: [`evals/REPORT.md`](evals/REPORT.md).
 
 ---
 
@@ -252,7 +284,7 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 
 ## Troubleshooting
 
-- **Project never matches anything**: check Ollama is running with `bge-m3` (a failed embedding is retried on the next change/boot/rescan, nothing is stored meanwhile). Use *Configuración → Rescan*.
+- **Project never matches anything**: check Ollama is running with `bge-m3` (a failed embedding is retried on the next change/boot/rescan, nothing is stored meanwhile). Use *Settings → Rescan*.
 - **`ECONNREFUSED 127.0.0.1:11434`**: start Ollama (`ollama serve`).
 - **Ingestion fails with "Unsupported content type"**: only HTML/text pages are supported (no binary PDFs).
 - **Secondary Linux drive not detected**: if your vault is on an NTFS/removable partition (`/run/media`), Loom attempts auto-mounting via `udisksctl`. Ensure your user has mount permissions.
