@@ -1,4 +1,4 @@
-import { boss } from '../queue';
+import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
 import { db } from '../db';
 import { contents } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -224,7 +224,7 @@ export const setupIngestionWorker = async () => {
 
         
         // 6. Trigger Evaluation Pipeline
-        await boss.send('evaluate_content', { contentId, traceId }, { singletonKey: `eval:${contentId}`, retryLimit: 2 });
+        await boss.send('evaluate_content', { contentId, traceId }, EVALUATE_JOB_OPTIONS);
         log.info({ traceId, contentId, chars: rawText.length }, 'Ingested; evaluation enqueued');
         await recordStage({ ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, attrs: { source: isYouTubeUrl(url) ? 'youtube' : 'web' } });
       } catch (error: any) {

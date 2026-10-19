@@ -6,6 +6,14 @@ const log = getLogger('evaluation-worker');
 
 const QUEUE_NAME = 'evaluate_content';
 
+/** Some project evaluations failed: the job fails so pg-boss retries it (audit F-09). */
+export class EvaluationIncompleteError extends Error {
+  constructor(public failures: number) {
+    super(`${failures} project evaluation(s) failed`);
+    this.name = 'EvaluationIncompleteError';
+  }
+}
+
 interface EvaluateContentData {
   contentId: string;
   targetProjectId?: string;
@@ -22,7 +30,9 @@ export const setupEvaluationWorker = async () => {
       const attempt = typeof job.retryCount === 'number' ? job.retryCount + 1 : undefined;
 
       try {
-        await evaluateContentMatch(contentId, targetProjectId, {}, { traceId, attempt });
+        // Projects evaluated on an earlier attempt are skipped, so a retry only redoes the failures
+        const stats = await evaluateContentMatch(contentId, targetProjectId, {}, { traceId, attempt });
+        if (stats.failures > 0) throw new EvaluationIncompleteError(stats.failures);
       } catch (error) {
         log.error({ err: error, contentId, traceId, attempt }, 'Evaluation job failed');
         throw error;

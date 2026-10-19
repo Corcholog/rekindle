@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { contents } from '../../db/schema';
-import { boss } from '../../queue';
+import { boss, INGEST_JOB_OPTIONS } from '../../queue';
 import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
 import { newTraceId } from '../../observability/pipeline';
 import { and, eq } from 'drizzle-orm';
@@ -58,7 +58,7 @@ export default async function (server: FastifyInstance) {
         url,
         initialTitle: passedTitle,
         selection,
-      }, { singletonKey: contentId, retryLimit: 2 });
+      }, INGEST_JOB_OPTIONS);
 
       // New URL: the insert wins atomically, even with concurrent requests
       const [created] = await db.insert(contents)

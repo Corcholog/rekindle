@@ -3,7 +3,7 @@ import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSu
 import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
-import { boss } from '../queue';
+import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
 import { z } from 'zod';
 import { retrieveWithStats, RetrievalOptions } from './retrieval';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
@@ -77,7 +77,8 @@ export async function evaluateContentMatch(
   }
   await recordStage({
     traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started,
-    ok: stats.failures === 0, attempt: trace.attempt, attrs: jobAttrs(),
+    ok: stats.failures === 0, errorKind: stats.failures > 0 ? 'project_failures' : null,
+    attempt: trace.attempt, attrs: jobAttrs(),
   });
   return stats;
 }
@@ -413,7 +414,7 @@ export async function enqueueProjectBacklogEvaluations(projectId: string, limit 
 
   for (const contentId of contentIds) {
     try {
-      await boss.send('evaluate_content', { contentId, targetProjectId: projectId });
+      await boss.send('evaluate_content', { contentId, targetProjectId: projectId }, EVALUATE_JOB_OPTIONS);
     } catch (err) {
       log.warn({ err, projectId, contentId }, 'Could not enqueue a backlog evaluation');
     }

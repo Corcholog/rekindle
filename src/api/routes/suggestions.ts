@@ -4,7 +4,7 @@ import { db } from '../../db';
 import { actionSuggestions, projects, contents, evaluations, projectSnapshots } from '../../db/schema';
 import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
-import { boss } from '../../queue';
+import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
@@ -1077,7 +1077,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
           await writeAcceptedSuggestionToVault(existing.id, vaultPath);
         } catch (vaultError) {
           server.log.error({ err: vaultError }, `Failed writing accepted suggestion ${existing.id} to vault; queued for retry`);
-          await boss.send('sync_suggestions', { projectId: existing.projectId }, { singletonKey: `sync:${existing.projectId}`, retryLimit: 2 }).catch(() => {});
+          await boss.send('sync_suggestions', { projectId: existing.projectId }, SYNC_JOB_OPTIONS).catch(() => {});
         }
       } else {
         server.log.warn(`VAULT_PATH not set; accepted suggestion ${existing.id} not written to vault`);
