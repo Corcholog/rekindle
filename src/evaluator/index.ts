@@ -62,18 +62,22 @@ export async function evaluateContentMatch(
   const origin = trace.traceId ? 'ingest' : targetProjectId ? 'backlog' : 'direct';
   const started = Date.now();
   const stats: EvaluationStats = { traceId, outcome: 'evaluated', candidates: 0, evaluated: 0, alreadyEvaluated: 0, suggestions: 0, failures: 0 };
+  const jobAttrs = () => {
+    const { traceId: _traceId, ...counts } = stats;
+    return { origin, targetProjectId, ...counts };
+  };
   try {
     await runEvaluation(contentId, targetProjectId, retrieval, traceId, stats);
   } catch (err) {
     await recordStage({
       traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started, ok: false,
-      errorKind: errorKindOf(err), attempt: trace.attempt, attrs: { origin, targetProjectId, ...stats },
+      errorKind: errorKindOf(err), attempt: trace.attempt, attrs: jobAttrs(),
     });
     throw err;
   }
   await recordStage({
     traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started,
-    ok: stats.failures === 0, attempt: trace.attempt, attrs: { origin, targetProjectId, ...stats },
+    ok: stats.failures === 0, attempt: trace.attempt, attrs: jobAttrs(),
   });
   return stats;
 }

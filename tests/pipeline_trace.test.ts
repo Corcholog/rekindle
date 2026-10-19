@@ -2,13 +2,20 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import Fastify from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 
 // Phase 4: one trace follows a clipped URL through ingestion, retrieval and triage to its
 // suggestion. Runs the real route, queue and workers with stubbed model calls and fetch.
+// Acceptance test for the roadmap: a suggestion is traceable to its content and retrieval step,
+// and no prompt, note text, article text, model output or URL reaches the logs.
 
 const SENTINEL = 'SENTINEL-9c1e';
 const VECTOR = Array.from({ length: 1024 }, (_, i) => ((i * 7) % 11) / 11);
 const ARTICLE_URL = 'https://articulo.example.org/ensayo';
+const FAILING_URL = `https://articulo.example.org/otro-${SENTINEL}`;
+const MISSING_URL = `https://articulo.example.org/no-existe-${SENTINEL}`;
 
 describe('Pipeline trace', () => {
   let container: StartedPostgreSqlContainer;
@@ -20,11 +27,19 @@ describe('Pipeline trace', () => {
   let project: any;
   let snapshot: any;
   let note: any;
+  let failTriage = false;
+  const logLines: string[] = [];
+  let restoreLogs: () => void = () => {};
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
     vi.stubEnv('DATABASE_URL', container.getConnectionUri());
     vi.stubEnv('EMBED_MODEL', 'bge-m3');
+
+    // Capture every log line of the run, at the most verbose level
+    const { logger, setLogSink } = await import('../src/observability/logger');
+    logger.level = 'debug';
+    restoreLogs = setLogSink({ write: (line) => { logLines.push(line); } });
 
     const dbModule = await import('../src/db/index');
     db = dbModule.db;
@@ -50,6 +65,7 @@ describe('Pipeline trace', () => {
       embed: async () => VECTOR,
       evaluate: async (_system: string, _user: string, zodSchema: any) => {
         const isSummary = 'summary' in (zodSchema.shape ?? {});
+        if (!isSummary && failTriage) throw new Error(`El modelo respondió: ${SENTINEL}`);
         const data = isSummary
           ? { summary: `Resumen ${SENTINEL}` }
           : {
@@ -63,7 +79,9 @@ describe('Pipeline trace', () => {
       },
     });
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => String(input).includes('no-existe')
+      ? new Response('no', { status: 404 })
+      : new Response(
       `<html><head><title>Artículo</title></head><body><article><p>Texto del artículo ${SENTINEL}. ${'Contenido largo. '.repeat(40)}</p></article></body></html>`,
       { status: 200, headers: { 'content-type': 'text/html' } },
     ));
@@ -82,6 +100,7 @@ describe('Pipeline trace', () => {
   }, 180000);
 
   afterAll(async () => {
+    restoreLogs();
     if (boss) await boss.stop({ graceful: false });
     const { pool } = await import('../src/db/index');
     await pool.end();
@@ -149,5 +168,86 @@ describe('Pipeline trace', () => {
     // Nothing private in the observability tables
     expect(JSON.stringify([events, telemetry])).not.toContain(SENTINEL);
     expect(JSON.stringify([events, telemetry])).not.toContain(ARTICLE_URL);
+  }, 90000);
+
+  it('renders the trace from a suggestion back to its retrieval step', async () => {
+    const { eq } = drizzle;
+    const [suggestion] = await db.select().from(schema.actionSuggestions);
+    const { buildTrace, renderTrace } = await import('../src/observability/trace');
+    const view = (await buildTrace(suggestion.id))!;
+
+    expect(view.contentId).toBe(suggestion.contentId);
+    expect(view.evaluation?.id).toBe(suggestion.evaluationId);
+    const retrieve = view.traces.flatMap(t => t.events).find(e => e.stage === 'retrieve')!;
+    expect(view.evaluation?.retrievalEventId).toBe(retrieve.id);
+    expect(view.traces[0].llm.map(a => a.component)).toEqual(['summary', 'triage']);
+
+    const text = renderTrace(view);
+    expect(text).toContain(`Selected by retrieval event: ${retrieve.id}`);
+    expect(text).toContain('<- selected this suggestion');
+    expect(text).toMatch(new RegExp(`#1 project ${suggestion.projectId} note distance 0 .*\\*`));
+    expect(text).not.toContain(SENTINEL);
+
+    // The same view from the content ID
+    const byContent = (await buildTrace(suggestion.contentId))!;
+    expect(byContent.traces.map(t => t.traceId)).toContain(retrieve.traceId);
+    const [content] = await db.select().from(schema.contents).where(eq(schema.contents.id, suggestion.contentId));
+    expect(content.traceId).toBe(retrieve.traceId);
+  });
+
+  it('records failures without leaking text, and no sentinel ever reaches the logs', async () => {
+    const { eq } = drizzle;
+
+    // 1. Triage fails with an error whose message quotes the model
+    failTriage = true;
+    const failing = await server.inject({ method: 'POST', url: '/api/ingest', payload: { url: FAILING_URL } });
+    const failingId = failing.json().contentId;
+    const failedJob = await waitFor(async () => {
+      const rows = await db.select().from(schema.pipelineEvents).where(eq(schema.pipelineEvents.contentId, failingId));
+      return rows.find((e: any) => e.stage === 'evaluate_job');
+    });
+    expect(failedJob).toMatchObject({ ok: false });
+    expect(failedJob.attrs).toMatchObject({ failures: 1, evaluated: 0 });
+    const failedTriage = await db.select().from(schema.llmTelemetry).where(eq(schema.llmTelemetry.contentId, failingId));
+    expect(failedTriage.find((t: any) => t.component === 'triage')).toMatchObject({ isSuccess: false, errorKind: 'other' });
+
+    // 2. Ingestion fails (404 on a URL that contains the sentinel)
+    const missing = await server.inject({ method: 'POST', url: '/api/ingest', payload: { url: MISSING_URL } });
+    const missingId = missing.json().contentId;
+    const failedIngest = await waitFor(async () => {
+      const rows = await db.select().from(schema.pipelineEvents).where(eq(schema.pipelineEvents.contentId, missingId));
+      return rows.find((e: any) => e.stage === 'ingest_job');
+    });
+    expect(failedIngest).toMatchObject({ ok: false, attempt: 1 });
+    expect(failedIngest.attrs).toMatchObject({ retryable: false });
+
+    // 3. Reconcile a vault whose folder, note names and text carry the sentinel
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-trace-'));
+    const projectDir = path.join(vault, 'Projects', `Proyecto ${SENTINEL}`);
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.writeFile(path.join(projectDir, `nota ${SENTINEL}.md`), `# Título ${SENTINEL}\n\nTexto privado ${SENTINEL} #project`);
+    await fs.writeFile(path.join(projectDir, 'rota.md'), '---\ntitle: [sin cerrar\n---\nTexto');
+    const { reconcileProject } = await import('../src/vault/reconciler');
+    await reconcileProject(projectDir, vault);
+    await fs.rm(vault, { recursive: true, force: true });
+
+    // Let any jobs the reconciliation enqueued run before checking the logs
+    await new Promise(r => setTimeout(r, 3000));
+
+    const logs = logLines.join('');
+    expect(logLines.length).toBeGreaterThan(10);
+    expect(logs).toContain('Triage failed for this project');
+    expect(logs).toContain('Ingestion failed');
+    expect(logs).toContain('Project synchronized');
+    expect(logs).not.toContain(SENTINEL);
+    expect(logs).not.toContain('articulo.example.org');
+    expect(logs).not.toContain(vault);
+
+    const observability = JSON.stringify([
+      await db.select().from(schema.pipelineEvents),
+      await db.select().from(schema.llmTelemetry),
+    ]);
+    expect(observability).not.toContain(SENTINEL);
+    expect(observability).not.toContain('articulo.example.org');
   }, 90000);
 });

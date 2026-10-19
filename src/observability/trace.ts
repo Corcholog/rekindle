@@ -94,7 +94,7 @@ export function renderTrace(view: TraceView): string {
           out.push(`    #${c.rank} project ${c.projectId} ${c.level} distance ${c.distance}${c.noteSnapshotId ? ` note ${c.noteSnapshotId}` : ''}${chosen}`);
         }
       } else {
-        const rest = Object.entries(attrs).filter(([k]) => k !== 'candidates').map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
+        const rest = Object.entries(attrs).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
         if (rest.length > 0) out.push(`    ${rest.join(' ')}`);
       }
     }
