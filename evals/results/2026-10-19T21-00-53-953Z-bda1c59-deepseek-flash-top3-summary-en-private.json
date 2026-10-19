@@ -1,0 +1,125 @@
+{
+  "meta": {
+    "gitSha": "bda1c59",
+    "gitDirty": false,
+    "config": "deepseek-flash-top3-summary-en",
+    "configHash": "c6935e454fa04c30e40733328311cd127bf8e199d57f727589576fbea85451e1",
+    "dataset": "private",
+    "datasetManifestHash": "87011bcc599ced3ac34142d8984b185bc29f06ffb8b168379d3ad415b22bcd7e",
+    "labeledBy": "Giorgio",
+    "mode": "rescore",
+    "rescoredFrom": "2026-10-19T15:55:56.257Z",
+    "embeddingModel": "bge-m3",
+    "cases": 47,
+    "labeledPairs": 376,
+    "startedAt": "2026-10-19T21:00:53.953Z",
+    "languages": {
+      "prompt": "es",
+      "output": "es",
+      "summary": "en"
+    }
+  },
+  "retrieval": {
+    "k": 3,
+    "threshold": 0.6,
+    "precisionAtK": 0.5444444444444445,
+    "recallAtK": 0.8416666666666667,
+    "casesWithRelevant": 30,
+    "falseRetrievalRate": 0.8235294117647058,
+    "casesWithoutRelevant": 17
+  },
+  "triage": {
+    "confusion": {
+      "actionable": {
+        "actionable": 24,
+        "tentative": 6,
+        "irrelevant": 5
+      },
+      "tentative": {
+        "actionable": 0,
+        "tentative": 12,
+        "irrelevant": 9
+      },
+      "irrelevant": {
+        "actionable": 1,
+        "tentative": 24,
+        "irrelevant": 295
+      }
+    },
+    "perClass": {
+      "actionable": {
+        "precision": 0.96,
+        "recall": 0.6857142857142857,
+        "f1": 0.8,
+        "support": 35
+      },
+      "tentative": {
+        "precision": 0.2857142857142857,
+        "recall": 0.5714285714285714,
+        "f1": 0.38095238095238093,
+        "support": 21
+      },
+      "irrelevant": {
+        "precision": 0.9546925566343042,
+        "recall": 0.921875,
+        "f1": 0.9379968203497615,
+        "support": 320
+      }
+    },
+    "macroF1": 0.7063164004340475,
+    "connection": {
+      "precision": 0.6268656716417911,
+      "recall": 0.75,
+      "f1": 0.6829268292682927,
+      "support": 56
+    }
+  },
+  "reliability": {
+    "llmCalls": 115,
+    "attempts": 115,
+    "malformedOutputs": 0,
+    "fallbacks": 0,
+    "failures": 0,
+    "rateLimitHits": 0,
+    "unavailableHits": 0,
+    "rateLimitWaitMs": 0,
+    "latencyMsP50": 2327,
+    "latencyMsP95": 4464
+  },
+  "cost": {
+    "promptTokens": 398088,
+    "completionTokens": 42618,
+    "estimatedUsd": 0.170568,
+    "note": "140 of 156 LLM calls were made in this run (the rest replayed from cache). Local models are counted as $0."
+  },
+  "telemetry": {
+    "llmCalls": 115,
+    "failedCalls": 0,
+    "fallbackCalls": 0,
+    "attempts": 115,
+    "malformedAttempts": 0,
+    "stages": [
+      {
+        "stage": "evaluate",
+        "events": 115,
+        "failures": 0,
+        "p50Ms": 2248,
+        "p95Ms": 4236
+      },
+      {
+        "stage": "evaluate_job",
+        "events": 47,
+        "failures": 0,
+        "p50Ms": 6490,
+        "p95Ms": 9569
+      },
+      {
+        "stage": "retrieve",
+        "events": 47,
+        "failures": 0,
+        "p50Ms": 1,
+        "p95Ms": 2
+      }
+    ]
+  }
+}

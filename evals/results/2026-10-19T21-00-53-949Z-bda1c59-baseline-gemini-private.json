@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "gitSha": "bda1c59",
+    "gitDirty": false,
+    "config": "baseline-gemini",
+    "configHash": "4260f8b14671047baa7eb574d93dcd6009492685e4b65a1578fe50fe4a273745",
+    "dataset": "private",
+    "datasetManifestHash": "87011bcc599ced3ac34142d8984b185bc29f06ffb8b168379d3ad415b22bcd7e",
+    "labeledBy": "Giorgio",
+    "mode": "rescore",
+    "rescoredFrom": "2026-10-18T14:38:43.724Z",
+    "embeddingModel": "bge-m3",
+    "cases": 47,
+    "labeledPairs": 376,
+    "startedAt": "2026-10-19T21:00:53.949Z"
+  },
+  "retrieval": {
+    "k": 3,
+    "threshold": 0.6,
+    "precisionAtK": 0.5888888888888888,
+    "recallAtK": 0.9138888888888889,
+    "casesWithRelevant": 30,
+    "falseRetrievalRate": 0.9411764705882353,
+    "casesWithoutRelevant": 17
+  },
+  "triage": {
+    "confusion": {
+      "actionable": {
+        "actionable": 35,
+        "tentative": 0,
+        "irrelevant": 0
+      },
+      "tentative": {
+        "actionable": 14,
+        "tentative": 6,
+        "irrelevant": 1
+      },
+      "irrelevant": {
+        "actionable": 22,
+        "tentative": 41,
+        "irrelevant": 257
+      }
+    },
+    "perClass": {
+      "actionable": {
+        "precision": 0.49295774647887325,
+        "recall": 1,
+        "f1": 0.660377358490566,
+        "support": 35
+      },
+      "tentative": {
+        "precision": 0.1276595744680851,
+        "recall": 0.2857142857142857,
+        "f1": 0.17647058823529413,
+        "support": 21
+      },
+      "irrelevant": {
+        "precision": 0.9961240310077519,
+        "recall": 0.803125,
+        "f1": 0.889273356401384,
+        "support": 320
+      }
+    },
+    "macroF1": 0.5753737677090814,
+    "connection": {
+      "precision": 0.4661016949152542,
+      "recall": 0.9821428571428571,
+      "f1": 0.632183908045977,
+      "support": 56
+    }
+  },
+  "reliability": {
+    "llmCalls": 215,
+    "attempts": 219,
+    "malformedOutputs": 0,
+    "fallbacks": 0,
+    "failures": 0,
+    "rateLimitHits": 0,
+    "unavailableHits": 4,
+    "rateLimitWaitMs": 60000,
+    "latencyMsP50": 4208,
+    "latencyMsP95": 6746
+  },
+  "cost": {
+    "promptTokens": 255435,
+    "completionTokens": 36157,
+    "estimatedUsd": 0,
+    "note": "No price configured for gemini:gemini-3.1-flash-lite; their cost is not included. 0 of 215 LLM calls were made in this run (the rest replayed from cache)."
+  }
+}

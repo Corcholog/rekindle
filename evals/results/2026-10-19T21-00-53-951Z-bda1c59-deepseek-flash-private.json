@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "gitSha": "bda1c59",
+    "gitDirty": false,
+    "config": "deepseek-flash",
+    "configHash": "cb99be6a45dcdd7fa812a6a49999d697617f38161f6b6be1dcded6f7ad3e6405",
+    "dataset": "private",
+    "datasetManifestHash": "87011bcc599ced3ac34142d8984b185bc29f06ffb8b168379d3ad415b22bcd7e",
+    "labeledBy": "Giorgio",
+    "mode": "rescore",
+    "rescoredFrom": "2026-10-18T14:38:47.091Z",
+    "embeddingModel": "bge-m3",
+    "cases": 47,
+    "labeledPairs": 376,
+    "startedAt": "2026-10-19T21:00:53.951Z"
+  },
+  "retrieval": {
+    "k": 3,
+    "threshold": 0.6,
+    "precisionAtK": 0.5888888888888888,
+    "recallAtK": 0.9138888888888889,
+    "casesWithRelevant": 30,
+    "falseRetrievalRate": 0.9411764705882353,
+    "casesWithoutRelevant": 17
+  },
+  "triage": {
+    "confusion": {
+      "actionable": {
+        "actionable": 31,
+        "tentative": 4,
+        "irrelevant": 0
+      },
+      "tentative": {
+        "actionable": 0,
+        "tentative": 20,
+        "irrelevant": 1
+      },
+      "irrelevant": {
+        "actionable": 1,
+        "tentative": 60,
+        "irrelevant": 259
+      }
+    },
+    "perClass": {
+      "actionable": {
+        "precision": 0.96875,
+        "recall": 0.8857142857142857,
+        "f1": 0.9253731343283582,
+        "support": 35
+      },
+      "tentative": {
+        "precision": 0.23809523809523808,
+        "recall": 0.9523809523809523,
+        "f1": 0.38095238095238093,
+        "support": 21
+      },
+      "irrelevant": {
+        "precision": 0.9961538461538462,
+        "recall": 0.809375,
+        "f1": 0.8931034482758621,
+        "support": 320
+      }
+    },
+    "macroF1": 0.7331429878522004,
+    "connection": {
+      "precision": 0.47413793103448276,
+      "recall": 0.9821428571428571,
+      "f1": 0.6395348837209303,
+      "support": 56
+    }
+  },
+  "reliability": {
+    "llmCalls": 215,
+    "attempts": 215,
+    "malformedOutputs": 0,
+    "fallbacks": 0,
+    "failures": 0,
+    "rateLimitHits": 0,
+    "unavailableHits": 0,
+    "rateLimitWaitMs": 0,
+    "latencyMsP50": 2131,
+    "latencyMsP95": 4074
+  },
+  "cost": {
+    "promptTokens": 386835,
+    "completionTokens": 53428,
+    "estimatedUsd": 0.18016410000000002,
+    "note": "0 of 215 LLM calls were made in this run (the rest replayed from cache). Local models are counted as $0."
+  }
+}
