@@ -146,7 +146,10 @@ export const ResultSchema = z.object({
     dataset: z.string(),
     datasetManifestHash: z.string(),
     labeledBy: z.string().nullable(),
-    mode: z.enum(['live', 'record', 'replay']),
+    /** rescore: the predictions of an earlier run scored again with the current labels (`pnpm eval rescore`). */
+    mode: z.enum(['live', 'record', 'replay', 'rescore']),
+    /** For rescore: when the run that produced the predictions started. */
+    rescoredFrom: z.string().optional(),
     embeddingModel: z.string(),
     cases: z.number(),
     labeledPairs: z.number(),
@@ -169,6 +172,8 @@ export const ResultSchema = z.object({
       precision: NullableNumber, recall: NullableNumber, f1: NullableNumber, support: z.number(),
     })),
     macroF1: NullableNumber,
+    /** Connection found (actionable or tentative, either way) vs irrelevant. Absent before 2026-10-19. */
+    connection: z.object({ precision: NullableNumber, recall: NullableNumber, f1: NullableNumber, support: z.number() }).optional(),
     /**
      * No longer scored: the labeled projects' notes were not good enough to judge which note a
      * suggestion belongs in (evals/README.md). Kept optional so results recorded before 2026-10-19 still load.

@@ -6,6 +6,7 @@ import { checkResult, loadThresholds } from './check';
 import { generateLabelSheet, loadDataset, loadRuns, validateLabels } from './dataset';
 import { renderSweep, sweepRetrieval } from './sweep';
 import { latestPerConfig, loadResults, renderReport } from './report';
+import { rescoreRuns } from './rescore';
 import { RunMode, runEval } from './run';
 
 function parseArgs(argv: string[]) {
@@ -35,6 +36,7 @@ const USAGE = `Uso: pnpm eval <comando>
   fetch <dataset>                      descarga las URLs de <dataset>/sources.yaml a articles/
   label <dataset> [--check] [--strict] genera labels.yaml vacío o valida el que existe
   check --dataset <nombre> [--config <nombre>] [--thresholds <archivo>]
+  rescore <dataset> [--config <nombre>]...   vuelve a puntuar las últimas ejecuciones con las etiquetas actuales, sin llamar a ningún modelo
   review <dataset> [--port N]          página local para ver las respuestas de los modelos y corregir etiquetas
   sweep <dataset> [--thresholds 0.3,0.4] [--ranks 1,2] [--write]   barrido de umbral de recuperación sin llamar a ningún modelo
   report                               regenera evals/REPORT.md`;
@@ -92,6 +94,13 @@ async function main() {
       const failures = results.flatMap(r => checkResult(r, thresholds));
       if (failures.length > 0) { console.error(failures.map(f => `- ${f}`).join('\n')); process.exitCode = 1; }
       else console.log(`Todas las comprobaciones pasan (${results.length} resultado(s)).`);
+      break;
+    }
+    case 'rescore': {
+      const dir = positional[0];
+      if (!dir) throw new Error('rescore necesita <dataset>');
+      const files = await rescoreRuns({ datasetDir: dir, configs: repeated.config, log: m => console.log(m) });
+      console.log(`${files.length} resultado(s) nuevos en evals/results; ejecuta pnpm eval:report.`);
       break;
     }
     case 'review': {

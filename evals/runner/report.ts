@@ -25,6 +25,9 @@ export function latestPerConfig(results: EvalResult[]): EvalResult[] {
 const pct = (n: number | null) => (n === null ? 'n/a' : `${(n * 100).toFixed(1)}%`);
 const num = (n: number | null) => (n === null ? 'n/a' : String(Math.round(n)));
 
+const connection = (r: EvalResult) => (r.triage.connection ? `${pct(r.triage.connection.precision)} / ${pct(r.triage.connection.recall)}` : 'not measured');
+const mode = (r: EvalResult) => (r.meta.mode === 'rescore' ? `rescore of ${r.meta.rescoredFrom?.slice(0, 10)}` : r.meta.mode);
+
 /** "in 2150 (1800 cached) / out 290 (0 thinking)"; runs recorded before 2026-10-19 lack the breakdown. */
 function perCall(r: EvalResult): string {
   const t = r.cost.triageTokensPerCall;
@@ -58,11 +61,11 @@ export function renderReport(results: EvalResult[]): string {
       out.push('', '> **Machinery check only.** These labels belong to a test fixture, not to a person judging relevance. The numbers prove the harness runs; they say nothing about quality.');
     }
     out.push('', '### Retrieval and triage', '');
-    out.push('| Config | Mode | P@K | R@K | False retrieval | Macro F1 | F1 actionable | F1 tentative | F1 irrelevant |');
-    out.push('|---|---|---|---|---|---|---|---|---|');
+    out.push('| Config | Mode | P@K | R@K | False retrieval | Macro F1 | F1 actionable | F1 tentative | F1 irrelevant | Connection found P / R |');
+    out.push('|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
       const f1 = (c: string) => pct(r.triage.perClass[c]?.f1 ?? null);
-      out.push(`| ${r.meta.config} | ${r.meta.mode} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} |`);
+      out.push(`| ${r.meta.config} | ${mode(r)} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} | ${connection(r)} |`);
     }
     out.push('', '### Reliability, latency and cost', '');
     out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Tokens per triage call | Est. USD |');
@@ -77,6 +80,7 @@ export function renderReport(results: EvalResult[]): string {
     '## Known weaknesses',
     '',
     '- The datasets are small: a single mislabeled or misjudged case moves the percentages visibly. Treat differences of a few points as noise.',
+    '- *Connection found* counts actionable and tentative as one answer ("this article connects to this project"): mixing them up still surfaces the connection, so only missing a labeled connection or proposing one the labels call irrelevant are errors. *rescore* rows are earlier runs scored again with the current labels; their calls, latency and cost are the original run\'s.',
     '- Ground truth comes from one labeler. Where the labeler is `test-fixture`, there is no human judgement at all.',
     '- Latency depends on the time of day and provider load; cost uses list prices from `evals/configs`, and providers without a price are reported as not measured. Runs recorded before 2026-10-19 did not keep cache hits or call times, so their estimate prices every token as an uncached peak-hour token: an upper bound.',
     '- Suggestion quality (relevance, usefulness, actionability) is not scored automatically; it needs the owner\'s ratings and is **not measured** unless ratings are recorded.',

@@ -1,7 +1,7 @@
 import { Labels, RunDetails } from '../schema';
 import { effectiveVerdict } from './dataset';
 import {
-  classMetrics, confusionMatrix, mean, precisionRecallAtK, Verdict,
+  classMetrics, confusionMatrix, connectionMetrics, mean, precisionRecallAtK, Verdict,
 } from './metrics';
 
 export interface PairPrediction {
@@ -79,6 +79,7 @@ export function scoreRun({ projects, cases, predictions, k }: ScoreInput) {
       confusion,
       perClass,
       macroF1,
+      connection: connectionMetrics(confusion),
     },
   };
 }

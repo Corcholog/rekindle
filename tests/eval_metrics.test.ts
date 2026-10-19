@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  precisionRecallAtK, confusionMatrix, classMetrics, mean, percentile, noteMatches, estimateCostUsd,
+  precisionRecallAtK, confusionMatrix, classMetrics, connectionMetrics, mean, percentile, noteMatches, estimateCostUsd,
 } from '../evals/runner/metrics';
 
 // Numbers below are computed by hand.
@@ -72,6 +72,18 @@ describe('helpers', () => {
     expect(noteMatches('Combat', 'research/combat.md')).toBe(true);
     expect(noteMatches('combat.md', 'research/sources.md')).toBe(false);
     expect(noteMatches('combat.md', null)).toBe(false);
+  });
+
+  it('scores connections found, where actionable and tentative are the same answer', () => {
+    const m = confusionMatrix([
+      { expected: 'actionable', predicted: 'tentative' }, // still a connection
+      { expected: 'tentative', predicted: 'actionable' }, // still a connection
+      { expected: 'actionable', predicted: 'irrelevant' }, // lost
+      { expected: 'irrelevant', predicted: 'tentative' }, // invented
+      { expected: 'irrelevant', predicted: 'irrelevant' },
+    ]);
+    expect(connectionMetrics(m)).toEqual({ precision: 2 / 3, recall: 2 / 3, f1: 2 / 3, support: 3 });
+    expect(connectionMetrics(confusionMatrix([{ expected: 'irrelevant', predicted: 'irrelevant' }]))).toEqual({ precision: null, recall: null, f1: null, support: 0 });
   });
 
   it('estimates cost from tokens and a price table', () => {

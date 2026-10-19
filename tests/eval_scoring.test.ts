@@ -52,6 +52,10 @@ describe('scoreRun', () => {
     // actionable: tp1 fp1 fn0 -> F1 2/3; tentative: tp0 fp1 fn1 -> 0; irrelevant: tp3 fp0 fn1 -> 6/7
     expect(score.triage.macroF1).toBeCloseTo((2 / 3 + 0 + 6 / 7) / 3, 10);
 
+    // Connection found (actionable or tentative vs irrelevant): tentative->actionable is a hit;
+    // tp 2 (A act->act, B tent->act), fn 0, fp 1 (B irr->tent)
+    expect(score.triage.connection).toEqual({ precision: 2 / 3, recall: 1, f1: 0.8, support: 2 });
+
     // Target notes are labeled but no longer scored (evals/README.md)
     expect(score.triage).not.toHaveProperty('targetNoteAccuracy');
   });

@@ -51,6 +51,25 @@ export function classMetrics(matrix: ConfusionMatrix) {
   return { perClass, macroF1: mean(VERDICTS.map(c => perClass[c].f1)) };
 }
 
+/**
+ * Connection found: actionable and tentative both mean "this article connects to this project", so
+ * mixing them up still surfaces the connection. Scores that yes/no question, where losing a real
+ * connection (calling it irrelevant) or inventing one are the only errors.
+ */
+export function connectionMetrics(matrix: ConfusionMatrix): ClassMetric {
+  const yes: Verdict[] = ['actionable', 'tentative'];
+  const tp = yes.reduce((sum, e) => sum + yes.reduce((s, p) => s + matrix[e][p], 0), 0);
+  const fn = yes.reduce((sum, e) => sum + matrix[e].irrelevant, 0);
+  const fp = yes.reduce((sum, p) => sum + matrix.irrelevant[p], 0);
+  const support = tp + fn;
+  return {
+    precision: tp + fp > 0 ? tp / (tp + fp) : null,
+    recall: support > 0 ? tp / support : null,
+    f1: support + fp > 0 ? (2 * tp) / (2 * tp + fp + fn) : null,
+    support,
+  };
+}
+
 /** Nearest-rank percentile. */
 export function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null;
