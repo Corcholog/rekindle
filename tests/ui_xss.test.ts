@@ -188,6 +188,15 @@ describe('Web UI renders untrusted text as text', () => {
         expect(links.every(href => /^https?:/.test(href!))).toBe(true);
       });
 
+      it('a suggestions link with an invalid id is ignored instead of breaking the list', { timeout: 15000 }, async () => {
+        go('reading');
+        await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the reading list');
+        dom.window.location.hash = '#suggestions?project=undefined&content=undefined&tab=active';
+        await waitFor(() => doc().querySelectorAll('.suggestion-card').length >= 1, 'the suggestions');
+        expect(doc().querySelector('#suggestions-list [role="alert"]')).toBeNull();
+        expect(doc().getElementById('selected-project-title')!.textContent).not.toContain('Alfa');
+      });
+
       it('a link to a project is not overwritten by a slower list of all projects', { timeout: 15000 }, async () => {
         go('reading');
         await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the reading list');

@@ -79,8 +79,7 @@ export function Suggestions({ refreshKey, onChange, focus = null }: { refreshKey
   useEffect(() => {
     if (!focus || appliedFocus.current === focus.key || loadedFor !== `${focus.tab}|${focus.projectId}`) return;
     appliedFocus.current = focus.key;
-    // The id comes from the URL: only a UUID is ever used in a selector
-    if (!focus.contentId || !/^[0-9a-f-]{36}$/i.test(focus.contentId)) return;
+    if (!focus.contentId) return; // App only passes a UUID here
     const card = document.querySelector<HTMLElement>(`.suggestion-card[data-content-id="${focus.contentId}"]`);
     if (!card) return;
     const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

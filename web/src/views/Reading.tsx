@@ -219,7 +219,8 @@ function EvaluationRow({ evaluation: ev, contentId }: { evaluation: NonNullable<
   const preview = ev.verdict !== 'irrelevant';
   // Actionable and tentative verdicts have a suggestion to review: link to it in Suggestions
   const tab = ev.suggestionStatus === 'accepted' || ev.suggestionStatus === 'discarded' ? ev.suggestionStatus : 'active';
-  const link = preview ? `#suggestions?${new URLSearchParams({ project: ev.projectId, content: contentId, tab })}` : null;
+  // A server older than the UI sends no projectId: then there is nothing to link to
+  const link = preview && ev.projectId ? `#suggestions?${new URLSearchParams({ project: ev.projectId, content: contentId, tab })}` : null;
   return (
     <li className="flex items-start gap-1 rounded-md bg-surface-2/60 text-sm">
       <button

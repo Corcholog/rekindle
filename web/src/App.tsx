@@ -24,16 +24,20 @@ const viewFromHash = (): View => {
 
 export interface SuggestionFocus { projectId: string; contentId: string | null; tab: SuggestionStatus; key: string }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const focusFromHash = (): SuggestionFocus | null => {
   const [name, query] = window.location.hash.replace(/^#\/?/, '').split('?');
   if (name !== 'suggestions' || !query) return null;
   const params = new URLSearchParams(query);
   const projectId = params.get('project');
+  const contentId = params.get('content');
   const tab = params.get('tab');
-  if (!projectId) return null;
+  // Ids come from the URL: anything but a UUID is ignored instead of reaching the API
+  if (!projectId || !UUID.test(projectId)) return null;
   return {
     projectId,
-    contentId: params.get('content'),
+    contentId: contentId && UUID.test(contentId) ? contentId : null,
     tab: tab === 'accepted' || tab === 'discarded' ? tab : 'active',
     key: window.location.hash,
   };
