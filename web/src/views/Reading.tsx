@@ -4,7 +4,6 @@ import { Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type ContentDetail, type ContentItem, type IngestStatus } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
-import { ProjectItem, ProjectLabel } from '@/components/ProjectSwatch';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
 import { Dialog } from '@/components/ui/dialog';
@@ -161,13 +160,13 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
   else if (item.counts.tentative > 0) state = `${t('verdict.tentative')} (${item.counts.tentative})`;
   else if (item.counts.irrelevant > 0) state = t('feed.noConnection');
   else state = t('feed.archived');
-  // The card's edge and status pill show the best verdict it got: amber actionable, violet tentative
+  // The card's edge and status pill show the best verdict it got, in the same shapes as the chips
   const tone = ready && !item.isEvaluating ? (item.counts.actionable > 0 ? 'act' : item.counts.tentative > 0 ? 'tent' : null) : null;
 
   return (
     <li className={cn(
       'content-item-card rounded-lg border border-l-4 border-line bg-surface p-4 shadow-[0_1px_2px_rgb(0_0_0/0.04)]',
-      tone === 'act' ? 'border-l-act' : tone === 'tent' ? 'border-l-tent' : 'border-l-line-strong',
+      tone === 'act' ? 'border-l-ember' : tone === 'tent' ? 'border-l-ember/40' : 'border-l-line-strong',
     )}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -181,7 +180,7 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
         </div>
         <span className={cn(
           'rounded-full px-2.5 py-0.5 text-xs',
-          tone === 'act' ? 'bg-act-soft font-medium text-act' : tone === 'tent' ? 'bg-tent-soft font-medium text-tent' : 'border border-line text-ink-2',
+          tone === 'act' ? 'bg-ember-soft font-medium text-ember' : tone === 'tent' ? 'border border-dashed border-ember/70 font-medium text-ember' : 'border border-line text-ink-2',
         )}>{state}</span>
       </div>
 
@@ -190,7 +189,7 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
           {item.evaluationsList!.map((ev, i) => (
             <li key={i} className="rounded-md bg-surface-2/60 px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <ProjectLabel title={ev.projectTitle} />
+                <span className="font-medium text-ink">{ev.projectTitle}</span>
                 <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
               </div>
               {ev.triageReasoning && ev.verdict !== 'irrelevant' && <p className="mt-0.5 line-clamp-2 text-ink-2">{ev.triageReasoning}</p>}
@@ -252,13 +251,13 @@ export function ContentDetailDialog({ id, onClose }: { id: string | null; onClos
               {data.evaluations.length === 0 && <p className="text-sm text-ink-3">{t('modal.noEvaluations')}</p>}
               <ul className="grid gap-3">
                 {data.evaluations.map(ev => (
-                  <ProjectItem key={ev.id} title={ev.projectTitle} className="rounded-md border border-line p-3">
+                  <li key={ev.id} className="rounded-md border border-line p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <ProjectLabel title={ev.projectTitle} className="text-sm" />
+                      <strong className="text-sm text-ink">{ev.projectTitle}</strong>
                       <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
                     </div>
                     <p className="mt-1 text-sm text-ink-2">{ev.triageReasoning || t('sug.noReasoning')}</p>
-                  </ProjectItem>
+                  </li>
                 ))}
               </ul>
             </section>

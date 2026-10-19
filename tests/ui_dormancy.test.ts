@@ -14,7 +14,7 @@ describe('ember logic in the web UI', () => {
 
   it('heats up with idle days', () => {
     expect([heatOf(null), heatOf(0), heatOf(6), heatOf(7), heatOf(13), heatOf(14), heatOf(90)])
-      .toEqual(['ash', 'ash', 'ash', 'warm', 'warm', 'hot', 'hot']);
+      .toEqual(['ash', 'burning', 'burning', 'embers', 'embers', 'ash', 'ash']);
   });
 
   it('lists dormant projects with something to review first', () => {

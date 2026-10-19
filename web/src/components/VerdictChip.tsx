@@ -9,8 +9,9 @@ export function VerdictChip({ verdict, score }: { verdict: Verdict | null; score
   return (
     <span className={cn(
       'rounded-full px-2 py-0.5 text-xs font-medium',
-      v === 'actionable' && 'bg-act-soft text-act',
-      v === 'tentative' && 'bg-tent-soft text-tent',
+      // Same shapes as the suggestion cards: lit for actionable, a smouldering outline for tentative
+      v === 'actionable' && 'bg-ember-soft text-ember',
+      v === 'tentative' && 'border border-dashed border-ember/70 text-ember',
       v === 'irrelevant' && 'font-normal text-ink-3',
     )}>
       {t(`verdict.${v}`)}{v !== 'irrelevant' && score !== undefined && score !== null ? ` · ${pct}%` : ''}

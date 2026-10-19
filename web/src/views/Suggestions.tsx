@@ -10,16 +10,13 @@ import { EmberMeter } from '@/components/EmberMeter';
 import { activeCount, sortProjects } from '@/lib/dormancy';
 import { SuggestionCard } from '@/components/SuggestionCard';
 import { SynthesisDialog, SynergyDialog } from '@/components/ProjectDialogs';
-import { ProjectSwatch } from '@/components/ProjectSwatch';
-import { useProjectHue } from '@/lib/projectHues';
 
-// Each tab's counter wears its verdict's colour, the same as the badges on the cards
-const STATUSES: { id: SuggestionStatus; label: string; count: (p: Project['counts']) => number; pill: string }[] = [
-  { id: 'active', label: 'triage.tabActive', count: c => c.active ?? c.pending + (c.tentative ?? 0), pill: 'bg-ember-soft text-ember' },
-  { id: 'pending', label: 'triage.tabPending', count: c => c.pending, pill: 'bg-act-soft text-act' },
-  { id: 'tentative', label: 'triage.tabTentative', count: c => c.tentative ?? 0, pill: 'bg-tent-soft text-tent' },
-  { id: 'accepted', label: 'triage.tabAccepted', count: c => c.accepted, pill: 'bg-ok-soft text-ok' },
-  { id: 'discarded', label: 'triage.tabDiscarded', count: c => c.discarded, pill: 'bg-surface-2 text-ink-3' },
+const STATUSES: { id: SuggestionStatus; label: string; count: (p: Project['counts']) => number }[] = [
+  { id: 'active', label: 'triage.tabActive', count: c => c.active ?? c.pending + (c.tentative ?? 0) },
+  { id: 'pending', label: 'triage.tabPending', count: c => c.pending },
+  { id: 'tentative', label: 'triage.tabTentative', count: c => c.tentative ?? 0 },
+  { id: 'accepted', label: 'triage.tabAccepted', count: c => c.accepted },
+  { id: 'discarded', label: 'triage.tabDiscarded', count: c => c.discarded },
 ];
 
 const EMPTY_KEY: Record<SuggestionStatus, string> = {
@@ -120,7 +117,7 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
         <p className="mb-3 text-xs text-ink-3">{t('rekindle.sidebarHint')}</p>
         <ul id="projects-list" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
           <li>
-            <ProjectButton active={selected === null} onClick={() => setSelected(null)} title={t('triage.allProjects')} count={totals.active} all />
+            <ProjectButton active={selected === null} onClick={() => setSelected(null)} title={t('triage.allProjects')} count={totals.active} />
           </li>
           {sorted.map(p => (
             <li key={p.id}>
@@ -129,7 +126,7 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
                 onClick={() => setSelected(p.id)}
                 title={p.title}
                 count={activeCount(p)}
-                meter={<EmberMeter idleDays={p.idleDays} />}
+                meter={<EmberMeter idleDays={p.idleDays} spark={p.isDormant && activeCount(p) > 0} />}
               />
             </li>
           ))}
@@ -139,16 +136,13 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
       <section className="min-w-0">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 id="selected-project-title" className="flex items-center gap-2.5 font-serif text-2xl text-ink">
-              {project ? <ProjectSwatch title={project.title} className="h-3.5 w-3.5" /> : <span aria-hidden="true" className="swatch-all h-3.5 w-3.5 shrink-0 rounded-[4px]" />}
-              {project?.title ?? t('triage.allProjects')}
-            </h3>
+            <h3 id="selected-project-title" className="font-serif text-2xl text-ink">{project?.title ?? t('triage.allProjects')}</h3>
             <p id="selected-project-thesis" className="mt-1 line-clamp-3 max-w-prose text-sm text-ink-2">
               {project ? project.thesisText || t('triage.noThesis') : t('triage.allProjectsThesis')}
             </p>
             {project && (
               <p className="mt-2 text-sm text-ink-3">
-                <EmberMeter idleDays={project.idleDays} showLabel={false} />{' '}
+                <EmberMeter idleDays={project.idleDays} showLabel={false} spark={project.isDormant && activeCount(project) > 0} />{' '}
                 {project.idleDays === null ? t('idle.unknown') : project.idleDays === 0 ? t('idle.active') : t('idle.days', { n: project.idleDays })}
               </p>
             )}
@@ -180,9 +174,7 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
               <ul className="grid gap-3 sm:grid-cols-2">
                 {visibleSynergies.map(s => (
                   <li key={s.id} className="synergy-card rounded-md border border-line p-3">
-                    <p className="flex flex-wrap items-center gap-x-1.5 text-sm font-medium text-ink">
-                      <ProjectSwatch title={s.projectA.title} />{s.projectA.title} <span className="text-ink-3">&amp;</span> <ProjectSwatch title={s.projectB.title} />{s.projectB.title}
-                    </p>
+                    <p className="text-sm font-medium text-ink">{s.projectA.title} <span className="text-ink-3">&amp;</span> {s.projectB.title}</p>
                     <p className="mt-1 line-clamp-3 text-sm text-ink-2">{s.rationale.replace(/\[\[([^\]]+)\]\]/g, '$1')}</p>
                     <div className="mt-2 flex items-center justify-between gap-2 text-xs text-ink-3">
                       <span>{s.similarityScore}%{s.hasExistingBridge ? ` · ${t('syn.inVault')}` : ''}</span>
@@ -202,7 +194,7 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
             <TabsList aria-label={t('nav.triage')} className="flex-1">
               {STATUSES.map(s => (
                 <TabsTrigger key={s.id} value={s.id} id={`tab-status-${s.id}`}>
-                  {t(s.label)} <span className={cn('rounded-full px-1.5 text-xs font-semibold tabular-nums', counts[s.id] > 0 ? s.pill : 'text-ink-3')}>{counts[s.id]}</span>
+                  {t(s.label)} <span className={cn('rounded-full px-1.5 text-xs tabular-nums', status === s.id && counts[s.id] > 0 ? 'bg-ember-soft font-semibold text-ember' : 'text-ink-3')}>{counts[s.id]}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -224,7 +216,9 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
               {status === 'active' && <p className="mt-1 text-ink-3">{t('triage.emptyActiveHint')}</p>}
             </div>
           )}
-          {(items ?? []).map(s => <SuggestionCard key={`${s.status}-${s.id}`} suggestion={s} onResolved={afterChange} />)}
+          {(items ?? []).map(s => (
+            <SuggestionCard key={`${s.status}-${s.id}`} suggestion={s} onResolved={afterChange} projectIdleDays={projects.find(p => p.id === s.projectId)?.idleDays} />
+          ))}
         </div>
       </section>
 
@@ -234,25 +228,20 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
   );
 }
 
-function ProjectButton({ active, onClick, title, count, meter, all = false }: { active: boolean; onClick: () => void; title: string; count: number; meter?: ReactNode; all?: boolean }) {
-  const hue = useProjectHue(all ? null : title);
+function ProjectButton({ active, onClick, title, count, meter }: { active: boolean; onClick: () => void; title: string; count: number; meter?: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      data-proj={all ? undefined : hue}
       className={cn(
-        'project-item flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md border-l-[3px] border-transparent px-2.5 py-2 text-left text-sm text-ink-2 hover:bg-surface-2 hover:text-ink',
-        active && (all ? 'bg-surface font-medium text-ink ring-1 ring-line' : 'border-proj bg-proj-soft font-medium text-ink'),
+        'project-item flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-ink-2 hover:bg-surface-2 hover:text-ink',
+        active && 'bg-surface font-medium text-ink ring-1 ring-line',
       )}
     >
-      {all
-        ? <span aria-hidden="true" className="swatch-all h-2.5 w-2.5 shrink-0 rounded-[3px]" />
-        : <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-proj" />}
       <span className="min-w-0 flex-1 truncate" title={title}>{title}</span>
       {meter}
-      {count > 0 && <span className={cn('rounded-full px-1.5 text-xs font-medium tabular-nums text-ink', active ? 'bg-surface' : 'bg-surface-2')}>{count}</span>}
+      {count > 0 && <span className={cn('rounded-full px-1.5 text-xs tabular-nums text-ink', active ? 'bg-surface-2' : 'bg-surface')}>{count}</span>}
     </button>
   );
 }

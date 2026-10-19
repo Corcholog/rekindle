@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'sonner';
 import { BookOpen, Flame, MessagesSquare, Settings as SettingsIcon, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, type VaultSettings } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { assignHues, ProjectHuesContext } from '@/lib/projectHues';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Reading } from '@/views/Reading';
@@ -39,8 +38,6 @@ export function App() {
   const [vault, setVault] = useState<VaultSettings | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [activeCount, setActiveCount] = useState(0);
-  const [projectTitles, setProjectTitles] = useState<string[]>([]);
-  const hues = useMemo(() => assignHues(projectTitles), [projectTitles]);
   const wasProcessing = useRef(false);
 
   useEffect(() => {
@@ -51,10 +48,7 @@ export function App() {
   useEffect(() => {
     api.vault().then(setVault).catch(() => setVault(null));
     api.projects()
-      .then(d => {
-        setActiveCount(d.projects.reduce((sum, p) => sum + (p.counts.active ?? p.counts.pending + (p.counts.tentative ?? 0)), 0));
-        setProjectTitles(d.projects.map(p => p.title));
-      })
+      .then(d => setActiveCount(d.projects.reduce((sum, p) => sum + (p.counts.active ?? p.counts.pending + (p.counts.tentative ?? 0)), 0)))
       .catch(() => {});
   }, [refreshKey]);
 
@@ -95,7 +89,6 @@ export function App() {
   ];
 
   return (
-    <ProjectHuesContext.Provider value={hues}>
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
@@ -148,6 +141,5 @@ export function App() {
       </main>
       <Toaster position="bottom-right" richColors closeButton theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'} />
     </div>
-    </ProjectHuesContext.Provider>
   );
 }

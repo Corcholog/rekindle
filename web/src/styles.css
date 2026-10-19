@@ -4,9 +4,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  Rekindle palette. Ember is reserved for heat: dormant projects, the suggestions that rekindle
-  them, and the one primary action per view. Each project has its own colour (never orange), and
-  verdicts have theirs: actionable amber, tentative violet, accepted green, discarded ash.
+  Rekindle palette: a hearth. Stone or coal, ink, ash and ember, with flame (ember-hot) only where
+  something burns. A project's heat is its only colour: burning when worked on this week, embers
+  after a week, ash once dormant. Verdicts differ by shape, not hue. Red is only for errors.
   Light is warm stone; dark is warm coal. Every text token reaches WCAG AA (4.5:1) on
   the backgrounds it is used on (tests/ui_contrast.test.ts).
 */
@@ -23,7 +23,7 @@
   --ember: #a83b0d;
   --ember-2: #bf4a12;
   --ember-ink: #ffffff;
-  --ember-hot: #e2731c;
+  --ember-hot: #d9661a;
   --ember-soft: rgb(184 65 15 / 0.09);
   --ember-glow: rgb(226 115 28 / 0.35);
   --glow: rgb(226 115 28 / 0.13);
@@ -31,20 +31,7 @@
   --ok-soft: #e0ebe2;
   --danger: #a8281c;
   --danger-soft: rgb(168 40 28 / 0.08);
-  --act: #8a4b00;
-  --act-soft: #ece3d8;
-  --tent: #6447b0;
-  --tent-soft: #e7e3ee;
   --focus: #a83b0d;
-  /* Project colours: one per project (lib/projectHues.ts); never orange, which means heat */
-  --p0: #2a9d8f; --p0-ink: #1b665d; --p0-soft: #d8e9e6; /* teal */
-  --p1: #5468d4; --p1-ink: #3946a6; --p1-soft: #dfe1f1; /* indigo */
-  --p2: #a0559b; --p2-ink: #7a3576; --p2-soft: #ebdee7; /* plum */
-  --p3: #6a9a3a; --p3-ink: #45661f; --p3-soft: #e2e9d8; /* moss */
-  --p4: #2e8bc0; --p4-ink: #1c638c; --p4-soft: #d9e7ed; /* sky */
-  --p5: #cc5580; --p5-ink: #9c3259; --p5-soft: #f2dee3; /* rose */
-  --p6: #9a8424; --p6-ink: #6a5a12; --p6-soft: #eae5d4; /* olive */
-  --p7: #64748b; --p7-ink: #45526a; --p7-soft: #e1e3e5; /* slate */
 }
 
 .dark {
@@ -68,30 +55,8 @@
   --ok-soft: #2e3a2e;
   --danger: #e6786b;
   --danger-soft: rgb(230 120 107 / 0.12);
-  --act: #f2b45a;
-  --act-soft: #443725;
-  --tent: #b9a3f0;
-  --tent-soft: #3b343d;
   --focus: #ffb35c;
-  --p0: #4fc1b2; --p0-ink: #7fd6ca; --p0-soft: #2d433c; /* teal */
-  --p1: #8c9cf0; --p1-ink: #aab6f5; --p1-soft: #3a3a4a; /* indigo */
-  --p2: #d08acb; --p2-ink: #e0a9dc; --p2-soft: #493742; /* plum */
-  --p3: #9cc06a; --p3-ink: #b6d38c; --p3-soft: #3e422c; /* moss */
-  --p4: #6bb8e6; --p4-ink: #95cdee; --p4-soft: #334148; /* sky */
-  --p5: #ec88a8; --p5-ink: #f2a7bf; --p5-soft: #4f363a; /* rose */
-  --p6: #cfb75a; --p6-ink: #ddc97d; --p6-soft: #494029; /* olive */
-  --p7: #9aa8bf; --p7-ink: #b7c2d4; --p7-soft: #3d3d3f; /* slate */
 }
-
-/* A data-proj attribute picks the project colour for everything inside it (bg-proj, text-proj-ink, bg-proj-soft) */
-[data-proj="0"] { --proj: var(--p0); --proj-ink: var(--p0-ink); --proj-soft: var(--p0-soft); }
-[data-proj="1"] { --proj: var(--p1); --proj-ink: var(--p1-ink); --proj-soft: var(--p1-soft); }
-[data-proj="2"] { --proj: var(--p2); --proj-ink: var(--p2-ink); --proj-soft: var(--p2-soft); }
-[data-proj="3"] { --proj: var(--p3); --proj-ink: var(--p3-ink); --proj-soft: var(--p3-soft); }
-[data-proj="4"] { --proj: var(--p4); --proj-ink: var(--p4-ink); --proj-soft: var(--p4-soft); }
-[data-proj="5"] { --proj: var(--p5); --proj-ink: var(--p5-ink); --proj-soft: var(--p5-soft); }
-[data-proj="6"] { --proj: var(--p6); --proj-ink: var(--p6-ink); --proj-soft: var(--p6-soft); }
-[data-proj="7"] { --proj: var(--p7); --proj-ink: var(--p7-ink); --proj-soft: var(--p7-soft); }
 
 @theme inline {
   --color-bg: var(--bg);
@@ -112,13 +77,6 @@
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-ember-2: var(--ember-2);
-  --color-act: var(--act);
-  --color-act-soft: var(--act-soft);
-  --color-tent: var(--tent);
-  --color-tent-soft: var(--tent-soft);
-  --color-proj: var(--proj, var(--ash));
-  --color-proj-ink: var(--proj-ink, var(--ink-2));
-  --color-proj-soft: var(--proj-soft, var(--surface-2));
   --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
   --font-serif: "Literata Variable", Georgia, serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -158,11 +116,6 @@
   background: linear-gradient(90deg, var(--ember) 0%, var(--ember-hot) 14%, transparent 62%);
 }
 
-/* All projects: every project colour at once */
-.swatch-all {
-  background: conic-gradient(var(--p0), var(--p1), var(--p2), var(--p3), var(--p4), var(--p5), var(--p6), var(--p7), var(--p0));
-}
-
 /* Reading text: whatever Rekindle writes for the person to read is set in Literata. */
 .prose-read {
   font-family: var(--font-serif);
@@ -170,8 +123,12 @@
   max-width: 68ch;
 }
 
-/* The ember: a coal that heats up with idle time. Its glow is the one signature effect. */
+/*
+  A project's heat as a coal: burning (flame, glowing) when worked on this week, embers after a
+  week, ash once dormant. Ash with something to review carries a spark: it can be rekindled.
+*/
 .ember-dot {
+  position: relative;
   width: 0.7rem;
   height: 0.7rem;
   border-radius: 9999px;
@@ -179,12 +136,24 @@
   background: var(--ash);
   transition: background-color 300ms ease, box-shadow 300ms ease;
 }
-.ember-dot[data-heat="warm"] {
+.ember-dot[data-heat="embers"] {
   background: var(--ember);
 }
-.ember-dot[data-heat="hot"] {
-  background: radial-gradient(circle at 40% 35%, var(--ember-hot), var(--ember) 70%);
-  box-shadow: 0 0 0.6rem 0.1rem var(--ember-glow);
+.ember-dot[data-heat="burning"] {
+  background: radial-gradient(circle at 40% 35%, var(--ember-hot), var(--ember) 75%);
+  box-shadow: 0 0 0.55rem 0.08rem var(--ember-glow);
+}
+.ember-dot[data-spark]::after {
+  content: "";
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 9999px;
+  background: var(--ember-hot);
+  /* A ring of paper separates the spark from the ash, which can be as bright as it */
+  box-shadow: 0 0 0 1.5px var(--surface), 0 0 0.35rem 0.05rem var(--ember-glow);
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ExternalLink, FileText, Flame, RotateCcw } from 'lucide-react';
+import { Check, ExternalLink, FileText, Flame, RotateCcw } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type DiscardReason, type Suggestion } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
-import { rekindles as rekindlesProject } from '@/lib/dormancy';
-import { useProjectHue } from '@/lib/projectHues';
+import { heatOf, rekindles as rekindlesProject } from '@/lib/dormancy';
 
 // Fixed reasons offered when discarding; the values match DISCARD_REASONS in src/db/schema.ts
 // and each has a "reason.<value>" label in the dictionaries
 export const DISCARD_REASONS: DiscardReason[] = ['unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other'];
 const ACTION_TYPES = ['evidence_citation', 'counter_argument', 'unblocker', 'narrative_bridge', 'other'];
 
-export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Suggestion; onResolved: () => void }) {
+// The card's left edge is its project's heat now: flame while worked on, ember, then ash
+const HEAT_EDGE = { burning: 'border-l-ember-hot', embers: 'border-l-ember', ash: 'border-l-ash' } as const;
+
+export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: { suggestion: Suggestion; onResolved: () => void; projectIdleDays?: number | null }) {
   const { t, apiError, locale } = useI18n();
   const [feedback, setFeedback] = useState('');
   const [reason, setReason] = useState<DiscardReason | ''>('');
@@ -31,12 +33,11 @@ export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Sugg
       : s.status === 'accepted' ? t('sug.accepted')
         : ACTION_TYPES.includes(s.actionType) ? t(`action.${s.actionType}`) : s.actionType;
   const target = s.targetFile && !['discarded', 'tentative', 'unknown'].includes(s.targetFile) ? s.targetFile : 'suggestions.md';
-  const hue = useProjectHue(s.projectTitle);
-  // The badge wears the verdict's colour: actionable amber, tentative violet, accepted green, discarded ash
-  const chipColor = s.status === 'tentative' ? 'bg-tent-soft text-tent'
-    : s.status === 'discarded' ? 'bg-surface-2 text-ink-3'
-      : s.status === 'accepted' ? 'bg-ok-soft text-ok'
-        : 'bg-act-soft text-act';
+  // Verdicts differ by shape: actionable is a lit chip, tentative a smouldering outline
+  const chipStyle = s.status === 'tentative' ? 'border border-dashed border-ember/70 text-ember'
+    : s.status === 'discarded' ? 'text-ink-3'
+      : s.status === 'accepted' ? 'bg-surface text-ink-2 ring-1 ring-line'
+        : 'bg-ember-soft text-ember';
 
   const resolve = async (status: 'accepted' | 'discarded') => {
     setBusy(true);
@@ -76,23 +77,24 @@ export function SuggestionCard({ suggestion: s, onResolved }: { suggestion: Sugg
   return (
     <article
       className={cn(
-        'suggestion-card overflow-hidden rounded-lg border border-l-4 bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.04)]',
+        'suggestion-card overflow-hidden rounded-lg border border-l-4 bg-surface',
         rekindles ? 'rekindled border-ember/50' : 'border-line',
-        'border-l-proj',
+        HEAT_EDGE[heatOf(projectIdleDays ?? s.projectIdleDays)],
         s.status === 'discarded' && 'opacity-80',
       )}
       data-id={s.id}
-      data-proj={hue}
     >
-      {/* Header strip in the project's colour: which project this is for, before anything else */}
-      <div className="flex flex-wrap items-center gap-2 bg-proj-soft px-5 py-2.5 text-xs">
-        <span className="font-semibold text-proj-ink">{s.projectTitle || t('sug.project')}</span>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-2/50 px-5 py-2.5 text-xs">
+        <span className="font-semibold text-ink">{s.projectTitle || t('sug.project')}</span>
         {rekindles && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-medium text-ember">
+          // The one lit element of the card: this connection could relight a cold project
+          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-ember to-ember-2 px-2 py-0.5 font-medium text-ember-ink">
             <Flame size={13} aria-hidden="true" />{t('rekindle.badge', { n: s.projectIdleDays! })}
           </span>
         )}
-        <span className={cn('rounded-full px-2 py-0.5 font-medium', chipColor)}>{chip}</span>
+        <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium', chipStyle)}>
+          {s.status === 'accepted' && <Check size={12} aria-hidden="true" />}{chip}
+        </span>
         {s.isStale && s.status === 'pending' && (
           <span className="rounded-full bg-surface px-2 py-0.5 text-ink-2" title={t('sug.staleTitle')}>{t('sug.stale')}</span>
         )}
