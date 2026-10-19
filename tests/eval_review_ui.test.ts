@@ -43,6 +43,15 @@ describe('label review page (DOM)', () => {
       },
     }));
 
+    // A second run that sees a connection the owner did not label (futbol-liga × Cocina is labeled irrelevant)
+    await fs.writeFile(path.join(dir, 'runs', 'modelo-b.json'), JSON.stringify({
+      config: 'modelo-b', configHash: 'y', generatedAt: '2026-01-01T00:00:00Z', k: 2, threshold: 0.6,
+      articles: {
+        'futbol-liga': { summary: 'R', retrieval: [{ project: 'Projects/Cocina', distance: 0.5, level: 'project', note: null }],
+          pairs: { 'Projects/Cocina': pair('actionable', 'Conexión que nadie marcó') } },
+      },
+    }));
+
     const { startReviewServer } = await import('../evals/runner/review');
     const server = await startReviewServer(dir, { port: 0 });
     base = server.url;
@@ -62,8 +71,7 @@ describe('label review page (DOM)', () => {
   });
 
   it('lists the articles, shows a metrics card per model and renders model text as text, never HTML', async () => {
-    expect(doc().querySelectorAll('.metric-card')).toHaveLength(1);
-    expect(doc().querySelector('.metric-card h2')!.textContent).toBe('modelo-a');
+    expect([...doc().querySelectorAll('.metric-card h2')].map(e => e.textContent)).toEqual(['modelo-a', 'modelo-b']);
 
     const titles = [...doc().querySelectorAll('.article-title')].map(e => e.textContent);
     expect(titles).toContain('El peso de la pérdida en el anime moderno');
@@ -95,5 +103,39 @@ describe('label review page (DOM)', () => {
     const ids = [...doc().querySelectorAll('#article-list .chip.source')].map(e => e.textContent);
     expect(ids).toContain('futbol-liga'); // model says tentative, label says irrelevant
     expect(ids).toContain('pan-masa-madre'); // label says actionable, the model never evaluated the pair
+  });
+
+  const setFilter = async (name: string) => {
+    const filter = doc().querySelector(`.filters button[data-filter="${name}"]`) as HTMLButtonElement;
+    filter.click();
+    await waitFor(() => filter.getAttribute('aria-checked') === 'true', `the ${name} filter`);
+  };
+  const listedIds = () => [...doc().querySelectorAll('#article-list .chip.source')].map(e => e.textContent);
+
+  it('filters to pairs a model calls actionable that the owner did not, and explains them', async () => {
+    await setFilter('extra');
+    expect(listedIds()).toContain('futbol-liga');
+    expect(listedIds()).not.toContain('pan-masa-madre'); // labeled actionable already
+
+    await openArticle('futbol-liga');
+    const cocina = [...doc().querySelectorAll('.project')].find(p => p.querySelector('h3')!.textContent === 'Cocina')!;
+    expect(cocina.classList.contains('extra')).toBe(true);
+    expect(cocina.querySelector('.extra-note')).not.toBeNull();
+    expect(cocina.textContent).toContain('Conexión que nadie marcó');
+  });
+
+  it('compares only the runs that are ticked', async () => {
+    await setFilter('extra');
+    const box = [...doc().querySelectorAll('#run-picker label')].find(l => l.textContent === 'modelo-b')!.querySelector('input') as HTMLInputElement;
+    box.click();
+    await waitFor(() => doc().querySelectorAll('.metric-card').length === 1, 'modelo-b to be hidden');
+    expect(doc().querySelector('.metric-card h2')!.textContent).toBe('modelo-a');
+    expect(listedIds()).not.toContain('futbol-liga'); // only modelo-b saw that connection
+
+    // The last visible run cannot be hidden
+    const onlyBox = [...doc().querySelectorAll('#run-picker label')].find(l => l.textContent === 'modelo-a')!.querySelector('input') as HTMLInputElement;
+    onlyBox.click();
+    expect(onlyBox.checked).toBe(true);
+    expect(doc().querySelectorAll('.metric-card')).toHaveLength(1);
   });
 });

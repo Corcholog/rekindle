@@ -16,6 +16,11 @@
     <p class="save-state" id="save-state" role="status" aria-live="polite"></p>
   </header>
 
+  <fieldset class="run-picker">
+    <legend>Modelos que se muestran</legend>
+    <div class="run-options" id="run-picker"></div>
+  </fieldset>
+
   <section class="metrics" id="metrics" aria-label="Métricas con tus etiquetas actuales"></section>
 
   <div class="layout">
@@ -24,6 +29,7 @@
         <button type="button" role="radio" data-filter="all" aria-checked="true">Todos</button>
         <button type="button" role="radio" data-filter="disagree" aria-checked="false">Con desacuerdos</button>
         <button type="button" role="radio" data-filter="split" aria-checked="false">Modelos divididos</button>
+        <button type="button" role="radio" data-filter="extra" aria-checked="false" title="Algún modelo visible lo ve accionable y tu etiqueta no lo es">Accionables que no marcaste</button>
       </div>
       <input type="search" id="search" placeholder="Buscar por título o id…" aria-label="Buscar artículo">
       <ol class="article-list" id="article-list"></ol>

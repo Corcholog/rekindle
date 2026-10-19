@@ -3,7 +3,11 @@
 const VERDICTS = ['actionable', 'tentative', 'irrelevant'];
 const VERDICT_TEXT = { actionable: 'Accionable', tentative: 'Tentativo', irrelevant: 'Irrelevante' };
 
-const state = { data: null, initialMetrics: null, selected: null, filter: 'all', query: '', savedTimer: null };
+const state = { data: null, initialMetrics: null, selected: null, filter: 'all', query: '', savedTimer: null, visible: new Set() };
+
+// Shown first when present: thinking on next to the thinking-off run and its repeat
+const DEFAULT_RUNS = ['deepseek-flash-top3', 'deepseek-flash-top3-rerun', 'deepseek-flash-top3-thinking'];
+const VISIBLE_KEY = 'review.visibleRuns';
 
 function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -38,20 +42,67 @@ function modelVerdict(run, articleId, project) {
 }
 const modelOrIrrelevant = (run, articleId, project) => modelVerdict(run, articleId, project) ?? 'irrelevant';
 
-function runNames() {
+function allRunNames() {
   return Object.keys(state.data.runs).sort();
+}
+/** The runs the owner chose to compare; every count and filter uses only these. */
+function runNames() {
+  return allRunNames().filter(name => state.visible.has(name));
+}
+
+function initialVisibleRuns() {
+  const all = allRunNames();
+  try {
+    const saved = JSON.parse(localStorage.getItem(VISIBLE_KEY) ?? 'null');
+    if (Array.isArray(saved)) {
+      const known = saved.filter(name => all.includes(name));
+      if (known.length > 0) return new Set(known);
+    }
+  } catch { /* storage unavailable: use the defaults */ }
+  const preferred = DEFAULT_RUNS.filter(name => all.includes(name));
+  return new Set(preferred.length > 0 ? preferred : all);
+}
+
+function renderRunPicker() {
+  const container = document.getElementById('run-picker');
+  container.replaceChildren();
+  for (const name of allRunNames()) {
+    container.append(h('label', { class: 'run-option' },
+      h('input', {
+        type: 'checkbox',
+        checked: state.visible.has(name),
+        onchange: event => {
+          if (event.target.checked) state.visible.add(name);
+          else if (state.visible.size > 1) state.visible.delete(name);
+          else event.target.checked = true; // at least one run stays visible
+          try { localStorage.setItem(VISIBLE_KEY, JSON.stringify([...state.visible])); } catch { /* not persisted */ }
+          renderMetrics();
+          renderList();
+          renderDetail();
+        },
+      }),
+      name));
+  }
+}
+
+/** A visible run calls the pair actionable where the owner's label does not. */
+function isExtraActionable(articleId, project) {
+  const label = effectiveVerdict(articleId, project);
+  return label !== null && label !== 'actionable' && runNames().some(name => modelVerdict(state.data.runs[name], articleId, project) === 'actionable');
 }
 
 function articleStats(articleId) {
   let disagreements = 0;
+  let extraActionable = 0;
   let split = false;
   for (const project of state.data.projects) {
     const expected = effectiveVerdict(articleId, project.folder);
     const answers = runNames().map(name => modelOrIrrelevant(state.data.runs[name], articleId, project.folder));
     if (expected !== null && answers.some(a => a !== expected)) disagreements++;
     if (new Set(answers).size > 1) split = true;
+    if (isExtraActionable(articleId, project.folder)) extraActionable++;
   }
-  return { disagreements, split };
+  return { disagreements, extraActionable, split };
 }
 
 function setSaveState(text, isError = false) {
@@ -121,6 +172,7 @@ function visibleArticles() {
     const stats = articleStats(article.id);
     if (state.filter === 'disagree') return stats.disagreements > 0;
     if (state.filter === 'split') return stats.split;
+    if (state.filter === 'extra') return stats.extraActionable > 0;
     return true;
   });
 }
@@ -142,6 +194,7 @@ function renderList() {
           h('span', { class: 'chip source', text: article.id }),
           stats.disagreements > 0 ? h('span', { class: 'chip bad', text: `${stats.disagreements} desacuerdo${stats.disagreements === 1 ? '' : 's'}` }) : h('span', { class: 'chip good', text: 'coinciden' }),
           stats.split ? h('span', { class: 'chip warn', text: 'modelos divididos' }) : null,
+          stats.extraActionable > 0 ? h('span', { class: 'chip actionable', text: `${stats.extraActionable} accionable${stats.extraActionable === 1 ? '' : 's'} que no marcaste` }) : null,
         ),
       ),
     ));
@@ -151,6 +204,7 @@ function renderList() {
 
 function interest(articleId, project) {
   let score = 0;
+  if (isExtraActionable(articleId, project.folder)) score += 4;
   const label = effectiveVerdict(articleId, project.folder);
   if (label && label !== 'irrelevant') score += 3;
   if (runNames().some(name => modelOrIrrelevant(state.data.runs[name], articleId, project.folder) !== 'irrelevant')) score += 2;
@@ -217,8 +271,10 @@ function renderProject(article, project) {
         project.notes.map(note => h('option', { value: note, text: note, selected: entry?.target_note === note }))));
   }
 
-  return h('section', { class: `project ${anyDiffers ? 'disagree' : ''}` },
+  const extra = isExtraActionable(article.id, project.folder);
+  return h('section', { class: `project ${anyDiffers ? 'disagree' : ''} ${extra ? 'extra' : ''}` },
     h('div', { class: 'project-head' }, h('h3', { text: project.folder.replace(/^(Projects|Proyectos)\//, '') }), h('span', { class: 'muted', text: retrievalText })),
+    extra ? h('p', { class: 'extra-note', text: 'Un modelo lo ve accionable y tú no. Lee su razonamiento: ¿hay una conexión que no viste? Si la hay, cambia tu etiqueta.' }) : null,
     h('div', { class: 'label-row' }, h('span', { class: 'muted', text: 'Tu etiqueta:' }), seg, clear,
       explicit === null ? h('span', { class: 'inherit-note', text: label ? `heredada del resto: ${VERDICT_TEXT[label]}` : 'sin etiqueta' }) : null,
       noteSelect),
@@ -283,6 +339,8 @@ async function start() {
   const res = await fetch('/api/data');
   state.data = await res.json();
   state.initialMetrics = structuredClone(state.data.metrics);
+  state.visible = initialVisibleRuns();
+  renderRunPicker();
   document.getElementById('subtitle').textContent =
     `Dataset «${state.data.dataset}» · etiquetas de ${state.data.labels.labeled_by ?? 'nadie todavía'} · ${state.data.articles.length} artículos · cada cambio se guarda en labels.yaml (con copia de seguridad)`;
 
