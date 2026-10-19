@@ -31,6 +31,8 @@ export interface Probes {
   /** Names of the project folders found under the vault's Projects/ or Proyectos/. */
   vaultProjects(vaultPath: string): Promise<string[] | null>;
   demoVaultPath: string;
+  /** web/dist/index.html exists (the server serves the built UI). */
+  webBuilt: boolean;
 }
 
 export const MIN_NODE_MAJOR = 22;
@@ -52,6 +54,10 @@ export async function runChecks(probes: Probes): Promise<CheckResult[]> {
   add(major >= MIN_NODE_MAJOR
     ? { id: 'node', label: 'Node.js', status: 'ok', detail: probes.nodeVersion }
     : { id: 'node', label: 'Node.js', status: 'fail', detail: `${probes.nodeVersion} is too old; Rekindle needs ${MIN_NODE_MAJOR} or newer`, fix: 'Install Node.js 22 or newer (https://nodejs.org)' });
+
+  add(probes.webBuilt
+    ? { id: 'web', label: 'Web UI build', status: 'ok', detail: 'web/dist found' }
+    : { id: 'web', label: 'Web UI build', status: 'fail', detail: 'web/dist is missing', fix: 'pnpm build:web' });
 
   add(probes.envFileExists
     ? { id: 'env', label: '.env file', status: 'ok', detail: 'found' }

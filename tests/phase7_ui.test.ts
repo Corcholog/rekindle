@@ -1,5 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest';
 import { installFakeAi } from './helpers/fakeAi';
+import { ensureWebBuild } from './helpers/webBuild';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -14,6 +15,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   let suggestionId: string;
 
   beforeAll(async () => {
+    ensureWebBuild();
     // 1. Setup Test DB
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
       .withDatabase('rekindledb_phase7')
@@ -122,30 +124,27 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.payload).toContain('Rekindle');
-    expect(res.payload).toContain('Consumo');
-    expect(res.payload).toContain('Sugerencias');
+    expect(res.payload).toContain('id="root"');
+    expect(res.payload).toContain('/assets/app.js');
   });
 
-  it('GET /styles.css sirve la hoja de estilos de la interfaz', async () => {
-    const res = await server.inject({
-      method: 'GET',
-      url: '/styles.css',
-    });
-
+  it('GET /favicon.svg sirve el icono de Rekindle', async () => {
+    const res = await server.inject({ method: 'GET', url: '/favicon.svg' });
     expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('text/css');
-    expect(res.payload).toContain('--bg-primary');
+    expect(res.headers['content-type']).toContain('image/svg');
   });
 
   it('GET /app.js sirve la lógica cliente de la interfaz', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: '/app.js',
+      url: '/assets/app.js',
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('javascript');
-    expect(res.payload).toContain('loadContents');
+    // The bundle carries the views and their styles (tokens included)
+    expect(res.payload).toContain('suggestions-list');
+    expect(res.payload).toContain('--ember');
   });
 
   it('GET /api/contents lista contenidos procesados con conteos', async () => {
@@ -554,15 +553,13 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   it('Feature 2: Frontend sirve la guía de la extensión y ya no incluye el bookmarklet', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: '/index.html',
+      url: '/assets/app.js',
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.payload).toContain('id="extension-guide-modal"');
-    expect(res.payload).not.toContain('id="bookmarklet-btn"');
-
-    const appJs = await fs.readFile(path.resolve(__dirname, '../web/app.js'), 'utf-8');
-    expect(appJs).not.toContain('quick_ingest');
+    expect(res.payload).toContain('ext.step3Text');
+    expect(res.payload).not.toContain('bookmarklet');
+    expect(res.payload).not.toContain('quick_ingest');
   });
 
   it('Feature 4: POST /api/projects/:id/synthesize retorna 404 para proyecto inexistente', async () => {
@@ -665,13 +662,12 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   it('Feature 4: Frontend sirve botón de síntesis y modal en index.html', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: '/index.html',
+      url: '/assets/app.js',
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.payload).toContain('id="btn-synthesize-project"');
-    expect(res.payload).toContain('id="synthesis-result-modal"');
-    expect(res.payload).toContain('id="synthesis-modal-title"');
+    expect(res.payload).toContain('btn-synthesize-project');
+    expect(res.payload).toContain('synthesis-modal-body');
   });
 
   it('Feature 5: GET /api/projects/synergies detecta sinergias y puentes semánticos entre proyectos activos', async () => {
@@ -854,15 +850,12 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   it('Feature 5: Frontend sirve panel de sinergias y modal de exploración en index.html', async () => {
     const res = await server.inject({
       method: 'GET',
-      url: '/index.html',
+      url: '/assets/app.js',
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.payload).toContain('id="synergies-section"');
-    expect(res.payload).toContain('id="synergies-grid"');
-    expect(res.payload).toContain('id="btn-refresh-synergies"');
-    expect(res.payload).toContain('id="synergy-bridge-modal"');
-    expect(res.payload).toContain('id="synergy-modal-title"');
+    expect(res.payload).toContain('synergies-section');
+    expect(res.payload).toContain('synergy-modal-body');
   });
 });
 

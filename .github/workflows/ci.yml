@@ -32,6 +32,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # The UI tests load the built bundle (web/dist)
+      - run: pnpm build:web
       # No Ollama, no API keys: tests/helpers/fakeAi.ts stands in for the models, and the
       # integration tests start throwaway pgvector databases with Testcontainers (Docker).
       - run: pnpm test

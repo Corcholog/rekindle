@@ -8,6 +8,7 @@ import settingsRoute from './routes/settings';
 import systemRoute from './routes/system';
 import libraryRoute from './routes/library';
 import fastifyStatic from '@fastify/static';
+import * as fs from 'fs';
 import * as path from 'path';
 import { startQueue, boss } from '../queue';
 import { pool } from '../db';
@@ -70,9 +71,13 @@ server.register(settingsRoute);
 server.register(systemRoute);
 server.register(libraryRoute);
 
-// Serve static frontend files from web/
+// Serve the built web UI (pnpm build:web writes web/dist; start.sh and pnpm start build it first)
+export const WEB_DIST = path.resolve(__dirname, '../../web/dist');
+if (!fs.existsSync(path.join(WEB_DIST, 'index.html'))) {
+  server.log.warn({ webDist: WEB_DIST }, 'The web UI is not built; run pnpm build:web');
+}
 server.register(fastifyStatic, {
-  root: path.resolve(__dirname, '../../web'),
+  root: WEB_DIST,
   prefix: '/',
   index: 'index.html',
 });

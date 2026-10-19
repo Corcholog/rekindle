@@ -5,250 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rekindle Clipper</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    /* Same palette as the web app (web/src/styles.css): ash paper in light, coal in dark */
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f8; --surface: #e7eaec; --line: rgb(29 33 36 / 0.14);
+      --ink: #1b1e21; --ink-2: #4b5258; --ink-3: #6c747a;
+      --ember: #b8410f; --ember-ink: #ffffff; --ember-soft: rgb(184 65 15 / 0.09);
+      --ok: #2c7046; --danger: #a8281c; --warn: #8a5a00;
     }
-
-    body {
-      width: 360px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: #0f0f11;
-      color: #f4f4f5;
-      font-size: 13px;
-      line-height: 1.4;
-      padding: 16px;
-      border: 1px solid #27272a;
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1714; --surface: #231f1b; --line: rgb(239 228 216 / 0.12);
+        --ink: #efe6dc; --ink-2: #b7aa9d; --ink-3: #8c8075;
+        --ember: #f07a30; --ember-ink: #1a1714; --ember-soft: rgb(240 122 48 / 0.12);
+        --ok: #86b894; --danger: #e6786b; --warn: #e3b25c;
+      }
     }
-
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #1f1f23;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .brand-icon {
-      width: 22px;
-      height: 22px;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #000;
-      font-weight: 700;
-      font-size: 13px;
-    }
-
-    .brand-name {
-      font-weight: 700;
-      font-size: 14px;
-      letter-spacing: -0.02em;
-      color: #fafafa;
-    }
-
-    .server-status {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      color: #a1a1aa;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #71717a;
-    }
-
-    .status-dot.online {
-      background: #10b981;
-      box-shadow: 0 0 6px #10b981;
-    }
-
-    .status-dot.offline {
-      background: #f59e0b;
-      box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
-    }
-
-    .queue-card {
-      margin-bottom: 12px;
-      padding: 8px 10px;
-      border-radius: 6px;
-      background: rgba(245, 158, 11, 0.12);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      color: #fbbf24;
-      font-size: 11px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .queue-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-
-    .queue-sync-btn {
-      background: #f59e0b;
-      color: #09090b;
-      border: none;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.15s ease;
-    }
-
-    .queue-sync-btn:hover {
-      background: #fbbf24;
-    }
-
-    .form-group {
-      margin-bottom: 12px;
-    }
-
-    label {
-      display: block;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #a1a1aa;
-      margin-bottom: 4px;
-    }
-
-    input[type="text"], textarea {
-      width: 100%;
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 6px;
-      color: #f4f4f5;
-      padding: 8px 10px;
-      font-size: 12px;
-      outline: none;
-      transition: border-color 0.15s ease;
-    }
-
-    input[type="text"]:focus, textarea:focus {
-      border-color: #f59e0b;
-    }
-
-    textarea {
-      resize: vertical;
-      min-height: 52px;
-      max-height: 100px;
-      font-family: inherit;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: all 0.15s ease;
-      text-decoration: none;
-    }
-
-    .btn-primary {
-      flex: 1;
-      background: #f59e0b;
-      color: #09090b;
-    }
-
-    .btn-primary:hover {
-      background: #fbbf24;
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .btn-secondary {
-      background: #27272a;
-      color: #d4d4d8;
-      border: 1px solid #3f3f46;
-    }
-
-    .btn-secondary:hover {
-      background: #3f3f46;
-      color: #fff;
-    }
-
-    .offline-hint {
-      font-size: 11px;
-      color: #a1a1aa;
-      margin-top: 6px;
-      line-height: 1.35;
-      display: none;
-    }
-
-    .offline-hint.visible {
-      display: block;
-    }
-
-    .feedback {
-      margin-top: 10px;
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      display: none;
-    }
-
-    .feedback.success {
-      display: block;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid #10b981;
-      color: #34d399;
-    }
-
-    .feedback.warning {
-      display: block;
-      background: rgba(245, 158, 11, 0.15);
-      border: 1px solid #f59e0b;
-      color: #fbbf24;
-    }
-
-    .feedback.error {
-      display: block;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid #ef4444;
-      color: #f87171;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 360px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1.45; padding: 16px; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand-icon { width: 22px; height: 22px; }
+    .brand-name { font-weight: 700; font-size: 14px; }
+    .server-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+    .status-dot.online { background: var(--ok); }
+    .status-dot.offline { background: var(--warn); }
+    .queue-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--ember-soft); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; color: var(--ink); }
+    .queue-info { display: flex; align-items: center; gap: 6px; }
+    .queue-sync-btn { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+    .form-group { display: grid; gap: 4px; margin-bottom: 10px; }
+    label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+    input, textarea { width: 100%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 7px 9px; font: inherit; }
+    textarea { min-height: 64px; resize: vertical; }
+    input:focus, textarea:focus { outline: 2px solid var(--ember); outline-offset: 1px; }
+    .actions { display: flex; gap: 8px; margin-top: 4px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; padding: 8px 12px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; border: 1px solid transparent; }
+    .btn-primary { flex: 1; background: var(--ember); color: var(--ember-ink); }
+    .btn-primary:disabled { opacity: 0.6; cursor: default; }
+    .btn-secondary { border-color: var(--line); background: var(--bg); color: var(--ink); }
+    .btn:focus-visible, .queue-sync-btn:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+    .offline-hint { display: none; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+    .offline-hint.visible { display: block; }
+    .feedback { margin-top: 10px; font-size: 12px; min-height: 1em; }
+    .feedback.success { color: var(--ok); }
+    .feedback.warning { color: var(--warn); }
+    .feedback.error { color: var(--danger); }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="brand">
-      <div class="brand-icon">✦</div>
+      <img class="brand-icon" src="icons/icon-48.png" alt="">
       <span class="brand-name">Rekindle Clipper</span>
     </div>
     <div class="server-status" id="server-status">

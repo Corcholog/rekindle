@@ -17,6 +17,7 @@ const healthy = (overrides: Partial<Probes> = {}): Probes => ({
   ollamaModels: async () => ['bge-m3:latest', 'qwen2.5:7b-instruct'],
   vaultProjects: async () => ['Faro', 'Ensayo'],
   demoVaultPath: '/repo/demo_vault',
+  webBuilt: true,
   ...overrides,
 });
 const statusOf = async (probes: Probes) => Object.fromEntries((await runChecks(probes)).map(r => [r.id, r.status]));
@@ -73,6 +74,11 @@ describe('doctor checks', () => {
     const output = renderChecks(await runChecks(healthy({ env })));
     expect(output).toContain('deepseek > ollama');
     expect(output).not.toContain('SECRET');
+  });
+
+  it('asks to build the web UI when web/dist is missing', async () => {
+    const results = await runChecks(healthy({ webBuilt: false }));
+    expect(results.find(r => r.id === 'web')).toMatchObject({ status: 'fail', fix: 'pnpm build:web' });
   });
 
   it('warns, without failing, when .env is missing', async () => {

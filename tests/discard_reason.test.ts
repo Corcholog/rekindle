@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import * as fs from 'fs/promises';
 
 // Discarding can carry one of a fixed set of reasons. `pnpm usertest:stats` counts them, so they
 // must be stored only for discards and only when valid.
@@ -73,14 +72,5 @@ describe('Discard reasons', () => {
     expect((await patch(id, { status: 'accepted', discardReason: 'other' })).statusCode).toBe(400);
     expect((await stored(id)).status).toBe('pending');
   });
-
-  it('the UI offers exactly the stored reasons, labeled in both languages', async () => {
-    const { DISCARD_REASONS } = schema;
-    const source = await fs.readFile('web/app.js', 'utf-8');
-    const block = source.match(/const DISCARD_REASONS = \[([^\]]*)\];/)![1];
-    const offered = [...block.matchAll(/'(\w+)'/g)].map(m => m[1]);
-    expect(offered).toEqual([...DISCARD_REASONS]);
-    const dict = await fs.readFile('web/i18n.js', 'utf-8');
-    for (const reason of DISCARD_REASONS) expect(dict.match(new RegExp(`'reason\\.${reason}':`, 'g')), reason).toHaveLength(2);
-  });
+  // The UI side (the reasons offered and their labels) is checked in tests/ui_i18n.test.ts
 });

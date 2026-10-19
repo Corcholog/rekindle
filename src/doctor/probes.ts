@@ -70,5 +70,6 @@ export async function realProbes(env: NodeJS.ProcessEnv, root = process.cwd()): 
     ollamaModels: () => probeOllamaModels(env.OLLAMA_URL || 'http://127.0.0.1:11434'),
     vaultProjects: probeVaultProjects,
     demoVaultPath: demoVaultPath(env, root),
+    webBuilt: await fs.access(path.join(root, 'web', 'dist', 'index.html')).then(() => true, () => false),
   };
 }

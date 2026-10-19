@@ -109,6 +109,14 @@ else
 fi
 echo ""
 
+# Build the web UI (web/dist), served by the server
+echo "Building the web UI..."
+if ! $PKG_CMD run build:web; then
+  echo "[ERROR] The web UI build failed. Run '$PKG_CMD install' and try again."
+  exit 1
+fi
+echo ""
+
 # Final preflight: lists exactly what is missing (models, vault, schema) with the command to fix it
 echo "Running the final check (preflight)..."
 if ! $PKG_CMD run preflight; then
@@ -134,4 +142,4 @@ fi
 
 echo "Starting the Rekindle server (Ctrl+C to stop)..."
 echo ""
-$PKG_CMD run dev
+$PKG_CMD run serve

@@ -211,6 +211,14 @@ echo.
 REM --------------------------------------------------------------------
 REM Verificacion final: indica que falta y como corregirlo
 REM --------------------------------------------------------------------
+echo Building the web UI...
+call !PKG_CMD! run build:web
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] The web UI build failed. Run '!PKG_CMD! install' and try again.
+    pause
+    exit /b 1
+)
+
 call !PKG_CMD! run preflight
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -236,7 +244,7 @@ start "" cmd /c "ping 127.0.0.1 -n 5 >nul & start http://127.0.0.1:3000"
 echo.
 echo Starting the Rekindle server (Ctrl+C to stop)...
 echo.
-call !PKG_CMD! run dev
+call !PKG_CMD! run serve
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] The server process exited with error code %ERRORLEVEL%.

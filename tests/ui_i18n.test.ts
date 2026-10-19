@@ -1,72 +1,72 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { JSDOM } from 'jsdom';
+import { describe, it, expect } from 'vitest';
 import * as fs from 'fs/promises';
+import * as path from 'path';
+import { DICT } from '../web/src/i18n/dict';
 
-// The web UI's dictionaries (web/i18n.js): both languages have the same keys, every key the
-// page and app.js use exists, and the static page renders fully in English.
+// The web UI's dictionaries (web/src/i18n/dict.ts): both languages have the same keys, every key
+// the components use exists, every API error code has a label, and no component renders strings
+// as HTML (React escapes everything else; this is the T9 boundary).
+
+async function sources(dir: string): Promise<{ file: string; text: string }[]> {
+  const out: { file: string; text: string }[] = [];
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...await sources(full));
+    else if (/\.(tsx?|css)$/.test(entry.name)) out.push({ file: full, text: await fs.readFile(full, 'utf-8') });
+  }
+  return out;
+}
+
+const SAMPLE = { n: 2, actionable: 1, tentative: 1, library: 2, notes: 3, project: 'P', path: 'p.md', ref: 'C1', dir: 'Projects', active: 2, missing: 1, message: 'm' };
 
 describe('web UI dictionaries', () => {
-  let i18n: any;
-  let html: string;
-  let appJs: string;
-
-  beforeAll(async () => {
-    html = await fs.readFile('web/index.html', 'utf-8');
-    appJs = await fs.readFile('web/app.js', 'utf-8');
-    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only', url: 'http://127.0.0.1:3000/' });
-    dom.window.eval(await fs.readFile('web/i18n.js', 'utf-8'));
-    i18n = (dom.window as any).LoomI18n;
-  });
-
-  it('has the same keys in Spanish and English, and no empty value', () => {
-    const es = Object.keys(i18n.DICT.es).sort();
-    const en = Object.keys(i18n.DICT.en).sort();
-    expect(en).toEqual(es);
-    for (const lang of ['es', 'en']) {
-      for (const [key, value] of Object.entries(i18n.DICT[lang])) {
-        const text = typeof value === 'function' ? (value as any)({ n: 2, actionable: 1, tentative: 1, library: 2, notes: 3, project: 'P', path: 'p.md', ref: 'C1', dir: 'Projects', active: 2, missing: 1 }) : value;
+  it('have the same keys in Spanish and English, and no empty value', () => {
+    expect(Object.keys(DICT.en).sort()).toEqual(Object.keys(DICT.es).sort());
+    for (const lang of ['es', 'en'] as const) {
+      for (const [key, value] of Object.entries(DICT[lang])) {
+        const text = typeof value === 'function' ? (value as (p: typeof SAMPLE) => string)(SAMPLE) : value;
         expect(typeof text === 'string' && text.trim().length > 0, `${lang} ${key}`).toBe(true);
       }
     }
   });
 
-  it('defines every key the page and app.js use', () => {
-    const htmlKeys = [
-      ...[...html.matchAll(/data-i18n(?:-html)?="([^"]+)"/g)].map(m => m[1]),
-      ...[...html.matchAll(/data-i18n-attrs="([^"]+)"/g)].flatMap(m => m[1].split(',').map(pair => pair.split(':')[1].trim())),
-    ];
-    const jsKeys = [...appJs.matchAll(/\bt\('([\w.]+)'/g), ...appJs.matchAll(/apiError\([^,]+, '([\w.]+)'\)/g)].map(m => m[1]);
-    const missing = [...new Set([...htmlKeys, ...jsKeys])].filter(key => !(key in i18n.DICT.es));
-    expect(missing).toEqual([]);
-    expect(htmlKeys.length).toBeGreaterThan(80);
-    expect(jsKeys.length).toBeGreaterThan(100);
-  });
-
-  it('labels every error code the API sends', async () => {
-    const sources = (await Promise.all(['ingest', 'library', 'projects', 'settings', 'suggestions'].map(f => fs.readFile(`src/api/routes/${f}.ts`, 'utf-8')))).join('\n')
-      + await fs.readFile('src/api/server.ts', 'utf-8');
-    const codes = [...new Set([...sources.matchAll(/code: '(\w+)'/g)].map(m => m[1]))];
-    expect(codes.length).toBeGreaterThan(5);
-    for (const code of codes) expect(i18n.DICT.en[`error.${code}`], code).toBeTruthy();
-  });
-
-  it('renders the static page in English with no Spanish text left', async () => {
-    const dom = new JSDOM(html.replace(/<script[^>]*src="(app|i18n)\.js"[^>]*><\/script>/g, ''), { runScripts: 'outside-only', url: 'http://127.0.0.1:3000/' });
-    dom.window.eval(await fs.readFile('web/i18n.js', 'utf-8'));
-    const api = (dom.window as any).LoomI18n;
-    api.setLanguage('en');
-    api.applyStatic();
-    const doc = dom.window.document;
-    expect(doc.documentElement.lang).toBe('en');
-    expect(doc.title).toBe('Rekindle — Contextual Writing Assistant');
-    const text = doc.body.textContent!.replace(/\s+/g, ' ');
-    // Words that only appear in the Spanish strings
-    for (const word of ['Sugerencias', 'Configuración', 'Guardar', 'Proyectos registrados', 'Cargando', 'Extensión']) {
-      expect(text, word).not.toContain(word);
+  it('define every key the components use', async () => {
+    const files = await sources('web/src');
+    const used = new Set<string>();
+    for (const { text } of files) {
+      for (const m of text.matchAll(/\bt(?:Rich)?\('([\w.]+)'/g)) used.add(m[1]);
+      for (const m of text.matchAll(/apiError\([^,]+, '([\w.]+)'\)/g)) used.add(m[1]);
+      for (const m of text.matchAll(/label: '([\w.]+)'/g)) used.add(m[1]);
     }
-    // The language names are shown in their own language on purpose
-    expect(text).toContain('Español');
-    const placeholders = [...doc.querySelectorAll('[placeholder]')].map(el => el.getAttribute('placeholder'));
-    expect(placeholders.join(' ')).not.toMatch(/[¿áéíóúñ]/);
+    expect(used.size).toBeGreaterThan(150);
+    expect([...used].filter(key => !(key in DICT.es))).toEqual([]);
+    // Keys built at run time
+    for (const prefix of ['action.', 'ingestStatus.', 'verdict.', 'reason.', 'theme.', 'lang.']) {
+      expect(Object.keys(DICT.es).some(k => k.startsWith(prefix)), prefix).toBe(true);
+    }
+  });
+
+  it('label every error code the API sends', async () => {
+    const api = (await Promise.all(['ingest', 'library', 'projects', 'settings', 'suggestions'].map(f => fs.readFile(`src/api/routes/${f}.ts`, 'utf-8')))).join('\n')
+      + await fs.readFile('src/api/server.ts', 'utf-8');
+    const codes = [...new Set([...api.matchAll(/code: '(\w+)'/g)].map(m => m[1]))];
+    expect(codes.length).toBeGreaterThan(5);
+    for (const code of codes) expect((DICT.en as Record<string, unknown>)[`error.${code}`], code).toBeTruthy();
+  });
+
+  it('never render a string as HTML', async () => {
+    const offenders = (await sources('web/src')).filter(f => /dangerouslySetInnerHTML|\.innerHTML\s*=/.test(f.text)).map(f => f.file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('offer the stored discard reasons, each labeled in both languages', async () => {
+    const { DISCARD_REASONS } = await import('../src/db/schema');
+    const card = await fs.readFile('web/src/components/SuggestionCard.tsx', 'utf-8');
+    const offered = [...card.match(/DISCARD_REASONS: DiscardReason\[\] = \[([^\]]*)\]/)![1].matchAll(/'(\w+)'/g)].map(m => m[1]);
+    expect(offered).toEqual([...DISCARD_REASONS]);
+    for (const reason of DISCARD_REASONS) {
+      expect((DICT.es as Record<string, unknown>)[`reason.${reason}`]).toBeTruthy();
+      expect((DICT.en as Record<string, unknown>)[`reason.${reason}`]).toBeTruthy();
+    }
   });
 });

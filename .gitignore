@@ -25,3 +25,6 @@ evals/dataset/runs/
 # Files Rekindle writes into the demo vaults while you try them
 demo_vault/**/suggestions.md
 demo_vault_en/**/suggestions.md
+
+# Built web UI (pnpm build:web)
+web/dist/

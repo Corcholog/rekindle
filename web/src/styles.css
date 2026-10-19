@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* The .dark class (set from the theme choice or the system setting) switches every token. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Rekindle palette. Ember is reserved for heat: dormant projects, the suggestions that rekindle
+  them, and the one primary action per view. Everything else stays in ash and ink.
+  Light is a cool ash-grey paper; dark is warm coal.
+*/
+:root {
+  --bg: #e7eaec;
+  --surface: #f6f7f8;
+  --surface-2: #dde1e4;
+  --line: rgb(29 33 36 / 0.13);
+  --line-strong: rgb(29 33 36 / 0.24);
+  --ink: #1b1e21;
+  --ink-2: #4b5258;
+  --ink-3: #6c747a;
+  --ash: #8b949b;
+  --ember: #b8410f;
+  --ember-ink: #ffffff;
+  --ember-hot: #e2731c;
+  --ember-soft: rgb(184 65 15 / 0.09);
+  --ember-glow: rgb(226 115 28 / 0.35);
+  --ok: #2c7046;
+  --ok-soft: rgb(44 112 70 / 0.1);
+  --danger: #a8281c;
+  --danger-soft: rgb(168 40 28 / 0.08);
+  --focus: #b8410f;
+}
+
+.dark {
+  --bg: #1a1714;
+  --surface: #231f1b;
+  --surface-2: #2e2924;
+  --line: rgb(239 228 216 / 0.1);
+  --line-strong: rgb(239 228 216 / 0.2);
+  --ink: #efe6dc;
+  --ink-2: #b7aa9d;
+  --ink-3: #8c8075;
+  --ash: #7e868c;
+  --ember: #f07a30;
+  --ember-ink: #1a1714;
+  --ember-hot: #ffb35c;
+  --ember-soft: rgb(240 122 48 / 0.12);
+  --ember-glow: rgb(255 140 60 / 0.45);
+  --ok: #86b894;
+  --ok-soft: rgb(134 184 148 / 0.12);
+  --danger: #e6786b;
+  --danger-soft: rgb(230 120 107 / 0.12);
+  --focus: #ffb35c;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ash: var(--ash);
+  --color-ember: var(--ember);
+  --color-ember-ink: var(--ember-ink);
+  --color-ember-hot: var(--ember-hot);
+  --color-ember-soft: var(--ember-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
+  --font-serif: "Literata Variable", Georgia, serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.05em 0.35em;
+    border-radius: 4px;
+    background: var(--surface-2);
+  }
+  ::selection {
+    background: var(--ember-soft);
+  }
+}
+
+/* Reading text: whatever Rekindle writes for the person to read is set in Literata. */
+.prose-read {
+  font-family: var(--font-serif);
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+/* The ember: a coal that heats up with idle time. Its glow is the one signature effect. */
+.ember-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: var(--ash);
+  transition: background-color 300ms ease, box-shadow 300ms ease;
+}
+.ember-dot[data-heat="warm"] {
+  background: var(--ember);
+}
+.ember-dot[data-heat="hot"] {
+  background: radial-gradient(circle at 40% 35%, var(--ember-hot), var(--ember) 70%);
+  box-shadow: 0 0 0.6rem 0.1rem var(--ember-glow);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rekindled {
+    animation: rekindle 1.6s ease-out 1;
+  }
+}
+@keyframes rekindle {
+  0% { box-shadow: 0 0 0 0 var(--ember-glow); }
+  40% { box-shadow: 0 0 1.4rem 0.2rem var(--ember-glow); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
