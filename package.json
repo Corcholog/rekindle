@@ -12,6 +12,7 @@
     "start": "tsx scripts/run_server.ts",
     "dev": "tsx watch scripts/run_server.ts",
     "typecheck": "tsc --noEmit",
+    "preflight": "tsx src/doctor/cli.ts",
     "eval": "tsx evals/runner/cli.ts",
     "eval:snapshot": "tsx evals/runner/cli.ts snapshot",
     "eval:fetch": "tsx evals/runner/cli.ts fetch",

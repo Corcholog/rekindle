@@ -82,7 +82,10 @@ echo ""
 
 # 5. Database migrations
 echo "[5/6] Verificando esquema de base de datos Drizzle..."
-$PKG_CMD run db:migrate || echo "[ADVERTENCIA] La migración finalizó con advertencia. Continuando..."
+if ! $PKG_CMD run db:migrate; then
+  echo "[ERROR] La migración falló. Revisa que PostgreSQL esté activo (docker compose up -d postgres)."
+  exit 1
+fi
 echo ""
 
 # 6. Ollama & models
@@ -103,6 +106,15 @@ if curl -s http://localhost:11434/api/tags 2>/dev/null | grep -qi "bge-m3"; then
   echo "[OK] Modelo de embeddings 'bge-m3' detectado."
 else
   echo "[ADVERTENCIA] Modelo 'bge-m3' no encontrado. Puedes descargarlo con: ollama pull bge-m3"
+fi
+echo ""
+
+# Final preflight: lists exactly what is missing (models, vault, schema) with the command to fix it
+echo "Ejecutando verificación final (preflight)..."
+if ! $PKG_CMD run preflight; then
+  echo ""
+  echo "[ERROR] Faltan requisitos. Corrige lo indicado arriba y vuelve a ejecutar ./start.sh."
+  exit 1
 fi
 echo ""
 

@@ -155,11 +155,12 @@ REM 5. Migraciones Drizzle
 REM --------------------------------------------------------------------
 echo [5/6] Verificando esquema de base de datos Drizzle...
 call !PKG_CMD! run db:migrate
-if %ERRORLEVEL% equ 0 (
-    echo [OK] Esquema de base de datos listo y actualizado.
-) else (
-    echo [ADVERTENCIA] La migracion finalizo con advertencia. Continuando si las tablas ya existen...
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] La migracion fallo. Revisa que PostgreSQL este activo.
+    pause
+    exit /b 1
 )
+echo [OK] Esquema de base de datos listo y actualizado.
 echo.
 
 REM --------------------------------------------------------------------
@@ -206,6 +207,17 @@ if %ERRORLEVEL% equ 0 (
 
 :OLLAMA_DONE
 echo.
+
+REM --------------------------------------------------------------------
+REM Verificacion final: indica que falta y como corregirlo
+REM --------------------------------------------------------------------
+call !PKG_CMD! run preflight
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [ERROR] Faltan requisitos. Corrige lo indicado arriba y vuelve a ejecutar start.bat.
+    pause
+    exit /b 1
+)
 
 REM --------------------------------------------------------------------
 REM Resumen final y arranque
