@@ -1,0 +1,37 @@
+{
+  "name": "deepseek-flash-top3-thinking",
+  "description": "DeepSeek Flash alone with thinking ON for triage, no fallback, the 3 closest projects per article. Summaries are the same thinking-off ones as every other config, so only the triage step differs from deepseek-flash-top3. Prices include cache hits and the off-peak discount (api-docs.deepseek.com, checked 2026-10-19).",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": true
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "cachedInputPerM": 0.006,
+      "outputPerM": 1.2,
+      "peakHoursUtc": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "offPeakFactor": 0.5
+    }
+  },
+  "maxProjects": 3
+}

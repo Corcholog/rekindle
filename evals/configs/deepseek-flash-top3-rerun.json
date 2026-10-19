@@ -1,0 +1,37 @@
+{
+  "name": "deepseek-flash-top3-rerun",
+  "description": "Identical to deepseek-flash-top3 (thinking off), run live on 2026-10-19 next to the thinking run: comparable latency and cache-hit counts, and a second run of the same setup to compare against the first. Prices include cache hits and the off-peak discount.",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "cachedInputPerM": 0.006,
+      "outputPerM": 1.2,
+      "peakHoursUtc": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "offPeakFactor": 0.5
+    }
+  },
+  "maxProjects": 3
+}
