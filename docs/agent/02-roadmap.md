@@ -188,13 +188,14 @@ Items decided or noticed in conversation that belong to no finished phase. Each 
 
 **Phase 7 (publication)**
 - **Rename the project.** Done 2026-10-19: Rekindle (repo `Corcholog/rekindle`); old vault markers stay recognized.
-- **Make the repo public** only after the Phase 7 checks (license, secret scan of the whole history). It is private until then; commits keep the owner's Gmail address (owner decision).
-- **LinkedIn post caveats:** one labeler, small n, Flash Lite tier, private data not reproducible by readers, run-to-run variance not measured, real article titles not named.
+- **Make the repo public** only after the Phase 7 checks. Both done 2026-10-19: Apache-2.0 with `NOTICE` and `CITATION.cff` crediting Giorgio Ivan Loguercio (owner's choice, for attribution), and a gitleaks scan of all 139 commits with no findings (`.env` and `evals/private/` never committed; the only personal traces are the user name `cork` in an old placeholder path and the owner's first name as labeler). The owner flips visibility; commits keep the owner's Gmail address (owner decision).
+- **LinkedIn post caveats:** one labeler, small n, Flash Lite tier, private data not reproducible by readers, run-to-run variance measured by a single repeat only, labels revised after reading thinking on's answers, real article titles not named. Target-note accuracy is not used (owner decision).
 
-**Evaluation experiments (need the owner; may cost DeepSeek credit, about $0.36 of $2 spent)**
-- Thinking mode ON only for the action-suggestion step. Needs splitting triage and action into two calls; measure with the harness.
+**Evaluation experiments (need the owner; may cost DeepSeek credit: $0.25 billed before 2026-10-19 evening, about $0.08 estimated since)**
+- Thinking on is measured for the whole triage call (finds every connection that reaches it, invents more); making it the default is the owner's open decision. Thinking on only for the action step is not tried.
+- Sending 4 projects per article instead of 3: 7 of 56 labeled connections never reach the model at 3 (`pnpm eval sweep`, free).
 - The owner's open question on `tentative` and forced connections (`docs/JOURNEY.md`, Phase 3 follow-up): what the model should surface that the user would miss without forcing links, and what the top-3 cutoff throws away.
-- Run-to-run variance of each model (repeat a config a few times) before trusting differences of a few points.
+- Run-to-run variance: one repeat of DeepSeek thinking off (macro-F1 0.77 vs 0.75); repeat a config a few more times before trusting differences of a few points.
 - Suggestion quality (usefulness, actionability) is not measured.
 
 **Open audit findings** (details in the local `docs/audit/AUDIT_REPORT.md`; listed as residual risks in `docs/THREAT_MODEL.md`)
