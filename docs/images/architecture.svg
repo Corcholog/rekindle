@@ -1,55 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="396" viewBox="0 0 1080 396" role="img" aria-labelledby="t d">
   <title id="t">How Rekindle works</title>
-  <desc id="d">What you read is clipped, read, summarized and embedded locally, then compared with snapshots of your projects. The 3 closest projects go to an LLM for a verdict. You review each suggestion; only an accepted one is written to your Obsidian vault, whose changes are watched and re-embedded locally.</desc>
-  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#57534c"/></marker></defs>
-  <rect width="1080" height="396" rx="14" fill="#ebe9e4"/>
-  <text x="20" y="42" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" font-weight="600" fill="#1c1b19">How Rekindle works</text>
-  <text x="20" y="63" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13.5" fill="#4a4741">Top: what you read. Bottom: your vault. They meet at retrieval, and only what you accept reaches the vault.</text>
-  <rect x="20" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="34" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Clip</text>
-  <text x="34" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">browser extension</text>
-  <text x="34" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">or a pasted link</text>
-  <rect x="200" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="214" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Read the page</text>
-  <text x="214" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">public http(s) only;</text>
-  <text x="214" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">extract, summarize</text>
-  <rect x="380" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="394" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Embed locally</text>
-  <text x="394" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">bge-m3 on Ollama;</text>
-  <text x="394" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">never sent out</text>
-  <rect x="560" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="574" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Retrieve</text>
-  <text x="574" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">pgvector finds the</text>
-  <text x="574" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">3 closest projects</text>
-  <rect x="740" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="754" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Triage</text>
-  <text x="754" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">DeepSeek, Gemini or</text>
-  <text x="754" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">local Qwen decide</text>
-  <rect x="920" y="82" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#a83b0d" stroke-width="2"/>
-  <text x="934" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#a83b0d">You review</text>
-  <text x="934" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">accept or discard;</text>
-  <text x="934" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">only then it is written</text>
-  <line x1="176" y1="126.0" x2="196" y2="126.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="356" y1="126.0" x2="376" y2="126.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="536" y1="126.0" x2="556" y2="126.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="716" y1="126.0" x2="736" y2="126.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="896" y1="126.0" x2="916" y2="126.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <rect x="560" y="270" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="574" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Project snapshots</text>
-  <text x="574" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">notes, embedded</text>
-  <text x="574" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">locally; idle time</text>
-  <rect x="740" y="270" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="754" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Watch the vault</text>
-  <text x="754" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">re-read the notes</text>
-  <text x="754" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">that changed</text>
-  <rect x="920" y="270" width="156" height="88" rx="10" fill="#f9f8f6" stroke="#d3cec6" stroke-width="1"/>
-  <text x="934" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#1c1b19">Obsidian vault</text>
-  <text x="934" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">your notes, plus</text>
-  <text x="934" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#57534c">accepted callouts</text>
-  <line x1="998.0" y1="170" x2="998.0" y2="266" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="1008.0" y="224.0" text-anchor="start" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#4a4741">Accept</text>
-  <line x1="920" y1="314.0" x2="900" y2="314.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="740" y1="314.0" x2="720" y2="314.0" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <line x1="638.0" y1="270" x2="638.0" y2="174" stroke="#57534c" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="628.0" y="224.0" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#4a4741">compared with</text>
+  <desc id="d">You clip an article or a YouTube video. Rekindle reads the page text or the video transcript, summarizes it and embeds it locally, then compares it with snapshots of your projects. The 3 closest projects go to an LLM for a verdict. You review each suggestion; only an accepted one is saved, to the project's suggestions.md. The vault is watched and changed notes are re-embedded locally.</desc>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a39689"/></marker></defs>
+  <rect width="1080" height="396" rx="14" fill="#1a1714"/>
+  <text x="20" y="42" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="18" font-weight="600" fill="#efe6dc">How Rekindle works</text>
+  <text x="20" y="63" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13.5" fill="#b7aa9d">Top: what you read. Bottom: your vault. They meet at retrieval, and only what you accept is saved to the vault.</text>
+  <rect x="20" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="34" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Clip</text>
+  <text x="34" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">an article or a</text>
+  <text x="34" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">YouTube video</text>
+  <rect x="200" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="214" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Read, summarize</text>
+  <text x="214" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">page text or the</text>
+  <text x="214" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">video transcript</text>
+  <rect x="380" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="394" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Embed locally</text>
+  <text x="394" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">bge-m3 on Ollama;</text>
+  <text x="394" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">never sent out</text>
+  <rect x="560" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="574" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Retrieve</text>
+  <text x="574" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">pgvector finds the</text>
+  <text x="574" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">3 closest projects</text>
+  <rect x="740" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="754" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Triage</text>
+  <text x="754" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">DeepSeek, Gemini or</text>
+  <text x="754" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">local Qwen decide</text>
+  <rect x="920" y="82" width="156" height="88" rx="10" fill="#231f1b" stroke="#f07a30" stroke-width="2"/>
+  <text x="934" y="108" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#f07a30">You review</text>
+  <text x="934" y="130" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">accept or discard;</text>
+  <text x="934" y="147" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">only then it is saved</text>
+  <line x1="176" y1="126.0" x2="196" y2="126.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="356" y1="126.0" x2="376" y2="126.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="536" y1="126.0" x2="556" y2="126.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="716" y1="126.0" x2="736" y2="126.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="896" y1="126.0" x2="916" y2="126.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="560" y="270" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="574" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Project snapshots</text>
+  <text x="574" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">notes, embedded</text>
+  <text x="574" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">locally; idle time</text>
+  <rect x="740" y="270" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="754" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Watch the vault</text>
+  <text x="754" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">re-read the notes</text>
+  <text x="754" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">that changed</text>
+  <rect x="920" y="270" width="156" height="88" rx="10" fill="#231f1b" stroke="#3d3731" stroke-width="1"/>
+  <text x="934" y="296" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="#efe6dc">Obsidian vault</text>
+  <text x="934" y="318" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">your notes, plus</text>
+  <text x="934" y="335" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#a39689">suggestions.md</text>
+  <line x1="998.0" y1="170" x2="998.0" y2="266" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="1008.0" y="224.0" text-anchor="start" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#b7aa9d">Accept</text>
+  <line x1="920" y1="314.0" x2="900" y2="314.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="740" y1="314.0" x2="720" y2="314.0" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="638.0" y1="270" x2="638.0" y2="174" stroke="#a39689" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="628.0" y="224.0" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#b7aa9d">compared with</text>
 </svg>

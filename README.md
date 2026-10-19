@@ -20,7 +20,7 @@ Writing projects get set aside for weeks, and then you read something that conne
 
 ## How it works
 
-![How Rekindle works: what you read is clipped, read, summarized and embedded locally, then compared with snapshots of your projects; the 3 closest projects go to an LLM for a verdict; you review each suggestion, and only an accepted one is written to your Obsidian vault, whose changes are watched and re-embedded locally](docs/images/architecture.svg)
+![How Rekindle works: you clip an article or a YouTube video; Rekindle reads the page text or the video transcript, summarizes it and embeds it locally, then compared with snapshots of your projects; the 3 closest projects go to an LLM for a verdict; you review each suggestion, and only an accepted one is written to your Obsidian vault, whose changes are watched and re-embedded locally](docs/images/architecture.svg)
 
 - **Ingestion & Web Clipper**: Ingest links directly from the Web UI or via the **Manifest V3 Web Clipper extension** (`extension/`). The clipper supports offline queueing in `chrome.storage.local` with background auto-sync when Rekindle reconnects. Web pages (Readability) and YouTube (shorts/embed/live/youtu.be transcripts) are canonicalised, stripped of tracking params, and capped safely.
 - **Hierarchical Evaluation**: Step 1 is a pgvector pre-filter checking both project snapshots and granular note snapshots (`project_note_snapshots`); step 2 is a structured-output LLM call with focal note context targeting specific files in your vault. Providers are tried in the order of `LLM_PROVIDERS` (default DeepSeek, then Gemini, then local Ollama `qwen2.5:7b-instruct`); a provider without a key is skipped and a failure moves to the next one.

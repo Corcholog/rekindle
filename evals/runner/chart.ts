@@ -41,7 +41,8 @@ export function renderChart(points: ChartPoint[]): string {
   const yMin = Math.max(0, Math.floor((Math.min(...points.map(p => p.found)) - 6) / 10) * 10);
   const x = (v: number) => left + (v / xMax) * (W - left - right);
   const y = (v: number) => top + (1 - (v - yMin) / (total - yMin)) * (H - top - bottom);
-  const ink = '#1c1b19', ink2 = '#4a4741', ink3 = '#57534c', line = '#d6d2cb', ember = '#a83b0d', ash = '#57534c';
+  // The app's dark theme (web/src/styles.css): coal, ink, ash, and ember for the default model
+  const bg = '#1a1714', ink = '#efe6dc', ink2 = '#b7aa9d', ink3 = '#a39689', line = '#3a342e', ember = '#f07a30', ash = '#a39689';
   const font = `font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif"`;
 
   const xTicks = Array.from({ length: xMax / 5 + 1 }, (_, i) => i * 5);
@@ -64,7 +65,7 @@ export function renderChart(points: ChartPoint[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="t d">
   <title id="t">Connections found and extra connections, by model</title>
   <desc id="d">${esc(points.map(p => `${p.label}: ${p.found} of ${p.total} found, ${p.extra} extra`).join('; '))}.</desc>
-  <rect width="${W}" height="${H}" rx="14" fill="#f9f8f6"/>
+  <rect width="${W}" height="${H}" rx="14" fill="${bg}"/>
   <text x="${left}" y="34" ${font} font-size="17" font-weight="600" fill="${ink}">Connections found vs. extra connections</text>
   <text x="${left}" y="54" ${font} font-size="13" fill="${ink2}">47 articles × 8 projects, labels by the owner. Up: more of the labeled connections. Right: more beyond them</text>
   ${yTicks.map(v => `<line x1="${left}" x2="${W - right}" y1="${y(v)}" y2="${y(v)}" stroke="${line}" stroke-width="1"/>
@@ -73,7 +74,7 @@ export function renderChart(points: ChartPoint[]): string {
   <line x1="${left}" x2="${W - right}" y1="${H - bottom}" y2="${H - bottom}" stroke="${ink3}" stroke-width="1"/>
   <text x="${left + (W - left - right) / 2}" y="${H - 22}" text-anchor="middle" ${font} font-size="13" fill="${ink2}">Extra: pairs labeled irrelevant that the model called actionable or tentative</text>
   <text transform="translate(22 ${top + (H - top - bottom) / 2}) rotate(-90)" text-anchor="middle" ${font} font-size="13" fill="${ink2}">Found, of ${total} labeled connections</text>
-  ${placed.map(({ p, anchor, tx, ty, leader }) => `${leader ? `<path d="${leader}" stroke="${ink3}" stroke-width="1"/>\n  ` : ''}<circle cx="${x(p.extra)}" cy="${y(p.found)}" r="${p.highlight ? 8 : 6.5}" fill="${p.highlight ? ember : ash}" stroke="#f9f8f6" stroke-width="2"/>
+  ${placed.map(({ p, anchor, tx, ty, leader }) => `${leader ? `<path d="${leader}" stroke="${ink3}" stroke-width="1"/>\n  ` : ''}<circle cx="${x(p.extra)}" cy="${y(p.found)}" r="${p.highlight ? 8 : 6.5}" fill="${p.highlight ? ember : ash}" stroke="${bg}" stroke-width="2"/>
   <text x="${tx}" y="${ty}" text-anchor="${anchor}" ${font} font-size="13" font-weight="${p.highlight ? 600 : 400}" fill="${ink}">${esc(p.label)}</text>
   <text x="${tx}" y="${ty + 16}" text-anchor="${anchor}" ${font} font-size="12" fill="${ink3}">${p.found} found, ${p.extra} extra</text>`).join('\n  ')}
 </svg>
