@@ -164,6 +164,10 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(readyItem.counts.evaluations).toBe(1);
     expect(readyItem.counts.actionable).toBe(1);
     expect(readyItem.counts.suggestions).toBe(1);
+    // Each verdict names its project and its suggestion's status, so Reading can link to it
+    expect(readyItem.evaluationsList).toEqual([
+      expect.objectContaining({ projectId, verdict: 'actionable', suggestionStatus: 'pending' }),
+    ]);
 
     const failedItem = body.items.find((i: any) => i.id === content2Id);
     expect(failedItem).toBeDefined();

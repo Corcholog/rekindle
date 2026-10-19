@@ -24,10 +24,13 @@ const ContentItemSchema = z.object({
     suggestions: z.number(),
   }),
   evaluationsList: z.array(z.object({
+    projectId: z.string().uuid(),
     projectTitle: z.string(),
     verdict: z.enum(['irrelevant', 'tentative', 'actionable']).nullable(),
     confidenceScore: z.number().nullable(),
     triageReasoning: z.string().nullable(),
+    /** Status of the suggestion this evaluation produced; null while a tentative one is unresolved. */
+    suggestionStatus: z.enum(['pending', 'accepted', 'discarded']).nullable(),
   })).optional(),
   hasSpatialAffinity: z.boolean().optional(),
   isEvaluating: z.boolean().optional(),
@@ -92,14 +95,17 @@ const hasSpatialAffinitySql = sql<boolean>`EXISTS (
 
 const evaluationsListSql = sql<any>`coalesce((
   SELECT json_agg(json_build_object(
+    'projectId', p.id,
     'projectTitle', p.title,
     'verdict', e.verdict,
     'confidenceScore', e.confidence_score,
-    'triageReasoning', e.triage_reasoning
+    'triageReasoning', e.triage_reasoning,
+    'suggestionStatus', s.status
   ))
   FROM evaluations e
   JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
   JOIN projects p ON ps.project_id = p.id
+  LEFT JOIN action_suggestions s ON s.evaluation_id = e.id
   WHERE e.content_id = contents.id
 ), '[]'::json)`;
 
