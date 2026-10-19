@@ -1,0 +1,2 @@
+# Investigación sobre faros
+Notas sobre el funcionamiento real de un faro: la lente de Fresnel, los mecanismos de relojería que hacían girar la óptica, el combustible (aceite, luego petróleo vaporizado) y las rutinas de los torreros, que debían mantener la luz encendida cada noche sin falta. Pendiente: averiguar cómo se comunicaban los fareros aislados con los barcos y qué señales usaban con niebla.
