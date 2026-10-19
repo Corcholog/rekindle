@@ -177,14 +177,14 @@ Three choices, because they matter for different reasons:
 | `OUTPUT_LANGUAGE` | What the model writes for you to read: reasoning, suggested actions, Consultor answers, synergies, briefs, and the callouts written to your vault | What you read should be in your language |
 | `NOTES_LANGUAGE` | The language article summaries are written in | The summary is what gets embedded and compared with your notes, so it should be in the notes' language whatever the article's language |
 
-The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below; one run each; a repeat of the baseline is described under [Evaluation](#evaluation)):
+The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below, with the labels as revised on 2026-10-19; one run each; a repeat of the baseline and the label revision are described under [Evaluation](#evaluation)):
 
-| Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / recall | Retrieval recall@3 / unrelated articles that still retrieve a project |
-|---|---|---|---|
-| Baseline: Spanish instructions, summaries and output | 0.78 | 96% / 26 of 31 | 91% / 94% |
-| E1: English output | 0.76 | 96% / 26 of 31 | 91% / 94% (same summaries) |
-| E2: English summaries compared with the Spanish notes | 0.73 | 96% / 24 of 31 | 88% / 83% |
-| E3: English instructions | 0.73 | 95% / 21 of 31 | 91% / 94% (same summaries) |
+| Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / found | Connections found / invented | Retrieval recall@3 / unrelated articles that still retrieve a project |
+|---|---|---|---|---|
+| Baseline: Spanish instructions, summaries and output | 0.77 | 100% / 27 of 35 | 46 of 56 / 19 | 91% / 94% |
+| E1: English output | 0.75 | 100% / 27 of 35 | 45 of 56 / 20 | 91% / 94% (same summaries) |
+| E2: English summaries compared with the Spanish notes | 0.71 | 96% / 24 of 35 | 42 of 56 / 25 | 84% / 82% |
+| E3: English instructions | 0.72 | 100% / 22 of 35 | 43 of 56 / 10 | 91% / 94% (same summaries) |
 
 What this supports: English output costs nothing measurable (the actionable verdicts were identical), so it is safe to offer. English instructions made the model more reluctant to call an article actionable, so instructions stay Spanish. Summaries in a different language from the notes lose relevant matches (and also filter more, since cross-language distances are larger), so summaries follow the notes. These are single runs on one person's labels; the English-output and English-notes combinations other than these three were **not measured**, and an English vault with English labels was **not measured**. Full tables: [`evals/REPORT.md`](evals/REPORT.md).
 
@@ -254,19 +254,24 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 ## Evaluation
 
-`pnpm eval` runs Rekindle's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, with the current setup (the 3 closest projects per article reach the LLM, Phase 5 prompts): one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (31 actionable, 20 tentative, 325 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
+`pnpm eval` runs Rekindle's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, with the current setup (the 3 closest projects per article reach the LLM, Phase 5 prompts): one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (35 actionable, 21 tentative, 320 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | DeepSeek Flash (thinking on) | Qwen 2.5 7B (local) |
 |---|---|---|---|---|
-| Triage macro-F1 | 0.67 | **0.78** | 0.69 | 0.63 |
-| `actionable` precision / recall | 56% / 90% | **96% / 84%** | 69% / 87% | 100% / 39% |
+| Triage macro-F1 | 0.69 | **0.77** | 0.71 | 0.58 |
+| `actionable` precision / recall | 64% / 91% | **100% / 77%** | 79% / 89% | 100% / 34% |
+| Connections found (of 56) / invented | 49 / 25 | 46 / 19 | 49 / 26 | 32 / 9 |
 | Latency p50 / p95 | 4.4 / 11.7 s | **2.3 / 4.4 s** | 4.1 / 8.4 s | 3.8 / 8.3 s |
 | Tokens per triage call: input (cached) / output (thinking) | not measured | 2,170 (1,976) / 281 (0) | 2,195 (1,600) / 638 (259) | not measured |
 | Estimated cost of the 118 calls | free tier | $0.024 | $0.056 | $0 |
 
-DeepSeek with thinking off leading is why the default chain is `deepseek,gemini,ollama` with thinking off; it also led when every project within the distance threshold reached the LLM and with the earlier prompts (macro-F1 0.74 vs 0.56 and 0.61, in [`docs/JOURNEY.md`](docs/JOURNEY.md)). Turning thinking on made the model call more articles actionable: one more right, but 12 wrong where thinking off had 1 (precision 96% → 69%), at nearly twice the latency and more than twice the output tokens. It was measured on the same summaries and retrieval, one run.
+**Connections found** treats `actionable` and `tentative` as one answer, "this article connects to this project": calling an actionable pair tentative, or the reverse, still shows you the connection, so only a lost connection or an invented one counts as an error. 7 of the 56 labeled connections never reach the model because of the top-3 cutoff, so 49 is the most any model can find here; *invented* counts pairs labeled irrelevant that the model called actionable or tentative.
 
-Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM (about 1 in 8) as misses. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Run-to-run variance is **not measured** beyond a single repeat: repeating the thinking-off run on 2026-10-19 gave the same macro-F1 (0.78) with `actionable` precision / recall 92% / 77% (2 fewer of the 31 actionable pairs found, 1 more false actionable). Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+DeepSeek with thinking off has the best macro-F1 and is the default (`deepseek,gemini,ollama`, thinking off); it also led when every project within the distance threshold reached the LLM and with the earlier prompts and labels (macro-F1 0.74 vs 0.56 and 0.61, in [`docs/JOURNEY.md`](docs/JOURNEY.md)). Thinking on trades the other way: it finds every connection that reaches it and 4 more actionable pairs, but invents 7 more connections, calls 8 pairs actionable that are not, and takes nearly twice the latency and more than twice the output tokens. Gemini behaves like thinking on, with more false actionables.
+
+**The labels were revised after seeing these answers.** On 2026-10-19 the owner read the pairs thinking on called actionable and changed 7 labels, every one toward thinking on's answer (2 tentative → actionable, 2 irrelevant → actionable, 3 irrelevant → tentative). All the numbers in this section use the revised labels, rescored from the recorded answers with `pnpm eval rescore` (no new model calls); this favors thinking on. Before the revision thinking on scored macro-F1 0.69 against 0.78.
+
+Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM as misses. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Run-to-run variance is **not measured** beyond a single repeat: repeating the thinking-off run on 2026-10-19 gave macro-F1 0.75 against 0.77, 25 actionable pairs found instead of 27 with 1 false actionable instead of 0, and 47 connections instead of 46. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 59%). Suggestion quality (usefulness, actionability) is **not measured**.
 
 **Tokens and cost.** The thinking-off token and cost figures come from that repeat run, because the first one did not record cache hits. Cost is estimated from the tokens DeepSeek reports and its list prices: cached input costs 2% of uncached input, and both runs were off-peak (half price). Before 2026-10-19 the harness priced every token as uncached and peak-hour, so it overstated cost: its estimates for the DeepSeek runs up to then add up to $0.69, while DeepSeek billed $0.25 for all use up to then (the first run, estimated at $0.18, was billed $0.07; figures from the owner's DeepSeek dashboard, not reproducible from this repo). The new estimates have **not** been checked against the bill yet.
 
@@ -290,7 +295,7 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 ## Known limitations
 
 - **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: only the 3 closest projects now reach the LLM (`TOP_K_PROJECTS_LIMIT = 3`), which cut calls by 45% and keeps 86% of the relevant pairs, but 1 in 8 relevant pairs is never evaluated.
-- **`tentative` judgements are weak for every model tried.** `tentative` F1 is 0.36–0.48 (a small sample: 20 pairs).
+- **`tentative` judgements are weak for every model tried.** `tentative` F1 is 0.28–0.48 (a small sample: 21 pairs). Counted as connections, together with `actionable`, the models find 32–49 of the 56 labeled connections.
 - **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts are scored, against one person's labels. Whether a suggestion names the note the owner would have picked is **not measured**: the labeled projects' notes were not good enough to judge it ([`evals/README.md`](evals/README.md)).
 - **A failed evaluation is invisible in the UI.** If the LLM fails while evaluating an article for a project, the job is retried three times (after 30 s, 60 s and 120 s); after that the pair waits until the project changes. Only `pnpm telemetry:report` shows the failure.
 - **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
