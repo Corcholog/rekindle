@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
+import { ChevronRight, Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type ContentDetail, type ContentItem, type IngestStatus } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
@@ -186,15 +186,7 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
 
       {(item.evaluationsList ?? []).length > 0 && (
         <ul className="mt-3 grid gap-2">
-          {item.evaluationsList!.map((ev, i) => (
-            <li key={i} className="rounded-md bg-surface-2/60 px-3 py-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-ink">{ev.projectTitle}</span>
-                <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
-              </div>
-              {ev.triageReasoning && ev.verdict !== 'irrelevant' && <p className="mt-0.5 line-clamp-2 text-ink-2">{ev.triageReasoning}</p>}
-            </li>
-          ))}
+          {item.evaluationsList!.map((ev, i) => <EvaluationRow key={i} evaluation={ev} />)}
         </ul>
       )}
 
@@ -213,6 +205,39 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
             : item.isEvaluating ? t('feed.evaluatingNotes') : ready ? t('feed.saved') : statusLabel}
         </span>
       </div>
+    </li>
+  );
+}
+
+/**
+ * One project's verdict on the article. Clicking it shows the model's full reasoning in place, for
+ * irrelevant verdicts too, so nobody has to open the article to learn why.
+ */
+function EvaluationRow({ evaluation: ev }: { evaluation: NonNullable<ContentItem['evaluationsList']>[number] }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const preview = ev.verdict !== 'irrelevant';
+  return (
+    <li className="text-sm">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className="evaluation-toggle flex w-full cursor-pointer items-start gap-2 rounded-md bg-surface-2/60 px-3 py-2 text-left hover:bg-surface-2"
+      >
+        <ChevronRight size={14} aria-hidden="true" className={cn('mt-1 shrink-0 text-ink-3 transition-transform', open && 'rotate-90')} />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-ink">{ev.projectTitle}</span>
+            <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
+          </span>
+          {(open || (preview && ev.triageReasoning)) && (
+            <span className={cn('evaluation-reasoning mt-0.5 block text-ink-2', !open && 'line-clamp-2')}>
+              {ev.triageReasoning || t('sug.noReasoning')}
+            </span>
+          )}
+        </span>
+      </button>
     </li>
   );
 }

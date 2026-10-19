@@ -153,6 +153,15 @@ describe('Web UI renders untrusted text as text', () => {
         expect(injected()).toEqual(clean);
         expect(doc().body.textContent).toContain('<img src=x onerror="window.__xss=1">');
 
+        // Each project's verdict opens in place to show the full reasoning, still as text
+        const toggle = doc().querySelector('.evaluation-toggle') as HTMLButtonElement;
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        toggle.click();
+        await waitFor(() => toggle.getAttribute('aria-expanded') === 'true', 'the reasoning to open');
+        expect(toggle.querySelector('.evaluation-reasoning')!.className).not.toContain('line-clamp');
+        expect(toggle.querySelector('.evaluation-reasoning')!.textContent).toContain('<b>negrita</b>');
+        expect(injected()).toEqual(clean);
+
         go('suggestions');
         await waitFor(() => doc().querySelectorAll('.suggestion-card').length >= 1, 'the suggestions');
         await waitFor(() => doc().querySelectorAll('.synergy-card').length === 1, 'the synergies');
