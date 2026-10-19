@@ -1,0 +1,28 @@
+{
+  "name": "deepseek-flash-top3-output-en",
+  "description": "Language experiment E1: deepseek-flash-top3 with the model writing reasoning and actions in English (Spanish instructions, Spanish summaries).",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3,
+  "languages": {
+    "output": "en"
+  }
+}

@@ -61,6 +61,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
   const summaryCache = await new JsonCache<string>(path.join(dataset.dir, 'cache', 'summaries.json')).load();
   const llmCache = await new JsonCache<RecordedCall>(path.join(dataset.dir, 'cache', 'llm.json')).load();
 
+  // Explicit languages: a run never depends on the LANGUAGE settings of the machine's .env
+  const languages = { prompt: 'es', output: 'es', summary: 'es', ...config.languages } as const;
+  const previousLanguages = { PROMPT_LANGUAGE: process.env.PROMPT_LANGUAGE, OUTPUT_LANGUAGE: process.env.OUTPUT_LANGUAGE };
+  process.env.PROMPT_LANGUAGE = languages.prompt;
+  process.env.OUTPUT_LANGUAGE = languages.output;
+
   log('Iniciando PostgreSQL de usar y tirar (Testcontainers)…');
   const container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
   // The harness must never see the development database or the real vault
@@ -194,11 +200,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
 
     for (const labelCase of cases) {
       const article = articleById.get(labelCase.article)!;
-      const summaryKey = sha256(`${article.text}\n${JSON.stringify(config.summaryProviders)}`);
+      // Spanish summaries keep their original cache key, so earlier recordings still replay
+      const summaryKey = sha256(`${article.text}\n${JSON.stringify(config.summaryProviders)}${languages.summary === 'es' ? '' : `\nsummary:${languages.summary}`}`);
       let summary = summaryCache.get(summaryKey);
       if (summary === undefined) {
         if (options.mode === 'replay') throw new Error('Modo replay: falta un resumen en la caché del dataset');
-        summary = await summarizeText(summaryAi, article.text);
+        summary = await summarizeText(summaryAi, article.text, undefined, { summary: languages.summary, prompt: 'es' });
         summaryCache.set(summaryKey, summary);
       }
       const embedding = await embed(summary);
@@ -291,6 +298,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         cases: score.cases,
         labeledPairs: score.labeledPairs,
         startedAt: new Date().toISOString(),
+        ...(config.languages ? { languages } : {}),
       },
       retrieval: { ...score.retrieval, threshold: config.threshold },
       triage: score.triage,
@@ -339,6 +347,10 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     return { result, resultFile };
   } finally {
     await container.stop();
+    for (const [key, value] of Object.entries(previousLanguages)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 

@@ -1,0 +1,28 @@
+{
+  "name": "deepseek-flash-top3-summary-en",
+  "description": "Language experiment E2: deepseek-flash-top3 with English summaries compared against the Spanish notes (Spanish instructions and output).",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3,
+  "languages": {
+    "summary": "en"
+  }
+}

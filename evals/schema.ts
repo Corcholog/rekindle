@@ -49,6 +49,18 @@ export const PriceSchema = z.object({
   outputPerM: z.number().nonnegative(),
 });
 
+const LanguageSchema = z.enum(['es', 'en']);
+
+export const LanguagesSchema = z.object({
+  /** Instructions of the triage prompt (the summary prompt keeps Spanish instructions). */
+  prompt: LanguageSchema.optional(),
+  /** Language the model writes reasoning and actions in. */
+  output: LanguageSchema.optional(),
+  /** Language of the summaries, which are embedded and compared with the notes. */
+  summary: LanguageSchema.optional(),
+});
+export type EvalLanguages = z.infer<typeof LanguagesSchema>;
+
 export const ConfigSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -73,6 +85,11 @@ export const ConfigSchema = z.object({
   }).default({ maxRetries: 6, baseDelayMs: 15_000, maxDelayMs: 120_000 }),
   /** USD per million tokens, keyed "provider:model". Missing entries mean cost is not measured. */
   prices: z.record(z.string(), PriceSchema).default({}),
+  /**
+   * Language experiments (src/ai/language.ts). Each field defaults to Spanish, the setup every
+   * earlier result was measured with; leaving the block out keeps the config hash unchanged.
+   */
+  languages: LanguagesSchema.optional(),
 });
 export type EvalConfig = z.infer<typeof ConfigSchema>;
 
@@ -130,6 +147,8 @@ export const ResultSchema = z.object({
     cases: z.number(),
     labeledPairs: z.number(),
     startedAt: z.string(),
+    /** Present when the config ran a language experiment. */
+    languages: z.object({ prompt: LanguageSchema, output: LanguageSchema, summary: LanguageSchema }).optional(),
   }),
   retrieval: z.object({
     k: z.number(),
