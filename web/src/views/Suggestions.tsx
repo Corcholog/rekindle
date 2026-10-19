@@ -115,7 +115,7 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
           <span className="text-xs text-ink-3">{projects.length}</span>
         </div>
         <p className="mb-3 text-xs text-ink-3">{t('rekindle.sidebarHint')}</p>
-        <ul id="projects-list" className="grid min-w-0 gap-1">
+        <ul id="projects-list" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
           <li>
             <ProjectButton active={selected === null} onClick={() => setSelected(null)} title={t('triage.allProjects')} count={totals.active} />
           </li>
