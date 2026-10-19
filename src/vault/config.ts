@@ -143,6 +143,19 @@ export async function writeEnvValue(envPath: string, key: string, value: string)
 }
 
 /**
+ * Sets a variable in memory and in the .env file dotenv reads from. Tests never touch the real
+ * .env: under Vitest only process.env changes.
+ */
+export async function persistEnvSetting(key: string, value: string): Promise<void> {
+  if (!isSafeEnvValue(value)) {
+    throw new Error(`Invalid value for ${key}: control characters are not allowed`);
+  }
+  process.env[key] = value;
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) return;
+  await writeEnvValue(path.resolve(process.cwd(), '.env'), key, value);
+}
+
+/**
  * Updates and persists the vault path in memory and in the .env file.
  */
 export async function persistVaultPath(newVaultPath: string): Promise<string> {
@@ -150,14 +163,6 @@ export async function persistVaultPath(newVaultPath: string): Promise<string> {
   if (!isSafeEnvValue(resolved)) {
     throw new Error('La ruta del vault contiene caracteres de control');
   }
-  process.env.VAULT_PATH = resolved;
-
-  // Never overwrite the real root .env file during automated test runs
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    return resolved;
-  }
-
-  // Same location dotenv reads from
-  await writeEnvValue(path.resolve(process.cwd(), '.env'), 'VAULT_PATH', resolved);
+  await persistEnvSetting('VAULT_PATH', resolved);
   return resolved;
 }

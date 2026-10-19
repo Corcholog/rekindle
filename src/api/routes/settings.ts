@@ -9,6 +9,7 @@ import {
   getCurrentVaultPath,
   validateVaultPath,
   persistVaultPath,
+  persistEnvSetting,
   isSafeEnvValue,
 } from '../../vault/config';
 import {
@@ -16,6 +17,7 @@ import {
   restartVaultWatcher,
 } from '../../vault/watcher';
 import { reconcileAllProjects } from '../../vault/reconciler';
+import { LANGUAGES, notesLanguage, outputLanguage, presetLanguage } from '../../ai/language';
 
 const ProjectVaultInfoSchema = z.object({
   id: z.string().uuid(),
@@ -42,7 +44,38 @@ const UpdateVaultBodySchema = z.object({
     .refine(isSafeEnvValue, 'La ruta del vault no puede contener saltos de línea ni caracteres de control'),
 });
 
+const LanguageSettingsSchema = z.object({
+  /** Default for the UI and for the two settings below (LANGUAGE in .env). */
+  preset: z.enum(LANGUAGES),
+  outputLanguage: z.enum(LANGUAGES),
+  notesLanguage: z.enum(LANGUAGES),
+});
+
+const UpdateLanguageBodySchema = z.object({
+  outputLanguage: z.enum(LANGUAGES).optional(),
+  notesLanguage: z.enum(LANGUAGES).optional(),
+}).refine(body => body.outputLanguage !== undefined || body.notesLanguage !== undefined, {
+  message: 'Nothing to update',
+});
+
+const currentLanguages = () => ({ preset: presetLanguage(), outputLanguage: outputLanguage(), notesLanguage: notesLanguage() });
+
 export default async function (server: FastifyInstance) {
+  // Languages: what generated text is written in, and what the notes are written in (summaries
+  // follow the notes, so retrieval compares like with like). Applies to new generations only.
+  server.get('/api/settings/language', {
+    schema: { response: { 200: LanguageSettingsSchema } },
+  }, async () => currentLanguages());
+
+  server.put('/api/settings/language', {
+    schema: { body: UpdateLanguageBodySchema, response: { 200: LanguageSettingsSchema } },
+  }, async (request) => {
+    const body = request.body as z.infer<typeof UpdateLanguageBodySchema>;
+    if (body.outputLanguage) await persistEnvSetting('OUTPUT_LANGUAGE', body.outputLanguage);
+    if (body.notesLanguage) await persistEnvSetting('NOTES_LANGUAGE', body.notesLanguage);
+    return currentLanguages();
+  });
+
   // 1. GET Current Vault Settings & Project Status
   server.get('/api/settings/vault', {
     schema: {

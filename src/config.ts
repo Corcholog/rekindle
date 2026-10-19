@@ -6,6 +6,9 @@ dotenv.config();
 // The API has no authentication, so it must only listen on loopback.
 const LOOPBACK_BIND_HOSTS = ['127.0.0.1', 'localhost', '::1'];
 
+// An empty value in .env means "not set"
+const languageVar = z.preprocess(v => (v === '' ? undefined : v), z.enum(['es', 'en']).optional());
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   HOST: z.string().default('127.0.0.1').refine(
@@ -26,6 +29,10 @@ const EnvSchema = z.object({
     { message: 'LLM_PROVIDERS may only list deepseek, gemini and ollama' },
   ),
   VAULT_PATH: z.string().optional(),
+  // Languages (src/ai/language.ts): LANGUAGE presets the other two; read at call time
+  LANGUAGE: languageVar,
+  OUTPUT_LANGUAGE: languageVar,
+  NOTES_LANGUAGE: languageVar,
 });
 
 export function parseEnv(raw: NodeJS.ProcessEnv | Record<string, string | undefined>) {
