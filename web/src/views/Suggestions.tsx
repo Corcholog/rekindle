@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { BookMarked, ChevronDown, RefreshCcw, Sparkles, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -10,6 +10,7 @@ import { EmberMeter } from '@/components/EmberMeter';
 import { activeCount, sortProjects } from '@/lib/dormancy';
 import { SuggestionCard } from '@/components/SuggestionCard';
 import { SynthesisDialog, SynergyDialog } from '@/components/ProjectDialogs';
+import type { SuggestionFocus } from '@/App';
 
 const STATUSES: { id: SuggestionStatus; label: string; count: (p: Project['counts']) => number }[] = [
   { id: 'active', label: 'triage.tabActive', count: c => c.active ?? c.pending + (c.tentative ?? 0) },
@@ -24,12 +25,15 @@ const EMPTY_KEY: Record<SuggestionStatus, string> = {
   accepted: 'triage.emptyAccepted', discarded: 'triage.emptyDiscarded',
 };
 
-export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onChange: () => void }) {
+export function Suggestions({ refreshKey, onChange, focus = null }: { refreshKey: number; onChange: () => void; focus?: SuggestionFocus | null }) {
   const { t, apiError } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState<SuggestionStatus>('active');
   const [items, setItems] = useState<Suggestion[] | null>(null);
+  // Which list the items belong to, so a link from Reading waits for the right one
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const appliedFocus = useRef<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [synergies, setSynergies] = useState<Synergy[]>([]);
   const [synthesis, setSynthesis] = useState<{ projectId: string; title: string } | null>(null);
@@ -37,12 +41,19 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
   const [batchRunning, setBatchRunning] = useState(false);
 
   const loadProjects = useCallback(() => api.projects().then(d => setProjects(d.projects)).catch(() => {}), []);
+  // Only the latest request may fill the list: switching project or tab quickly must not let an
+  // older, slower response overwrite the newer one
+  const latestRequest = useRef(0);
   const loadSuggestions = useCallback(async () => {
+    const request = ++latestRequest.current;
     try {
       const data = await api.suggestions(status, selected);
+      if (request !== latestRequest.current) return;
       setItems(data.items);
+      setLoadedFor(`${status}|${selected}`);
       setLoadError(null);
     } catch (err) {
+      if (request !== latestRequest.current) return;
       setLoadError(err instanceof Error ? err.message : String(err));
     }
   }, [status, selected]);
@@ -58,6 +69,25 @@ export function Suggestions({ refreshKey, onChange }: { refreshKey: number; onCh
 
   useEffect(() => { loadProjects(); loadSynergies(); }, [loadProjects, loadSynergies, refreshKey]);
   useEffect(() => { loadSuggestions(); }, [loadSuggestions, refreshKey]);
+
+  // A "View suggestion" link from Reading: open that project and tab, then bring the card into view
+  useEffect(() => {
+    if (!focus || appliedFocus.current === focus.key) return;
+    setSelected(focus.projectId);
+    setStatus(focus.tab);
+  }, [focus]);
+  useEffect(() => {
+    if (!focus || appliedFocus.current === focus.key || loadedFor !== `${focus.tab}|${focus.projectId}`) return;
+    appliedFocus.current = focus.key;
+    // The id comes from the URL: only a UUID is ever used in a selector
+    if (!focus.contentId || !/^[0-9a-f-]{36}$/i.test(focus.contentId)) return;
+    const card = document.querySelector<HTMLElement>(`.suggestion-card[data-content-id="${focus.contentId}"]`);
+    if (!card) return;
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    card.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+    card.classList.add('focused');
+    window.setTimeout(() => card.classList.remove('focused'), 2500);
+  }, [focus, loadedFor]);
 
   const sorted = useMemo(() => sortProjects(projects), [projects]);
   const project = projects.find(p => p.id === selected) ?? null;
