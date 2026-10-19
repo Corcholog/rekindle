@@ -64,7 +64,7 @@ rekindle/
 │  │  ├─ aiProvider.ts                AI facade: structured completions via the provider chain, local embeddings
 │  │  ├─ chain.ts                     Ordered provider chain (LLM_PROVIDERS), one retry on malformed output
 │  │  ├─ types.ts                     ChatProvider interface, error kinds, JSON parsing/validation
-│  │  ├─ pricing.ts                   List prices for cost estimates (shared with evals)
+│  │  ├─ pricing.ts                   List prices for cost estimates: cached input, off-peak hours (shared with evals)
 │  │  └─ providers/                   deepseek.ts, gemini.ts, ollama.ts
 │  ├─ api/
 │  │  ├─ server.ts                    Fastify app setup, error handler, lifecycle hooks, boot writeback recovery

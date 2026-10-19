@@ -177,7 +177,7 @@ Three choices, because they matter for different reasons:
 | `OUTPUT_LANGUAGE` | What the model writes for you to read: reasoning, suggested actions, Consultor answers, synergies, briefs, and the callouts written to your vault | What you read should be in your language |
 | `NOTES_LANGUAGE` | The language article summaries are written in | The summary is what gets embedded and compared with your notes, so it should be in the notes' language whatever the article's language |
 
-The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below; one run each, with run-to-run variance **not measured**):
+The language of the model's **instructions** is not a setting: it stays Spanish because that measured best. Measured on the labeled evaluation set (DeepSeek Flash, the 3 closest projects per article, the same 47 articles and 376 labeled pairs as below; one run each; a repeat of the baseline is described under [Evaluation](#evaluation)):
 
 | Change from the Spanish baseline | Triage macro-F1 | `actionable` precision / recall | Retrieval recall@3 / unrelated articles that still retrieve a project |
 |---|---|---|---|
@@ -256,14 +256,19 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 `pnpm eval` runs Rekindle's real retrieval and triage against articles and projects labeled by a person (see [`evals/README.md`](evals/README.md)); the full tables are in [`evals/REPORT.md`](evals/REPORT.md). Latest run, with the current setup (the 3 closest projects per article reach the LLM, Phase 5 prompts): one labeler (the project owner), 47 articles × 8 projects = 376 labeled pairs (31 actionable, 20 tentative, 325 irrelevant), each provider alone with no fallback, identical summaries and retrieval:
 
-| | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | Qwen 2.5 7B (local) |
-|---|---|---|---|
-| Triage macro-F1 | 0.67 | **0.78** | 0.63 |
-| `actionable` precision / recall | 56% / 90% | **96% / 84%** | 100% / 39% |
-| Latency p50 / p95 | 4.4 / 11.7 s | **2.3 / 4.4 s** | 3.8 / 8.3 s |
-| Cost of 118 triage calls | free tier | about $0.12 at list price | $0 |
+| | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | DeepSeek Flash (thinking on) | Qwen 2.5 7B (local) |
+|---|---|---|---|---|
+| Triage macro-F1 | 0.67 | **0.78** | 0.69 | 0.63 |
+| `actionable` precision / recall | 56% / 90% | **96% / 84%** | 69% / 87% | 100% / 39% |
+| Latency p50 / p95 | 4.4 / 11.7 s | **2.3 / 4.4 s** | 4.1 / 8.4 s | 3.8 / 8.3 s |
+| Tokens per triage call: input (cached) / output (thinking) | not measured | 2,170 (1,976) / 281 (0) | 2,195 (1,600) / 638 (259) | not measured |
+| Estimated cost of the 118 calls | free tier | $0.024 | $0.056 | $0 |
 
-DeepSeek leading is why the default chain is `deepseek,gemini,ollama`; it also led when every project within the distance threshold reached the LLM and with the earlier prompts (macro-F1 0.74 vs 0.56 and 0.61, in [`docs/JOURNEY.md`](docs/JOURNEY.md)). Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM (about 1 in 8) as misses. These numbers come from a small, single-labeler dataset, and the models' run-to-run variance is **not measured**: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+DeepSeek with thinking off leading is why the default chain is `deepseek,gemini,ollama` with thinking off; it also led when every project within the distance threshold reached the LLM and with the earlier prompts (macro-F1 0.74 vs 0.56 and 0.61, in [`docs/JOURNEY.md`](docs/JOURNEY.md)). Turning thinking on made the model call more articles actionable: one more right, but 12 wrong where thinking off had 1 (precision 96% → 69%), at nearly twice the latency and more than twice the output tokens. It was measured on the same summaries and retrieval, one run.
+
+Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM (about 1 in 8) as misses. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Run-to-run variance is **not measured** beyond a single repeat: repeating the thinking-off run on 2026-10-19 gave the same macro-F1 (0.78) with `actionable` precision / recall 92% / 77% (2 fewer of the 31 actionable pairs found, 1 more false actionable). Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+
+**Tokens and cost.** The thinking-off token and cost figures come from that repeat run, because the first one did not record cache hits. Cost is estimated from the tokens DeepSeek reports and its list prices: cached input costs 2% of uncached input, and both runs were off-peak (half price). Before 2026-10-19 the harness priced every token as uncached and peak-hour, so it overstated cost: its estimates for the DeepSeek runs up to then add up to $0.69, while DeepSeek billed $0.25 for all use up to then (the first run, estimated at $0.18, was billed $0.07; figures from the owner's DeepSeek dashboard, not reproducible from this repo). The new estimates have **not** been checked against the bill yet.
 
 **Real-user testing: not measured.** The workflow and the counts to record are defined in [`docs/USER_TEST.md`](docs/USER_TEST.md); no session has been run yet.
 

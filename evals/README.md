@@ -44,7 +44,7 @@ A dataset is a directory:
 | False retrieval | Share of articles with no relevant project that still retrieved a project |
 | Triage F1 | Per class and macro, from the confusion matrix (a project that was not retrieved counts as `irrelevant`) |
 | Reliability | Malformed model outputs, fallbacks to another provider, failed calls |
-| Latency, tokens, USD | p50/p95 per call; cost only where a price is configured, otherwise "not measured" |
+| Latency, tokens, USD | p50/p95 per call; total tokens, the part of the input served from the provider's cache and the part of the output spent thinking, and the mean per triage call (runs from 2026-10-19 on); cost only where a price is configured, otherwise "not measured". Prices can set a cached-input rate and off-peak hours (`src/ai/pricing.ts`); recordings without call times are priced at peak, an upper bound |
 | Telemetry | The run's own `llm_telemetry` and `pipeline_events`, summarized by the same code as `pnpm telemetry:report` (results from before Phase 4 do not have it). Run details carry each article's trace ID. |
 
 Suggestion quality (relevance, usefulness, actionability) needs the owner's ratings and is **not measured** yet.
