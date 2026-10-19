@@ -183,6 +183,10 @@ describe('Web UI renders untrusted text as text', () => {
         await waitFor(() => doc().querySelectorAll('.project-item').length === 3, 'the project list');
         expect(injected()).toEqual(clean);
         expect(doc().body.textContent).toContain('Alfa <img src=x');
+        // Each card names the suggested note (as text) and says accepting saves to suggestions.md, not into the note
+        const card = doc().querySelector('.suggestion-card')!;
+        expect(card.querySelector('.suggested-note')!.textContent).toContain('<img src=x');
+        expect(card.querySelector('.saved-to')!.textContent).toContain('suggestions.md');
         // The javascript: URI never becomes a link
         const links = [...doc().querySelectorAll('.suggestion-card a')].map(a => a.getAttribute('href'));
         expect(links.every(href => /^https?:/.test(href!))).toBe(true);

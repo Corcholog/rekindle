@@ -386,7 +386,7 @@ erDiagram
    - Unique composite index on `(content_id, project_snapshot_id, consumption_seq)` prevents redundant LLM evaluations.
 6. **`action_suggestions`**:
    - Concrete proposed actions generated when an evaluation is `actionable`.
-   - `target_file` is the note the LLM proposed (falling back to the closest-affinity note, then `ideas.md`). It is shown in the UI and used for staleness detection; it is **not** used for writing: accepted callouts always go to `<project>/suggestions.md`.
+   - `target_file` is the note the LLM proposed (falling back to the closest-affinity note, then `ideas.md`). It is shown in the UI ("Suggested note"), used for staleness detection, and linked from the accepted callout (`[[<project folder>/<note>|<note>]]`, by `suggestedNoteLink`, omitted when the name would break the link syntax); it is **not** where anything is written: accepted callouts always go to `<project>/suggestions.md`, and the note itself is never edited.
    - Partial btree index `action_suggestions_status_partial_idx` on `status` where `status = 'pending'`.
 7. **`llm_telemetry`**:
    - One row per provider attempt of every LLM call that passes a call context (all six: `summary`, `triage`, `consult`, `synergy`, `synthesis`, `reevaluate`), failures included: provider, model, attempt number, error kind, fallback flag, rate-limit wait, latency, tokens, estimated cost (`src/ai/pricing.ts`), prompt and answer lengths and a 16-hex prompt hash. Never prompt or answer text. Indexed on `created_at` and `trace_id`. See section 16.
@@ -439,6 +439,7 @@ Policy: **Only accepted suggestions write to the vault.**
   > [!tip] Sugerencia Aceptada: CITA DE EVIDENCIA (16/10/2026)
   > **Acción:** Integrar datos del artículo en la sección de antecedentes.
   > **Observación:** El informe aporta cifras que validan la hipótesis principal.
+  > **Nota sugerida:** [[Projects/Ensayo/antecedentes|antecedentes]]
   > **Fuente:** [Título del Artículo](https://example.com/article)
   > **Feedback:** Considerar también el contraargumento de la página 4.
   ```

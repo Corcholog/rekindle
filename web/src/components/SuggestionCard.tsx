@@ -17,7 +17,7 @@ const ACTION_TYPES = ['evidence_citation', 'counter_argument', 'unblocker', 'nar
 const HEAT_EDGE = { burning: 'border-l-ember-hot', embers: 'border-l-ember', ash: 'border-l-ash' } as const;
 
 export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: { suggestion: Suggestion; onResolved: () => void; projectIdleDays?: number | null }) {
-  const { t, apiError, locale } = useI18n();
+  const { t, tRich, apiError, locale } = useI18n();
   const [feedback, setFeedback] = useState('');
   const [reason, setReason] = useState<DiscardReason | ''>('');
   const [busy, setBusy] = useState(false);
@@ -32,7 +32,9 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
     : s.status === 'discarded' ? (s.targetFile === 'discarded' ? t('sug.discardedByFilter') : t('sug.discarded'))
       : s.status === 'accepted' ? t('sug.accepted')
         : ACTION_TYPES.includes(s.actionType) ? t(`action.${s.actionType}`) : s.actionType;
-  const target = s.targetFile && !['discarded', 'tentative', 'unknown'].includes(s.targetFile) ? s.targetFile : 'suggestions.md';
+  // The note the model says this belongs in; tentative items have none. Accepting never edits it:
+  // the suggestion is appended to the project's suggestions.md, with a link to this note
+  const note = s.targetFile && !['discarded', 'tentative', 'unknown', 'suggestions.md'].includes(s.targetFile) ? s.targetFile : null;
   // Verdicts differ by shape: actionable is a lit chip, tentative a smouldering outline
   const chipStyle = s.status === 'tentative' ? 'border border-dashed border-ember/70 text-ember'
     : s.status === 'discarded' ? 'text-ink-3'
@@ -117,10 +119,12 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
       )}
 
       <dl className="mt-4 grid gap-1 text-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <dt className="text-ink-3">{s.status === 'accepted' ? t('sug.integratedIn') : t('sug.suggestedTarget')}</dt>
-          <dd className="flex items-center gap-1 text-ink"><FileText size={14} aria-hidden="true" /><code>{target}</code></dd>
-        </div>
+        {note && (
+          <div className="flex flex-wrap items-center gap-2">
+            <dt className="text-ink-3">{t('sug.suggestedNote')}</dt>
+            <dd className="suggested-note flex items-center gap-1 text-ink"><FileText size={14} aria-hidden="true" /><code>{note}</code></dd>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <dt className="text-ink-3">{t('sug.source')}</dt>
           <dd className="min-w-0">
@@ -130,6 +134,11 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
           </dd>
         </div>
       </dl>
+      {s.status !== 'discarded' && (
+        <p className="saved-to mt-2 text-xs text-ink-3">
+          {tRich(s.status === 'accepted' ? 'sug.writtenTo' : s.status === 'tentative' ? 'sug.savedOnIntegrate' : 'sug.savedOnAccept', { file: <code>suggestions.md</code> })}
+        </p>
+      )}
 
       <details className="mt-3 text-sm" onToggle={e => (e.currentTarget as HTMLDetailsElement).open && loadReasoning()}>
         <summary className="cursor-pointer text-ink-2 hover:text-ink">{t('sug.showMore')}</summary>
