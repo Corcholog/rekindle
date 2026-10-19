@@ -64,6 +64,7 @@ loom/
 │  │  ├─ aiProvider.ts                AI facade: structured completions via the provider chain, local embeddings
 │  │  ├─ chain.ts                     Ordered provider chain (LLM_PROVIDERS), one retry on malformed output
 │  │  ├─ types.ts                     ChatProvider interface, error kinds, JSON parsing/validation
+│  │  ├─ pricing.ts                   List prices for cost estimates (shared with evals)
 │  │  └─ providers/                   deepseek.ts, gemini.ts, ollama.ts
 │  ├─ api/
 │  │  ├─ server.ts                    Fastify app setup, error handler, lifecycle hooks, boot writeback recovery
@@ -93,6 +94,12 @@ loom/
 │  │  ├─ sanitize.ts                  Neutralizes active markdown in model text before vault writes
 │  │  ├─ generatedNotes.ts            Explicitly saved synergy notes and briefs (never overwrite)
 │  │  └─ watcher.ts                   Chokidar live filesystem watcher with debounce
+│  ├─ observability/
+│  │  ├─ logger.ts                    Redacting pino logger (no text, URLs or error messages)
+│  │  ├─ llmTelemetry.ts              One llm_telemetry row per provider attempt
+│  │  ├─ pipeline.ts                  Trace IDs and pipeline_events (stage timing, retrieval)
+│  │  ├─ report.ts / trace.ts         telemetry:report / telemetry:trace / prune
+│  │  └─ cli.ts                       pnpm telemetry:* entry point
 │  ├─ net/
 │  │  └─ safeFetch.ts                 Public-internet-only page fetch (DNS-checked IPs, redirects, 5 MB cap)
 │  └─ workers/
@@ -211,7 +218,8 @@ Loom reads configuration through `src/config.ts`, which validates `process.env` 
 | `GEMINI_MODEL` | `string?` | *optional* | Overrides `CHAT_MODEL` (read directly from `process.env`). |
 | `GEMINI_API_KEY` | `string?` | *optional* | Google AI Studio API key. If omitted, every LLM call runs locally on Ollama. |
 | `VAULT_PATH` | `string?` | *optional* | Absolute or relative path to the root of the Obsidian vault. `pnpm start/dev` default to `./demo_vault`; the UI can rewrite it in `.env`. |
-| `LOG_LEVEL` | `string?` | `'warn'` | Fastify log level (read directly from `process.env`). |
+| `LOG_LEVEL` | `string?` | `'info'` (`'silent'` under `NODE_ENV=test`) | Level of the server's structured logger, shared with Fastify (read directly from `process.env`). |
+| `LOG_FORMAT` | `string?` | `'pretty'` (`'json'` under `NODE_ENV=production`) | `pretty` prints one readable line per record; `json` prints raw pino JSON lines. |
 
 ### Semantic Engine Constants (`src/config.ts`)
 - `PROJECT_DIR_NAMES = ['Projects', 'Proyectos']`: Recognised top-level vault project directories.
@@ -238,6 +246,8 @@ erDiagram
   projects ||--o{ action_suggestions : "targets"
   contents ||--o{ action_suggestions : "references"
   action_suggestions ||--o{ llm_telemetry : "telemetry"
+  contents ||--o{ pipeline_events : "traced by"
+  pipeline_events ||--o{ evaluations : "retrieval selected"
 
   contents {
     uuid id PK
@@ -250,6 +260,7 @@ erDiagram
     text embedding_model
     integer consumption_seq
     ingest_status ingest_status
+    uuid trace_id
     timestamp consumed_at
   }
 
@@ -294,6 +305,8 @@ erDiagram
     real confidence_score
     text triage_reasoning
     integer consumption_seq
+    uuid trace_id
+    uuid retrieval_event_id FK
     timestamp evaluated_at
   }
 
@@ -315,10 +328,34 @@ erDiagram
   llm_telemetry {
     uuid id PK
     telemetry_component component
+    uuid trace_id
+    uuid content_id FK
+    uuid snapshot_id FK
     uuid suggestion_id FK
+    text provider
     text model_name
-    integer latency_ms
+    integer attempt_no
     boolean is_success
+    text error_kind
+    boolean is_fallback
+    integer latency_ms
+    integer prompt_tokens
+    integer completion_tokens
+    real cost_usd
+    varchar_16 prompt_hash
+  }
+
+  pipeline_events {
+    uuid id PK
+    uuid trace_id
+    pipeline_stage stage
+    uuid content_id FK
+    uuid snapshot_id FK
+    integer duration_ms
+    boolean ok
+    text error_kind
+    integer attempt
+    jsonb attrs
   }
 ```
 
@@ -347,7 +384,9 @@ erDiagram
    - `target_file` is the note the LLM proposed (falling back to the closest-affinity note, then `ideas.md`). It is shown in the UI and used for staleness detection; it is **not** used for writing: accepted callouts always go to `<project>/suggestions.md`.
    - Partial btree index `action_suggestions_status_partial_idx` on `status` where `status = 'pending'`.
 7. **`llm_telemetry`**:
-   - Currently written only for the evaluator's triage call, and only on success (model name and latency). Token, cost and error columns exist but are not populated yet (Phase 4).
+   - One row per provider attempt of every LLM call that passes a call context (all six: `summary`, `triage`, `consult`, `synergy`, `synthesis`, `reevaluate`), failures included: provider, model, attempt number, error kind, fallback flag, rate-limit wait, latency, tokens, estimated cost (`src/ai/pricing.ts`), prompt and answer lengths and a 16-hex prompt hash. Never prompt or answer text. Indexed on `created_at` and `trace_id`. See section 16.
+8. **`pipeline_events`**:
+   - One row per pipeline stage of a trace (`fetch`, `extract`, `summarize`, `embed`, `ingest_job`, `retrieve`, `evaluate`, `evaluate_job`) with duration, outcome, error kind, pg-boss attempt and `attrs` (IDs, counts, lengths, distances). `evaluations.retrieval_event_id` points at the `retrieve` event that selected the project (set null if that event is pruned). Indexed on `created_at` and `trace_id`.
 
 ---
 
@@ -501,7 +540,7 @@ For each candidate project under the 0.6 cutoff:
 3. **Target File Resolution**: If the LLM specifies `targetFile`, it is stored as-is (not validated against the project's notes); otherwise it falls back to `matchedNotePath`, or finally `ideas.md`.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Loom automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
 5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`).
-6. **Failure handling** — **Known issue:** an LLM error for one project is logged and skipped; the job still completes, so it is not retried and no failure is recorded in telemetry.
+6. **Failure handling** — **Known issue:** an LLM error for one project is skipped and the job still completes, so it is not retried. The failure is recorded (a failed `evaluate` event, the failed LLM attempts, and `failures` on the `evaluate_job` event), so `telemetry:report` shows it.
 7. **Embedding model**: only embeddings produced by the current `EMBED_MODEL` are compared; contents and snapshots from another model are skipped until re-embedded (invariant I7).
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
@@ -664,6 +703,9 @@ pnpm test:coverage         # Same, with v8 line/branch coverage for src/
 pnpm run db:generate       # Generate a migration after editing src/db/schema.ts
 pnpm run db:migrate        # Apply Drizzle migrations to PostgreSQL
 pnpm run db:reset          # Drop schemas and re-migrate (destructive)
+pnpm telemetry:report      # Latency, failure/fallback rates and cost over a period (--since 7d)
+pnpm telemetry:trace <id>  # One suggestion or content back through retrieval and ingestion
+pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline events
 ```
 
 ### Automated Test Suites (`tests/`)
@@ -674,6 +716,7 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
   - `tests/request_guard.test.ts`, `tests/safe_fetch.test.ts`: Host/Origin guard and SSRF protection (local HTTP servers).
   - `tests/vault_sanitize.test.ts`, `tests/generated_notes.test.ts`, `tests/env_writer.test.ts`: vault-write sanitization, generated notes, `.env` writer.
   - `tests/invariants.test.ts`: invariants I2, I3 and I4 with mocked LLM SDKs.
+  - `tests/logger_redaction.test.ts`: the structured logger censors text-like fields and error messages.
 - **Integration Tests (Require Docker / Testcontainers; most also need a local Ollama with `bge-m3` and `qwen2.5:7b-instruct`)**:
   - `tests/db.test.ts`: Database schema validation, pgvector HNSW cosine KNN operations.
   - `tests/evaluation.test.ts` & `tests/ingestion.test.ts`: Worker pipeline tests.
@@ -684,8 +727,10 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
   - `tests/reingest_idempotency.test.ts`, `tests/embedding_model.test.ts`: invariants I6 and I7.
   - `tests/error_responses.test.ts`: 500 responses do not leak internal errors.
   - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks.
-  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Requires a real `GEMINI_API_KEY`; skipped otherwise.
-- There is no fake LLM provider yet, so AI behavior is only tested against live models (Phase 5).
+  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`LOOM_LIVE_TESTS=1`); skipped otherwise.
+  - `tests/pipeline_trace.test.ts`: Phase 4 acceptance. The real ingest route, queue and workers with stubbed models and fetch: one trace links a suggestion to its content and retrieval event, and a sentinel planted in notes, articles, model output, error messages and URLs never reaches the logs or the telemetry tables.
+  - `tests/observability_schema.test.ts`, `tests/llm_telemetry.test.ts`, `tests/telemetry_report.test.ts`: migration 0006, per-attempt telemetry rows, and the report math on hand-built rows.
+- Under Vitest the default `DATABASE_URL` points at a closed port and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`.
 
 ---
 
@@ -693,7 +738,18 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
 
 `pnpm eval run <dataset> --config <file>` measures retrieval and triage quality. It starts a throwaway Postgres, reconciles the dataset's vault with the real reconciler, summarizes and embeds each labeled article, runs `retrieveCandidates` and `evaluateContentMatch`, and compares the verdicts with the owner's `labels.yaml`. Embeddings, summaries and LLM answers are cached per dataset, so a recorded dataset replays offline and deterministically (`--replay`). The runner swaps in its record/replay layer through `AiProvider.setOverrides()`; production code paths are otherwise unchanged. See `evals/README.md` for the workflow, the metrics and the privacy rules. Real notes and labels live only in the git-ignored `evals/private/`. Each run also writes `<dataset>/runs/<config>.json` (summaries, retrieval distances and every model's verdict, reasoning and suggested action); `pnpm eval:review <dataset>` serves a local page (127.0.0.1, same Host/Origin guard as the API) that shows those answers next to the owner's labels, saves corrections to `labels.yaml` and re-scores live with the same `scoreRun` function the runner uses.
 
-## 16. Known Considerations & Future Roadmap
+## 16. Observability (`src/observability/`)
+
+Model behavior is measured from IDs, counts, lengths, hashes and durations; note text, article text, prompts, model output and URLs are never logged or stored in telemetry.
+
+- **Trace ID.** `POST /api/ingest` starts a trace for each ingestion it enqueues and stores it on the content. It travels in the `ingest_url` and `evaluate_content` job payloads, so one trace covers fetch → extract → summarize → embed → retrieve → triage → suggestion. Backlog evaluations (from the reconciler), direct evaluations and re-evaluations start their own trace (`origin` in the `evaluate_job` event).
+- **Stages** (`pipeline.ts`): `recordStage` / `timeStage` write `pipeline_events`. The `retrieve` event keeps the threshold, the limit, how many projects were within the threshold before the limit, and each candidate's rank, project, snapshot, note snapshot, level and distance. Each `evaluate` event (one per candidate) records verdict, confidence and the evaluation and suggestion IDs; failures record an error kind such as `llm_chain` or `ProviderError`'s kind.
+- **LLM calls** (`llmTelemetry.ts`): `AiProvider.evaluateContent(system, user, schema, options, ctx)` writes one `llm_telemetry` row per attempt when a context is given, including the attempts of a call that threw. Rows written for a triage call are linked to the suggestion it produced. Telemetry write errors are logged and never fail the pipeline.
+- **Logs** (`logger.ts`): one pino logger for the workers, evaluator, vault code and Fastify (per-request logging off: request URLs can carry search text). Keys such as `text`, `prompt`, `summary`, `url`, `title`, `notePath`, `message` and `stack` are censored at any depth; errors keep only `{type, kind, status, code}`. Folder and note paths appear as a 10-hex `pathKey` hash.
+- **Commands** (`report.ts`, `trace.ts`, `cli.ts`): `pnpm telemetry:report [--since 7d] [--json]`, `pnpm telemetry:trace <suggestionId|contentId>` and `pnpm telemetry:prune --older-than <N>d` (no default age; nothing is pruned automatically). Calls are counted by their first attempt; latency is that of the answering attempt; p50/p95 use `percentile_cont`.
+- **Evals.** The harness runs the real pipeline on its own database, so each eval result carries a `telemetry` block built by the same report code, and each article in the run details carries its trace ID.
+
+## 17. Known Considerations & Future Roadmap
 
 | Area | Current Behavior | Future Consideration |
 |---|---|---|

@@ -46,6 +46,7 @@ A dataset is a directory:
 | Target note | Share of labeled `actionable` pairs where the suggestion named the right note |
 | Reliability | Malformed model outputs, fallbacks to another provider, failed calls |
 | Latency, tokens, USD | p50/p95 per call; cost only where a price is configured, otherwise "not measured" |
+| Telemetry | The run's own `llm_telemetry` and `pipeline_events`, summarized by the same code as `pnpm telemetry:report` (results from before Phase 4 do not have it). Run details carry each article's trace ID. |
 
 Suggestion quality (relevance, usefulness, actionability) needs the owner's ratings and is **not measured** yet.
 

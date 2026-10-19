@@ -90,6 +90,24 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 
 - **Open question from the owner (for the deeper analysis):** «Que vea cosas donde el usuario no, es importante, pero tampoco debe forzar conexiones (el tentativo muchas veces fuerza conexiones, aunque a veces hay irrelevantes para LLM que uno puede buscar conexión)». In English: the model should notice connections the user would miss, but must not force them. `tentative` often forces a link, yet some pairs the model calls irrelevant are ones a person could still find a connection in. What this means for the `tentative` label, for the prompt, and for what a rank cutoff throws away (the pairs ranked 4th or lower) has not been analyzed yet.
 
+### 2026-10-18 — Phase 4: AI observability
+- **Context:** Telemetry only recorded successful triage calls (model and latency). Retries, fallbacks, failures, tokens and cost were dropped, five of the six LLM features recorded nothing, and nothing linked a suggestion to the retrieval step that produced it. About 60 `console` calls printed article URLs, project titles, note paths and full error objects; an error message can quote model output.
+- **What happened:**
+  - Migration `0006` adds `pipeline_events` (one row per stage of a trace) and per-attempt columns on `llm_telemetry` (provider, attempt, error kind, fallback, wait, lengths, prompt hash). Evaluations store their trace and the retrieval event that selected them.
+  - A trace ID starts at each ingestion and travels in the job payloads. Stages recorded: fetch, extract, summarize, embed, ingest job, retrieve (threshold, limit, the projects within the threshold before the limit, each candidate's rank and distance), one evaluate event per candidate, and the evaluation job.
+  - `AiProvider.evaluateContent` takes a call context and writes one row per provider attempt, failures included, for all six LLM features. Cost uses a shared price table (`src/ai/pricing.ts`): DeepSeek at its peak list price (an upper bound), Ollama $0, Gemini "not priced" because a free and a paid key look the same.
+  - Every `console` call in `src/` (except the migrate/reset CLIs) goes through one redacting pino logger, also used by Fastify with per-request logs off.
+  - New commands: `pnpm telemetry:report`, `pnpm telemetry:trace`, `pnpm telemetry:prune` (needs an explicit age; nothing prunes automatically). Eval results now include the run's own telemetry, and run details include each article's trace ID.
+- **Owner decisions:** one row per attempt (not per call), replace all `console` logging, CLI only (no UI page), manual prune.
+- **Alternatives considered:** one telemetry row per call with attempts in jsonb (fallback and malformed rates would need jsonb queries); an `Observabilidad` UI page (more surface for the same numbers); automatic pruning at boot (deletes data without the owner asking).
+- **Evidence:** commits `2dffd5e`…`a43f72d`; `tests/pipeline_trace.test.ts` (acceptance), `tests/telemetry_report.test.ts`, `tests/llm_telemetry.test.ts`, `tests/logger_redaction.test.ts`.
+- **Outcome / lesson:**
+  - The roadmap's three acceptance criteria are covered by tests: `telemetry:trace` leads from a suggestion to its content and retrieval event; the report shows latency, fallback rate, failure rate and cost over a period; and a sentinel planted in notes, articles, summaries, model output, error messages and URLs never reaches the logs or the telemetry tables, at debug level, including failure paths. A mutation check confirmed the test fails if a URL is logged.
+  - Production numbers on the owner's real use are **not measured** yet: they need some days of normal use followed by `pnpm telemetry:report`.
+  - **Incident:** while writing the telemetry test I ran it once on its own before it was correct. It imported a module that reaches `src/db` before stubbing the Testcontainers URL, so it used the development database from `.env`. It applied migration `0006` there (the same additive migration the owner would apply) and inserted 3 fake `llm_telemetry` rows, which the owner deleted. Fix: the test imports the module only after the stub, and `vitest.config.ts` now sets the default `DATABASE_URL` to a closed port, so a test making that mistake fails instead of writing anywhere. The full suite caught the next attempt.
+  - node-postgres sends a JS `Date` in raw SQL as local time, while `timestamp` columns hold UTC (drizzle and `now()`). On this UTC−3 machine the report's time window would have been shifted by three hours. Caught while writing the report; time filters are sent as UTC ISO strings. No other raw SQL in `src/` passes a `Date`.
+  - Partly closes audit F-09: evaluator LLM failures are now recorded, though still not retried. Closes F-27 (`console` logging without correlation).
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -106,6 +124,9 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | F-17 | Embedding model not tracked on snapshots or enforced in distance queries (invariant I7) | Phase 0 audit | Medium | `cbaf4a2` | `tests/embedding_model.test.ts` |
 | F-22 | Docker Postgres published on all interfaces with the default password | Phase 0 audit | Medium | `c1d543a` | not testable in the suite (config); verified with `docker compose config` |
 | F-26 | 500 responses returned internal error text (provider errors, hosts) | Phase 0 audit | Low | `38f49dd` | `tests/error_responses.test.ts` |
+| F-27 | Logs printed article URLs, project titles, note paths and raw error objects, with no way to correlate lines of one job | Phase 0 audit | Low | `b4e2fd8`, `5c5013c`, `72e6cc8` | `tests/logger_redaction.test.ts`, `tests/pipeline_trace.test.ts` |
+| F-09 (partial) | Evaluator LLM failures were swallowed with no telemetry (still not retried) | Phase 0 audit | Medium | `599685c`, `72e6cc8` | `tests/pipeline_trace.test.ts` (failure path), `tests/llm_telemetry.test.ts` |
+| — | A test could bind the DB pool to the development database by importing `src/db` before stubbing its container URL; it did once (3 fake rows, deleted by the owner) | Full test run after adding the guard | Medium (process) | `0efbec4` | every DB test now fails against the closed default port if it forgets the stub |
 
 ## Dead code and legacy removed
 
@@ -143,6 +164,8 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-18 | Send only the 3 closest projects to the LLM (replay) | LLM calls / DeepSeek macro-F1 / `actionable` recall / triage cost | 215 / 0.74 / 97% / about $0.18 | 118 / 0.79 / 87% / about $0.11 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3.json --replay` |
 | 2026-10-18 | DeepSeek spend | Estimated list-price cost, 215 triage calls | not measured | about $0.18 (summaries about $0.06 more) | token counts in the result files; not a billed amount |
 | 2026-10-18 | Phase 3 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 123 / 1 | 186 / 2 | `pnpm test:coverage`; lines 84.06% → 85.28% |
+| 2026-10-18 | Phase 4 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 186 / 2 | 210 / 2 | `pnpm test:coverage`; lines 85.28% → 86.44% (branches 71.84%, functions 84.53%) |
+| 2026-10-18 | Phase 4 | LLM calls with telemetry (of 6 call sites) / attempts recorded on failure | 1 (triage, success only) / no | 6 / yes | `grep -n "component: '" src`; `tests/llm_telemetry.test.ts` |
 | 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |
 
 ## Dead ends and things that did not work

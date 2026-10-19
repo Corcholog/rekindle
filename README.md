@@ -85,7 +85,8 @@ cp .env.example .env
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | – / `deepseek-flash` | Enables DeepSeek when listed in `LLM_PROVIDERS`. Thinking mode is requested off. |
 | `GEMINI_API_KEY` | – | Enables Gemini. Leave empty for 100% local operation. |
 | `VAULT_PATH` | `./demo_vault` (via `pnpm start/dev`) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |
-| `LOG_LEVEL` | `warn` | Fastify log level. |
+| `LOG_LEVEL` | `info` | Server log level (structured logs shared with Fastify). |
+| `LOG_FORMAT` | `pretty` | `pretty` for one readable line per record, `json` for raw JSON lines (default in production). |
 
 ### 2. Install and migrate
 
@@ -142,6 +143,9 @@ With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), t
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |
+| `pnpm telemetry:report --since 7d` | Per-stage latency, LLM failure / fallback / malformed rates, tokens and estimated cost for a period |
+| `pnpm telemetry:trace <suggestionId\|contentId>` | Follows a suggestion back to its content, the retrieval step that selected it, every stage and every LLM attempt |
+| `pnpm telemetry:prune --older-than 90d` | ⚠️ Deletes telemetry rows and pipeline events older than the given age (never runs automatically) |
 
 ---
 
@@ -193,6 +197,10 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 
 DeepSeek leading is why the default chain is `deepseek,gemini,ollama`. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
 
+## Observability
+
+Every ingestion starts a trace that follows the article through fetch, extraction, summary, embedding, retrieval and triage to its suggestions. Each stage and each LLM attempt (provider, retries, fallbacks, errors, tokens, estimated cost) is stored in Postgres, and `pnpm telemetry:report` and `pnpm telemetry:trace` read it back. Logs and telemetry hold IDs, counts, lengths, hashes and durations only: no note text, article text, prompt, model output or URL (`tests/pipeline_trace.test.ts` checks this with planted sentinel strings). Production latency, failure and cost figures on the owner's real use are **not measured** yet. See [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-observability-srcobservability).
+
 ## Security model
 
 Loom is a single-user, local-only tool:
@@ -206,7 +214,7 @@ Loom is a single-user, local-only tool:
 - **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: only the 3 closest projects now reach the LLM (`TOP_K_PROJECTS_LIMIT = 3`), which cut calls by 45% and keeps 86% of the relevant pairs, but 1 in 8 relevant pairs is never evaluated.
 - **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.18–0.38 and the right target note is chosen in 32–42% of cases (small samples: 20 and 19 pairs).
 - **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts and target notes are scored, against one person's labels.
-- **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the error is logged and that pair is skipped until the project changes.
+- **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the failure is recorded (`telemetry:report` shows it) and that pair is skipped until the project changes.
 - **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
 - **Synergies may include deleted notes**, because they compare notes from older project snapshots too.
 - **The extension can send a queued clip twice** when two sync triggers fire at once. Re-ingesting is harmless; it no longer creates duplicate suggestions.

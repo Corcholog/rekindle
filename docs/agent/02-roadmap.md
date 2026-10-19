@@ -8,7 +8,7 @@ Order rationale: less code first (cleanup) makes every later step cheaper; secur
 - [x] **Phase 1 — Cleanup: dead code and legacy**
 - [x] **Phase 2 — Fix Critical and High findings**
 - [x] **Phase 3 — Evaluation harness**
-- [ ] **Phase 4 — AI observability**
+- [x] **Phase 4 — AI observability**
 - [ ] **Phase 5 — CI, integration and failure-scenario tests, threat model**
 - [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test**
 - [ ] **Phase 7 — Publication package**
