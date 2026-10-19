@@ -134,6 +134,23 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - DeepSeek spend so far, at list price: about $0.36 of the $2 credit (estimate from token counts, not a billed amount).
   - The run's output exposed a logging bug: a log field named `level` (note- or project-level match) repeated pino's own `level` key, so those lines parsed with the level `note`. Log fields that collide with pino's keys are now renamed, and the eval CLI only shows warnings from the pipeline.
 
+### 2026-10-19 — Phase 6: reproducibility, demo and user-test workflow (code and docs done; recording and testers pending)
+- **Context:** someone else should be able to run Loom and judge it. The demo vault was one project with one 152-byte note, `start.sh` kept going after a failed migration, and the README had never been followed from a clean clone.
+- **What happened:**
+  - Replaced the demo vault with four synthetic Spanish projects (a lighthouse novel, an essay on attention, a board game, a podcast on urban history; 15 notes, one nested folder) and a list of nine public Spanish Wikipedia articles to try, two of them controls (`4c01141`).
+  - `tests/first_suggestion.test.ts` runs the README path offline: demo vault indexed, article ingested and evaluated, one pending suggestion, nothing in the vault until accepted, one callout after accepting, no suggestion for the control article (`3ff5bad`).
+  - `pnpm preflight` checks Node, `.env`, Postgres, migrations, Ollama and its models, the vault and the active providers, and prints the fix command for each problem; `start.sh` and `start.bat` run it and stop on a failed migration (`13a2715`). The script is not called `doctor` because pnpm already has a built-in `pnpm doctor` that silently ran instead of mine.
+  - Discarding takes an optional reason (migration 0007, a select next to the button), so the user test can count why suggestions are rejected (`b35a5ab`). Callout dates are now `dd/mm/yyyy` whatever the machine locale (`2439d98`).
+  - `pnpm usertest:stats` prints counts only (acceptance rate, discard reasons, time to the first suggestion) from the tester's own database (`90ec0e5`). `docs/USER_TEST.md` defines the session and `docs/DEMO.md` the shot list (`cd56cd5`).
+  - Followed the README in a fresh clone of the committed code, with its own Postgres volume and only local models (no cloud key), then deleted that throwaway setup. It found two problems: `./start.sh` was not executable in git, and trying the demo left an untracked `suggestions.md` in the repository (now git-ignored).
+- **Alternatives considered:** a full `docker compose up` that also runs the app and Ollama (about 6 GB of downloads, and Ollama on CPU in Docker makes the local model slow); reason chips instead of a select (more UI for the same data); computing time to the first accepted suggestion from the database (not reliable, see below).
+- **Evidence:** commits above; the clean-clone run: 9 articles produced 1 `actionable`, 5 `tentative` and no suggestion on the two controls, with `qwen2.5:7b-instruct` only. The first suggestion appeared 201 s after the first demo clip. One run on one Linux machine: not a benchmark.
+- **Outcome / lesson:**
+  - Time to the first accepted suggestion is not taken from the database: `resolved_at` is written by Node and `created_at` by the database clock, and they differ by the machine's UTC offset. The user test takes that time with a stopwatch.
+  - The clean-clone server also received a stray clip I did not send (presumably the browser extension's offline queue). It was processed locally into the throwaway database. Anyone running a second instance next to a real one should expect that.
+  - One of the 267 tests failed in each of two files during the first coverage run, while the clean-clone server and Ollama were busy on the same machine; both pass alone and in two further full runs. Not reproduced, so not diagnosed.
+  - Still open for the owner: recording the demo, running 3 to 5 user sessions, and trying `start.bat` on Windows. The README says "not measured" for real-user results and "not tested" for Windows.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -159,6 +176,9 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | — | An interrupted evaluation could leave an actionable evaluation without its suggestion; every retry skipped the pair | Writing failure scenario 3 | Medium | `7beb8f3` | `tests/failure_jobs.test.ts` (fails on the old code) |
 | — | `singletonKey` on job sends never de-duplicated (pg-boss standard-policy queues); duplicates were harmless only because handlers are idempotent | Checked while writing scenario 3 | Low | `ff2f275` | `tests/failure_jobs.test.ts` (duplicate and concurrent runs) |
 | — | A test could bind the DB pool to the development database by importing `src/db` before stubbing its container URL; it did once (3 fake rows, deleted by the owner) | Full test run after adding the guard | Medium (process) | `0efbec4` | every DB test now fails against the closed default port if it forgets the stub |
+| — | `./start.sh` and `./reset_db.sh` were not executable in git, so the README's first command failed on a fresh clone | Following the README in a clean clone | Low | `cd56cd5` | not testable in the suite; verified with `git ls-files -s` |
+| — | `start.sh` and `start.bat` kept going after a failed migration | Phase 6 review of the scripts | Low | `13a2715` | none (shell scripts); `pnpm preflight` catches the resulting missing schema (`tests/doctor.test.ts`) |
+| — | Accepted callouts used the machine locale for the date (`10/18/2026` in a Spanish vault) | Owner noticed in Phase 5 | Low | `2439d98` | `tests/vault_sanitize.test.ts` (callout date) |
 
 ## Dead code and legacy removed
 
@@ -204,6 +224,10 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-18 | Target-note validation (replay, top-3 configs) | Target-note accuracy, Gemini / DeepSeek / Qwen | 7/19 / 8/19 / 6/19 | 9/19 / 8/19 / 6/19 | `pnpm eval run evals/private --config evals/configs/<config>-top3.json --replay` at `d3d2955`; result files `*d3d2955*` |
 | 2026-10-18 | Phase 4 | LLM calls with telemetry (of 6 call sites) / attempts recorded on failure | 1 (triage, success only) / no | 6 / yes | `grep -n "component: '" src`; `tests/llm_telemetry.test.ts` |
 | 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |
+| 2026-10-19 | Phase 6 demo vault | Projects / notes in `demo_vault/` | 1 / 1 | 4 / 15 | `find demo_vault -name '*.md'` |
+| 2026-10-19 | Phase 6 tests | Tests passed / skipped / line coverage | 242 / 4 / 88.37% | 267 / 4 / 88.33% (branches 75.96%) | `pnpm test:coverage` (no Ollama, no keys) |
+| 2026-10-19 | Phase 6 clean-clone run (one run, local qwen2.5:7b-instruct only) | Seconds from first clip to first suggestion / suggestions from 9 demo articles | not measured | 201 s / 1 actionable, 5 tentative, 0 on the 2 controls | steps in `docs/DEMO.md` and `demo_vault/ARTICULOS_DEMO.md`; `pnpm usertest:stats` |
+| 2026-10-19 | Phase 6 user test | Testers run, acceptance rate, rejection reasons | not measured | not measured | `docs/USER_TEST.md` |
 
 ## Dead ends and things that did not work
 

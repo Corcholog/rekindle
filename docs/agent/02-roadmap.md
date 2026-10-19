@@ -10,7 +10,7 @@ Order rationale: less code first (cleanup) makes every later step cheaper; secur
 - [x] **Phase 3 — Evaluation harness**
 - [x] **Phase 4 — AI observability**
 - [x] **Phase 5 — CI, integration and failure-scenario tests, threat model**
-- [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test**
+- [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test** (code and docs done 2026-10-19; open: demo recording, user sessions, Windows check)
 - [ ] **Phase 7 — Publication package**
 - [ ] **Optional — Evidence-driven improvements** (only if Phase 3 shows the need)
 
