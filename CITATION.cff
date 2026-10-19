@@ -11,8 +11,9 @@ authors:
     family-names: "Loguercio"
     alias: "Corcholog"
     email: "loguerciogiorgioivan@gmail.com"
-    website: "https://github.com/Corcholog"
+    website: "https://www.linkedin.com/in/corcho-log/"
 repository-code: "https://github.com/Corcholog/rekindle"
+url: "https://github.com/Corcholog/rekindle"
 license: Apache-2.0
 keywords:
   - obsidian

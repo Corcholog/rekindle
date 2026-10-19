@@ -319,4 +319,4 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 
 Rekindle is released under the [Apache License 2.0](LICENSE). You may use, modify and redistribute it, including commercially; redistributions and derivative works must keep the [`NOTICE`](NOTICE) file, which credits the author. To cite Rekindle, use GitHub's *Cite this repository* button or [`CITATION.cff`](CITATION.cff).
 
-Built by Giorgio Ivan Loguercio ([GitHub](https://github.com/Corcholog)).
+Built by Giorgio Ivan Loguercio ([GitHub](https://github.com/Corcholog) · [LinkedIn](https://www.linkedin.com/in/corcho-log/)).
