@@ -81,6 +81,8 @@ describe('Writeback idempotency and recovery', () => {
 
     const text = await fs.readFile(suggestionsFile(), 'utf-8');
     expect(text).toContain(`%% rekindle:${id} %%`);
+    // The callout links to the note the suggestion is for, by its full path inside the vault
+    expect(text).toContain('> **Nota sugerida:** [[Projects/Ensayo/ideas|ideas]]');
     expect(await countCallouts()).toBe(1);
   });
 

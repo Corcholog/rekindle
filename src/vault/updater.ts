@@ -23,7 +23,26 @@ type WritableSuggestion = {
   userFeedback: string | null;
   sourceUri: string | null;
   sourceTitle: string | null;
+  /** The note the suggestion is for, relative to the project folder (validated when the suggestion was made). */
+  targetFile?: string | null;
+  /** The project's folder, relative to the vault, so the link resolves to that exact note. */
+  folderPath?: string | null;
 };
+
+// Placeholder targets that are not notes: nothing to link to
+const NOT_A_NOTE = new Set(['discarded', 'tentative', 'unknown', 'suggestions.md']);
+
+/**
+ * An Obsidian link to the note a suggestion is for: [[Projects/X/research/combat|combat]]. Null when
+ * there is no note, or when its name holds characters that would break the link syntax.
+ */
+export function suggestedNoteLink(targetFile: string | null | undefined, folderPath?: string | null): string | null {
+  if (!targetFile || NOT_A_NOTE.has(targetFile)) return null;
+  const note = targetFile.replace(/\\/g, '/').replace(/\.md$/i, '');
+  if (!note || /[[\]|#^\r\n]/.test(note) || note.startsWith('/') || note.split('/').includes('..')) return null;
+  const full = folderPath ? `${folderPath.replace(/\/+$/, '')}/${note}` : note;
+  return `[[${full}|${note.split('/').pop()}]]`;
+}
 
 /** Local date, whatever the machine's locale: dd/mm/yyyy in Spanish, yyyy-mm-dd in English. */
 export function formatCalloutDate(date: Date, lang: Language = 'es'): string {
@@ -59,6 +78,8 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
   let callout = `\n\n> [!tip] ${text.calloutTitle}: ${typeLabel} (${formatCalloutDate(date, lang)})\n`;
   callout += prefixLines(text.calloutAction, sug.suggestedAction);
   callout += prefixLines(text.calloutObservation, sug.observation);
+  const noteLink = suggestedNoteLink(sug.targetFile, sug.folderPath);
+  if (noteLink) callout += `> **${text.calloutNote}:** ${noteLink}\n`;
   callout += `> **${text.calloutSource}:** ${link}\n`;
   if (sug.userFeedback) {
     callout += prefixLines(text.calloutFeedback, sug.userFeedback);
@@ -89,6 +110,7 @@ const writableSelection = {
   observation: actionSuggestions.observation,
   suggestedAction: actionSuggestions.suggestedAction,
   userFeedback: actionSuggestions.userFeedback,
+  targetFile: actionSuggestions.targetFile,
   sourceUri: contents.uri,
   sourceTitle: contents.title,
 };
