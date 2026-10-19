@@ -79,4 +79,14 @@ describe('helpers', () => {
     expect(estimateCostUsd({ promptTokens: 2_000_000, completionTokens: 1_000_000 }, { inputPerM: 0.3, outputPerM: 1.2 })).toBeCloseTo(1.8, 10);
     expect(estimateCostUsd(undefined, { inputPerM: 0.3, outputPerM: 1.2 })).toBe(0);
   });
+
+  it('averages tokens per call, with cache hits and thinking as parts of the totals', async () => {
+    const { tokensPerCall } = await import('../evals/runner/run');
+    expect(tokensPerCall([
+      { promptTokens: 2000, cachedPromptTokens: 1500, completionTokens: 900, reasoningTokens: 600 },
+      { promptTokens: 1000, completionTokens: 100 },
+      undefined,
+    ])).toEqual({ prompt: 1500, cachedPrompt: 750, completion: 500, reasoning: 300 });
+    expect(tokensPerCall([undefined])).toBeNull();
+  });
 });

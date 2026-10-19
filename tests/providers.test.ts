@@ -30,7 +30,7 @@ describe('DeepSeekProvider', () => {
   afterAll(async () => { await new Promise(resolve => server.close(resolve)); });
   beforeEach(() => { requests = []; replies = []; });
 
-  const completion = (content: string | null, usage = { prompt_tokens: 120, completion_tokens: 30 }) => ({
+  const completion = (content: string | null, usage: Record<string, unknown> = { prompt_tokens: 120, completion_tokens: 30 }) => ({
     status: 200,
     body: { choices: [{ message: { content } }], usage },
   });
@@ -62,6 +62,15 @@ describe('DeepSeekProvider', () => {
     await (await make()).complete('s', 'u', schema, { thinking: true });
     expect(requests[0].body.thinking).toEqual({ type: 'enabled' });
     expect(requests[0].body.temperature).toBeUndefined();
+  });
+
+  it('reports cache hits and thinking tokens as parts of the totals', async () => {
+    replies.push(completion('{"verdict":"irrelevant","score":0.1}', {
+      prompt_tokens: 2000, completion_tokens: 700, prompt_cache_hit_tokens: 1500, prompt_cache_miss_tokens: 500,
+      completion_tokens_details: { reasoning_tokens: 600 },
+    }));
+    const result = await (await make()).complete('s', 'u', schema, { thinking: true });
+    expect(result.usage).toEqual({ promptTokens: 2000, completionTokens: 700, cachedPromptTokens: 1500, reasoningTokens: 600 });
   });
 
   it('classifies failures', async () => {

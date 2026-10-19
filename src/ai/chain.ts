@@ -70,11 +70,11 @@ export async function runChain<S extends z.ZodTypeAny>(
       try {
         const { data, usage } = await provider.complete(system, user, schema, options);
         const latencyMs = Date.now() - started;
-        attempts.push({ provider: provider.name, model: provider.model, ok: true, usage, latencyMs });
+        attempts.push({ provider: provider.name, model: provider.model, ok: true, usage, latencyMs, startedAt: new Date(started).toISOString() });
         return { data, model: `${provider.name}:${provider.model}`, usage, latencyMs, attempts };
       } catch (err) {
         const kind: ErrorKind = err instanceof ProviderError ? err.kind : 'other';
-        const attempt: Attempt = { provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started };
+        const attempt: Attempt = { provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started, startedAt: new Date(started).toISOString() };
         attempts.push(attempt);
         log.warn({ provider: provider.name, model: provider.model, errorKind: kind, attempt: attempts.length, err }, 'LLM provider attempt failed');
 

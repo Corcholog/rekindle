@@ -3,6 +3,10 @@ import { z } from 'zod';
 export interface Usage {
   promptTokens?: number;
   completionTokens?: number;
+  /** Part of promptTokens served from the provider's prompt cache (billed cheaper). */
+  cachedPromptTokens?: number;
+  /** Part of completionTokens spent thinking (DeepSeek thinking mode). */
+  reasoningTokens?: number;
 }
 
 /** unavailable = the provider's servers are overloaded or down (HTTP 5xx); transient, unlike a spent quota. */
@@ -58,6 +62,8 @@ export interface Attempt {
   errorKind?: ErrorKind;
   usage?: Usage;
   latencyMs: number;
+  /** When the attempt started (ISO 8601); prices can depend on the hour. */
+  startedAt?: string;
   /** Time slept after this attempt before retrying (rate limits). */
   waitedMs?: number;
 }

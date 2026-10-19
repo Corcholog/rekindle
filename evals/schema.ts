@@ -44,9 +44,13 @@ const ProviderSpecSchema = z.object({
 });
 export type ProviderSpec = z.infer<typeof ProviderSpecSchema>;
 
+// Mirrors PriceTable in src/ai/pricing.ts
 export const PriceSchema = z.object({
   inputPerM: z.number().nonnegative(),
   outputPerM: z.number().nonnegative(),
+  cachedInputPerM: z.number().nonnegative().optional(),
+  peakHoursUtc: z.array(z.tuple([z.number().int().min(0).max(24), z.number().int().min(0).max(24)])).optional(),
+  offPeakFactor: z.number().positive().max(1).optional(),
 });
 
 const LanguageSchema = z.enum(['es', 'en']);
@@ -189,6 +193,13 @@ export const ResultSchema = z.object({
   cost: z.object({
     promptTokens: z.number(),
     completionTokens: z.number(),
+    /** Parts of the totals: prompt tokens served from the provider cache, completion tokens spent thinking. Absent before 2026-10-19. */
+    cachedPromptTokens: z.number().optional(),
+    reasoningTokens: z.number().optional(),
+    /** Mean tokens per successful triage call (summaries excluded). Absent before 2026-10-19. */
+    triageTokensPerCall: z.object({
+      prompt: z.number(), cachedPrompt: z.number(), completion: z.number(), reasoning: z.number(),
+    }).nullable().optional(),
     estimatedUsd: NullableNumber,
     note: z.string(),
   }),

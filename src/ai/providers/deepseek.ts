@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ChatProvider, Completion, CompletionOptions, ProviderError, parseModelJson, toJsonSchema } from '../types';
+import { ChatProvider, Completion, CompletionOptions, ProviderError, Usage, parseModelJson, toJsonSchema } from '../types';
 
 export interface DeepSeekOptions {
   apiKey: string;
@@ -85,9 +85,19 @@ export class DeepSeekProvider implements ChatProvider {
 
     const payload: any = await response.json().catch(() => null);
     const data = parseModelJson(payload?.choices?.[0]?.message?.content, schema);
-    const usage = payload?.usage
-      ? { promptTokens: payload.usage.prompt_tokens, completionTokens: payload.usage.completion_tokens }
-      : undefined;
-    return { data, usage };
+    return { data, usage: deepSeekUsage(payload?.usage) };
   }
+}
+
+const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+
+/** Token counts from a DeepSeek response, including cache hits and thinking tokens when reported. */
+export function deepSeekUsage(raw: any): Usage | undefined {
+  if (!raw) return undefined;
+  const usage: Usage = { promptTokens: count(raw.prompt_tokens), completionTokens: count(raw.completion_tokens) };
+  const cached = count(raw.prompt_cache_hit_tokens);
+  const reasoning = count(raw.completion_tokens_details?.reasoning_tokens);
+  if (cached !== undefined) usage.cachedPromptTokens = cached;
+  if (reasoning !== undefined) usage.reasoningTokens = reasoning;
+  return usage;
 }

@@ -82,10 +82,21 @@ describe('LLM telemetry rows (one per attempt)', () => {
   });
 
   it('prices DeepSeek at list price, Ollama at zero and leaves Gemini unpriced', () => {
+    // No time given: peak price, an upper bound
     expect(attemptCostUsd('deepseek', 'deepseek-flash', { promptTokens: 1_000_000, completionTokens: 1_000_000 })).toBeCloseTo(1.5, 10);
     expect(attemptCostUsd('ollama', 'qwen2.5:7b-instruct', { promptTokens: 5000 })).toBe(0);
     expect(attemptCostUsd('gemini', 'gemini-3.1-flash-lite', { promptTokens: 5000 })).toBeNull();
     expect(attemptCostUsd('deepseek', 'deepseek-flash', undefined)).toBeNull();
+  });
+
+  it('prices DeepSeek cache hits cheaper and halves prices off-peak', () => {
+    const usage = { promptTokens: 1_000_000, cachedPromptTokens: 800_000, completionTokens: 100_000 };
+    // 200k uncached × 0.3 + 800k cached × 0.006 + 100k × 1.2 = 0.06 + 0.0048 + 0.12
+    const peak = new Date('2026-10-19T02:30:00Z'); // Monday, 01–04 UTC
+    expect(attemptCostUsd('deepseek', 'deepseek-flash', usage, peak)).toBeCloseTo(0.1848, 10);
+    expect(attemptCostUsd('deepseek', 'deepseek-flash', usage, new Date('2026-10-19T15:00:00Z'))).toBeCloseTo(0.0924, 10);
+    expect(attemptCostUsd('deepseek', 'deepseek-flash', usage, new Date('2026-10-18T02:30:00Z'))).toBeCloseTo(0.0924, 10); // Sunday
+    expect(attemptCostUsd('deepseek', 'deepseek-flash', usage, new Date('2026-10-19T10:00:00Z'))).toBeCloseTo(0.0924, 10); // windows end at 10:00
   });
 
   // --- AiProvider writes the rows (database)

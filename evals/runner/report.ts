@@ -25,6 +25,13 @@ export function latestPerConfig(results: EvalResult[]): EvalResult[] {
 const pct = (n: number | null) => (n === null ? 'n/a' : `${(n * 100).toFixed(1)}%`);
 const num = (n: number | null) => (n === null ? 'n/a' : String(Math.round(n)));
 
+/** "in 2150 (1800 cached) / out 290 (0 thinking)"; runs recorded before 2026-10-19 lack the breakdown. */
+function perCall(r: EvalResult): string {
+  const t = r.cost.triageTokensPerCall;
+  if (!t) return 'not measured';
+  return `in ${t.prompt} (${t.cachedPrompt} cached) / out ${t.completion} (${t.reasoning} thinking)`;
+}
+
 export function renderReport(results: EvalResult[]): string {
   const latest = latestPerConfig(results);
   const datasets = [...new Set(latest.map(r => r.meta.dataset))];
@@ -58,10 +65,10 @@ export function renderReport(results: EvalResult[]): string {
       out.push(`| ${r.meta.config} | ${r.meta.mode} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} |`);
     }
     out.push('', '### Reliability, latency and cost', '');
-    out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Est. USD |');
-    out.push('|---|---|---|---|---|---|---|---|---|---|');
+    out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Tokens per triage call | Est. USD |');
+    out.push('|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
-      out.push(`| ${r.meta.config} | ${r.reliability.llmCalls} | ${r.reliability.malformedOutputs} | ${r.reliability.fallbacks} | ${r.reliability.failures} | ${r.reliability.rateLimitHits} / ${r.reliability.unavailableHits} (${Math.round(r.reliability.rateLimitWaitMs / 1000)} s) | ${num(r.reliability.latencyMsP50)} | ${num(r.reliability.latencyMsP95)} | ${r.cost.promptTokens} / ${r.cost.completionTokens} | ${r.cost.estimatedUsd === null ? 'not measured' : r.cost.estimatedUsd.toFixed(4)} |`);
+      out.push(`| ${r.meta.config} | ${r.reliability.llmCalls} | ${r.reliability.malformedOutputs} | ${r.reliability.fallbacks} | ${r.reliability.failures} | ${r.reliability.rateLimitHits} / ${r.reliability.unavailableHits} (${Math.round(r.reliability.rateLimitWaitMs / 1000)} s) | ${num(r.reliability.latencyMsP50)} | ${num(r.reliability.latencyMsP95)} | ${r.cost.promptTokens} / ${r.cost.completionTokens} | ${perCall(r)} | ${r.cost.estimatedUsd === null ? 'not measured' : r.cost.estimatedUsd.toFixed(4)} |`);
     }
     out.push('', ...rows.map(r => `- **${r.meta.config}** (commit \`${r.meta.gitSha}\`${r.meta.gitDirty ? ', dirty tree' : ''}, config \`${r.meta.configHash.slice(0, 8)}\`): ${r.cost.note}`), '');
   }
@@ -71,7 +78,7 @@ export function renderReport(results: EvalResult[]): string {
     '',
     '- The datasets are small: a single mislabeled or misjudged case moves the percentages visibly. Treat differences of a few points as noise.',
     '- Ground truth comes from one labeler. Where the labeler is `test-fixture`, there is no human judgement at all.',
-    '- Latency depends on the time of day and provider load; cost uses list prices from `evals/configs`, and providers without a price are reported as not measured.',
+    '- Latency depends on the time of day and provider load; cost uses list prices from `evals/configs`, and providers without a price are reported as not measured. Runs recorded before 2026-10-19 did not keep cache hits or call times, so their estimate prices every token as an uncached peak-hour token: an upper bound.',
     '- Suggestion quality (relevance, usefulness, actionability) is not scored automatically; it needs the owner\'s ratings and is **not measured** unless ratings are recorded.',
     '',
   );

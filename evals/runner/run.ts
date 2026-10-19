@@ -41,6 +41,17 @@ class BudgetExceededError extends Error {}
 const MALFORMED = new Set(['empty', 'invalid_json', 'schema']);
 const gitOutput = (...args: string[]) => execFileSync('git', args, { encoding: 'utf-8' }).trim();
 
+// Recordings from before call times were kept are priced at peak (an upper bound)
+const attemptTime = (attempt: Attempt) => (attempt.startedAt ? new Date(attempt.startedAt) : undefined);
+
+/** Mean token counts of the given calls, or null when none reported usage. */
+export function tokensPerCall(usages: (Attempt['usage'])[]): { prompt: number; cachedPrompt: number; completion: number; reasoning: number } | null {
+  const known = usages.filter((u): u is NonNullable<typeof u> => u !== undefined);
+  if (known.length === 0) return null;
+  const avg = (pick: (u: NonNullable<Attempt['usage']>) => number | undefined) => Math.round(known.reduce((s, u) => s + (pick(u) ?? 0), 0) / known.length);
+  return { prompt: avg(u => u.promptTokens), cachedPrompt: avg(u => u.cachedPromptTokens), completion: avg(u => u.completionTokens), reasoning: avg(u => u.reasoningTokens) };
+}
+
 export async function loadConfig(configPath: string): Promise<{ config: EvalConfig; hash: string }> {
   const config = ConfigSchema.parse(JSON.parse(await fs.readFile(configPath, 'utf-8')));
   return { config, hash: sha256(JSON.stringify(config)) };
@@ -152,7 +163,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
           });
           for (const attempt of result.attempts) {
             const p = priceOf(attempt.provider, attempt.model);
-            if (p) spentUsd += estimateCostUsd(attempt.usage, p);
+            if (p) spentUsd += estimateCostUsd(attempt.usage, p, attemptTime(attempt));
           }
           sink.push({ phase, ok: true, attempts: result.attempts, latencyMs: result.latencyMs, generated: true });
           if (options.mode === 'record') {
@@ -277,7 +288,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     for (const attempt of allAttempts) {
       if (!attempt.usage) continue;
       const price = priceOf(attempt.provider, attempt.model);
-      if (price) estimatedUsd += estimateCostUsd(attempt.usage, price);
+      if (price) estimatedUsd += estimateCostUsd(attempt.usage, price, attemptTime(attempt));
       else unpriced.add(`${attempt.provider}:${attempt.model}`);
     }
     const generatedCalls = sink.filter(e => e.generated).length;
@@ -317,6 +328,9 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       cost: {
         promptTokens: allAttempts.reduce((s, a) => s + (a.usage?.promptTokens ?? 0), 0),
         completionTokens: allAttempts.reduce((s, a) => s + (a.usage?.completionTokens ?? 0), 0),
+        cachedPromptTokens: allAttempts.reduce((s, a) => s + (a.usage?.cachedPromptTokens ?? 0), 0),
+        reasoningTokens: allAttempts.reduce((s, a) => s + (a.usage?.reasoningTokens ?? 0), 0),
+        triageTokensPerCall: tokensPerCall(triageEntries.filter(e => e.ok).map(e => e.attempts.at(-1)!.usage)),
         estimatedUsd: unpriced.size === allAttempts.filter(a => a.usage).length && unpriced.size > 0 ? null : estimatedUsd,
         note: unpriced.size > 0
           ? `No price configured for ${[...unpriced].join(', ')}; their cost is not included. ${generatedCalls} of ${sink.length} LLM calls were made in this run (the rest replayed from cache).`
