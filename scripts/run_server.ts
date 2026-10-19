@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import { startServer } from '../src/api/server';
-import * as path from 'path';
+import { demoVaultPath } from '../src/vault/demo';
 
-// If no VAULT_PATH in .env or environment, default to demo_vault
-process.env.VAULT_PATH = process.env.VAULT_PATH || path.resolve(process.cwd(), 'demo_vault');
+// Without VAULT_PATH, use the demo vault in the notes language (demo_vault or demo_vault_en)
+process.env.VAULT_PATH = process.env.VAULT_PATH || demoVaultPath();
 process.env.PORT = process.env.PORT || '3000';
 
 startServer().catch(err => {

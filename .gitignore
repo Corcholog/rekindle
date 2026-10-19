@@ -22,5 +22,6 @@ docs/audit/
 evals/private/
 evals/dataset/runs/
 
-# Files Loom writes into the demo vault while you try it
+# Files Loom writes into the demo vaults while you try them
 demo_vault/**/suggestions.md
+demo_vault_en/**/suggestions.md

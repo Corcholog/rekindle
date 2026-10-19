@@ -104,7 +104,7 @@ export async function runChecks(probes: Probes): Promise<CheckResult[]> {
   } else if (projects.length === 0) {
     add({ id: 'vault', label: 'Obsidian vault', status: 'warn', detail: 'no project folders under Projects/ or Proyectos/', fix: 'Create a folder per project inside Projects/' });
   } else {
-    add({ id: 'vault', label: 'Obsidian vault', status: 'ok', detail: `${projects.length} projects${usingDemo ? ' (demo vault)' : ''}` });
+    add({ id: 'vault', label: 'Obsidian vault', status: 'ok', detail: `${projects.length} projects${usingDemo ? ` (demo vault: ${probes.demoVaultPath.split(/[\\/]/).pop()})` : ''}` });
   }
 
   add(cloud.length === 0

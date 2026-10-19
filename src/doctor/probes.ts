@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Pool } from 'pg';
 import { PROJECT_DIR_NAMES } from '../config';
 import type { DbState, Probes } from './checks';
+import { demoVaultPath } from '../vault/demo';
 
 const PROBE_TIMEOUT_MS = 3000;
 
@@ -68,6 +69,6 @@ export async function realProbes(env: NodeJS.ProcessEnv, root = process.cwd()): 
     database: () => probeDatabase(env.DATABASE_URL || 'postgres://loom:loompassword@localhost:5432/loomdb'),
     ollamaModels: () => probeOllamaModels(env.OLLAMA_URL || 'http://127.0.0.1:11434'),
     vaultProjects: probeVaultProjects,
-    demoVaultPath: path.join(root, 'demo_vault'),
+    demoVaultPath: demoVaultPath(env, root),
   };
 }
