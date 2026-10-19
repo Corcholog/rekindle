@@ -83,6 +83,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const { reconcileProject } = await import('../../src/vault/reconciler');
     const { evaluateContentMatch } = await import('../../src/evaluator');
     const { retrieveCandidates } = await import('../../src/evaluator/retrieval');
+    const { buildReport } = await import('../../src/observability/report');
 
     const embedModel = env.EMBED_MODEL;
     const sink: SinkEntry[] = [];
@@ -215,7 +216,8 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         pairs: {},
       };
 
-      await evaluateContentMatch(content.id, undefined, { threshold: config.threshold, limit: config.maxProjects });
+      const evaluation = await evaluateContentMatch(content.id, undefined, { threshold: config.threshold, limit: config.maxProjects });
+      detailArticles[article.id].traceId = evaluation.traceId;
       await saveCaches(); // progress survives an interrupted run
       if (quotaExhausted) {
         throw new Error('Cuota agotada en el proveedor de IA (límite diario). El progreso quedó guardado: vuelve a ejecutar con --record más tarde para continuar.');
@@ -272,6 +274,8 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       else unpriced.add(`${attempt.provider}:${attempt.model}`);
     }
     const generatedCalls = sink.filter(e => e.generated).length;
+    // The database is this run's alone, so the whole telemetry history is the run's
+    const telemetry = await buildReport({ since: new Date(0) }, db);
 
     const result: EvalResult = ResultSchema.parse({
       meta: {
@@ -309,6 +313,14 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         note: unpriced.size > 0
           ? `No price configured for ${[...unpriced].join(', ')}; their cost is not included. ${generatedCalls} of ${sink.length} LLM calls were made in this run (the rest replayed from cache).`
           : `${generatedCalls} of ${sink.length} LLM calls were made in this run (the rest replayed from cache). Local models are counted as $0.`,
+      },
+      telemetry: {
+        llmCalls: telemetry.totals.calls,
+        failedCalls: telemetry.totals.failedCalls,
+        fallbackCalls: telemetry.totals.fallbackCalls,
+        attempts: telemetry.totals.attempts,
+        malformedAttempts: telemetry.totals.malformedAttempts,
+        stages: telemetry.stages,
       },
     });
 

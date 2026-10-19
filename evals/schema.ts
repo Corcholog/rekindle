@@ -102,6 +102,8 @@ export const RunDetailsSchema = z.object({
   k: z.number(),
   threshold: z.number(),
   articles: z.record(z.string(), z.object({
+    /** Trace of the article's evaluation in the run database (pipeline_events, llm_telemetry). */
+    traceId: z.string().optional(),
     summary: z.string(),
     retrieval: z.array(z.object({
       project: z.string(),
@@ -167,5 +169,20 @@ export const ResultSchema = z.object({
     estimatedUsd: NullableNumber,
     note: z.string(),
   }),
+  /**
+   * The production telemetry (llm_telemetry, pipeline_events) of the run's throwaway database,
+   * summarized by the same code as `pnpm telemetry:report`. Absent in results from before Phase 4.
+   * In replay mode stage latencies measure the pipeline without model time.
+   */
+  telemetry: z.object({
+    llmCalls: z.number(),
+    failedCalls: z.number(),
+    fallbackCalls: z.number(),
+    attempts: z.number(),
+    malformedAttempts: z.number(),
+    stages: z.array(z.object({
+      stage: z.string(), events: z.number(), failures: z.number(), p50Ms: NullableNumber, p95Ms: NullableNumber,
+    })),
+  }).optional(),
 });
 export type EvalResult = z.infer<typeof ResultSchema>;

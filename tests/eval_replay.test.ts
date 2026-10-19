@@ -34,7 +34,12 @@ describe('eval harness replay', () => {
     const first = await replay();
     const second = await replay();
 
-    const stable = (r: typeof first.result) => ({ ...r, meta: { ...r.meta, startedAt: '' } });
+    // Wall-clock fields differ between runs; everything else must match
+    const stable = (r: typeof first.result) => ({
+      ...r,
+      meta: { ...r.meta, startedAt: '' },
+      telemetry: r.telemetry && { ...r.telemetry, stages: r.telemetry.stages.map(s => ({ ...s, p50Ms: 0, p95Ms: 0 })) },
+    });
     expect(stable(second.result)).toEqual(stable(first.result));
 
     const { result } = first;
@@ -44,6 +49,11 @@ describe('eval harness replay', () => {
     expect(result.triage).toMatchObject({ targetNoteAccuracy: 0.5, targetNoteCases: 2 }); // recorded: one of two target notes was right
     expect(result.reliability).toMatchObject({ llmCalls: 3, failures: 0, fallbacks: 0, malformedOutputs: 0 });
     expect(result.cost.estimatedUsd).toBe(0);
+
+    // The production telemetry of the run agrees with the harness's own accounting
+    expect(result.telemetry).toMatchObject({ llmCalls: result.reliability.llmCalls, failedCalls: 0, fallbackCalls: 0 });
+    expect(result.telemetry!.stages.map(s => s.stage)).toEqual(['evaluate', 'evaluate_job', 'retrieve']);
+    expect(result.telemetry!.stages.find(s => s.stage === 'evaluate_job')!.events).toBe(3);
 
     const llmCalls = fetchSpy.mock.calls.filter(([url]) => !String(url).startsWith('http://127.0.0.1:') || !String(url).includes(':9')).length;
     expect(llmCalls).toBe(0);
@@ -57,6 +67,7 @@ describe('eval harness replay', () => {
     const { loadDataset } = await import('../evals/runner/dataset');
 
     const details = RunDetailsSchema.parse(JSON.parse(await fs.readFile(detailsFile, 'utf-8')));
+    expect(Object.values(details.articles).every(a => /^[0-9a-f-]{36}$/.test(a.traceId ?? ''))).toBe(true);
     const dataset = await loadDataset(DATASET);
     const rescored = scoreRun({
       projects: dataset.projects.map(p => p.folderPath), cases: dataset.labels!.cases,
