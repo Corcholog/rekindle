@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './quietLogs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { checkResult, loadThresholds } from './check';

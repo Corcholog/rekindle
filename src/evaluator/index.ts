@@ -176,7 +176,7 @@ async function runEvaluation(
       continue;
     }
 
-    log.info({ traceId, contentId, snapshotId, rank, level: candidate.level, distance: candidate.distance }, 'Triage started');
+    log.info({ traceId, contentId, snapshotId, rank, matchLevel: candidate.level, distance: candidate.distance }, 'Triage started');
 
     const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a los BORRADORES Y NOTAS DEL PROYECTO.
 Debes responder SIEMPRE en ESPAÑOL.

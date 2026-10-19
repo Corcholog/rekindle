@@ -58,4 +58,14 @@ describe('Structured logger redaction', () => {
     const line = formatPretty(JSON.stringify({ level: 30, time: 0, component: 'evaluator', msg: 'Done', contentId: 'c-1', n: 3 }));
     expect(line).toMatch(/INFO +\[evaluator\] Done contentId=c-1 n=3\n$/);
   });
+
+  it('renames fields that would collide with the keys pino writes itself', () => {
+    cap = capture();
+    getLogger('test').info({ level: 'note', time: 'ayer', msg: 'campo', rank: 1 }, 'Real message');
+    const line = cap.lines[0];
+    expect(line.match(/"level":/g)).toHaveLength(1);
+    expect(line.match(/"msg":/g)).toHaveLength(1);
+    const rec = JSON.parse(line);
+    expect(rec).toMatchObject({ level: 30, msg: 'Real message', level_field: 'note', time_field: 'ayer', msg_field: 'campo', rank: 1 });
+  });
 });

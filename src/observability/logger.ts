@@ -49,6 +49,21 @@ export function pathKey(p: string): string {
   return createHash('sha256').update(p).digest('hex').slice(0, 10);
 }
 
+// pino writes these keys itself; a log field with the same name would repeat the key in the JSON
+// line (the last one wins when parsed), so it is renamed
+const RESERVED_LOG_KEYS = ['level', 'time', 'msg', 'pid', 'hostname'];
+
+function formatLogFields(obj: Record<string, unknown>): Record<string, unknown> {
+  const clean = sanitizeLogObject(obj) as Record<string, unknown>;
+  for (const key of RESERVED_LOG_KEYS) {
+    if (key in clean) {
+      clean[`${key}_field`] = clean[key];
+      delete clean[key];
+    }
+  }
+  return clean;
+}
+
 export interface LogSink { write(line: string): void }
 
 const LEVEL_NAMES: Record<number, string> = { 10: 'TRACE', 20: 'DEBUG', 30: 'INFO', 40: 'WARN', 50: 'ERROR', 60: 'FATAL' };
@@ -78,7 +93,7 @@ export const logger = pino({
   level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
   base: undefined,
   serializers: { err: (err: unknown) => (err instanceof Error ? serializeError(err) : err) },
-  formatters: { log: (obj) => sanitizeLogObject(obj) as Record<string, unknown> },
+  formatters: { log: formatLogFields },
 }, destination);
 
 export function getLogger(component: string) {
