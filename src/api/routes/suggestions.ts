@@ -6,6 +6,7 @@ import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
+import { newTraceId } from '../../observability/pipeline';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 
 const SuggestionItemSchema = z.object({
@@ -702,8 +703,10 @@ ${(content.summary || '').substring(0, 10000)}
 
 Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue abordada en el texto, o si quedó obsoleta.`;
 
+    // A re-evaluation starts its own trace; the content keeps the trace of its ingestion
+    const traceId = newTraceId();
     const { data: evalResult } = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, reevaluationSchema, undefined, {
-      component: 'reevaluate', contentId: sug.contentId, snapshotId: latestSnapshot.id, suggestionId: sug.id,
+      component: 'reevaluate', traceId, contentId: sug.contentId, snapshotId: latestSnapshot.id, suggestionId: sug.id,
     });
 
     let newEvaluationId: string;
@@ -716,12 +719,14 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         confidenceScore: 0.90,
         triageReasoning: evalResult.reasoning,
         consumptionSeq: content.consumptionSeq,
+        traceId,
       }).onConflictDoUpdate({
         target: [evaluations.contentId, evaluations.projectSnapshotId, evaluations.consumptionSeq],
         set: {
           verdict: 'actionable',
           triageReasoning: evalResult.reasoning,
           evaluatedAt: new Date(),
+          traceId,
         }
       }).returning({ id: evaluations.id });
 
@@ -747,12 +752,14 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         confidenceScore: isAddressed ? 0.20 : 0.10,
         triageReasoning: `${reasonPrefix}: ${evalResult.reasoning}`,
         consumptionSeq: content.consumptionSeq,
+        traceId,
       }).onConflictDoUpdate({
         target: [evaluations.contentId, evaluations.projectSnapshotId, evaluations.consumptionSeq],
         set: {
           verdict: 'irrelevant',
           triageReasoning: `${reasonPrefix}: ${evalResult.reasoning}`,
           evaluatedAt: new Date(),
+          traceId,
         }
       }).returning({ id: evaluations.id });
 

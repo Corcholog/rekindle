@@ -9,6 +9,7 @@ import { env } from '../config';
 import { summarizeText } from '../ai/summarize';
 import * as net from 'net';
 import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
+import { newTraceId, recordStage, timeStage, errorKindOf } from '../observability/pipeline';
 
 import { YoutubeTranscript } from 'youtube-transcript';
 
@@ -118,12 +119,18 @@ export const setupIngestionWorker = async () => {
     for (const job of jobArray) {
       if (!job || !job.data) continue;
       
-      const { contentId, url, initialTitle, selection } = job.data as { 
-        contentId: string; 
-        url: string; 
-        initialTitle?: string; 
-        selection?: string; 
+      const { contentId, url, initialTitle, selection, traceId: jobTraceId } = job.data as {
+        contentId: string;
+        url: string;
+        initialTitle?: string;
+        selection?: string;
+        traceId?: string;
       };
+      // Jobs enqueued before tracing existed carry no trace ID
+      const traceId = jobTraceId ?? newTraceId();
+      const attempt = typeof job.retryCount === 'number' ? job.retryCount + 1 : null;
+      const stage = { traceId, contentId, attempt };
+      const jobStarted = Date.now();
       console.log(`Processing ingestion job for: ${url} (Content ID: ${contentId})`);
 
       try {
@@ -148,7 +155,8 @@ export const setupIngestionWorker = async () => {
 
         if (isYouTubeUrl(url)) {
           console.log(`[IngestWorker] Extracting transcript for YouTube video: ${url}`);
-          const yt = await extractYouTubeContent(url);
+          const yt = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'youtube' } },
+            () => extractYouTubeContent(url), r => ({ chars: r.rawText.length }));
           rawText = yt.rawText;
           channelOrDomain = yt.author || 'YouTube';
           title = yt.author && !yt.title.toLowerCase().includes(yt.author.toLowerCase())
@@ -156,11 +164,13 @@ export const setupIngestionWorker = async () => {
             : yt.title;
         } else {
           // Public-internet only: every redirect hop and resolved IP is checked, body capped at 5 MB
-          const page = await fetchPublicPage(url);
+          const page = await timeStage({ ...stage, stage: 'fetch', attrs: { source: 'web' } },
+            () => fetchPublicPage(url), r => ({ bytes: r.text.length }));
           const html = page.text;
-          const doc = new JSDOM(html, { url: page.finalUrl });
-          const reader = new Readability(doc.window.document);
-          const article = reader.parse();
+          const article = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'web' } }, async () => {
+            const doc = new JSDOM(html, { url: page.finalUrl });
+            return new Readability(doc.window.document).parse();
+          }, r => ({ chars: r?.textContent?.length ?? 0 }));
 
           if (!article || !article.textContent) {
             if (selection && selection.trim().length > 0) {
@@ -189,14 +199,17 @@ export const setupIngestionWorker = async () => {
           .where(eq(contents.id, contentId));
 
         // 3. Summarize through the LLM provider chain
-        const summary = await summarizeText(ollama, rawText, { contentId });
+        const summary = await timeStage({ ...stage, stage: 'summarize' },
+          () => summarizeText(ollama, rawText, { traceId, contentId }),
+          r => ({ inputChars: rawText.length, summaryChars: r.length }));
 
         await db.update(contents)
           .set({ summary, ingestStatus: 'embedding' })
           .where(eq(contents.id, contentId));
 
         // 4. Generate Embedding
-        const embedding = await ollama.getEmbedding(summary);
+        const embedding = await timeStage({ ...stage, stage: 'embed', attrs: { model: env.EMBED_MODEL, chars: summary.length } },
+          () => ollama.getEmbedding(summary), r => ({ dimensions: r.length }));
 
         // 5. Save everything and mark ready
         await db.update(contents)
@@ -210,8 +223,9 @@ export const setupIngestionWorker = async () => {
         console.log(`Successfully ingested and vectorised: ${url}`);
         
         // 6. Trigger Evaluation Pipeline
-        await boss.send('evaluate_content', { contentId }, { singletonKey: `eval:${contentId}`, retryLimit: 2 });
+        await boss.send('evaluate_content', { contentId, traceId }, { singletonKey: `eval:${contentId}`, retryLimit: 2 });
         console.log(`Enqueued evaluation job for content ${contentId}`);
+        await recordStage({ ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, attrs: { source: isYouTubeUrl(url) ? 'youtube' : 'web' } });
       } catch (error: any) {
         console.error(`Error in ingestion worker for ${url}:`, error);
         
@@ -226,6 +240,10 @@ export const setupIngestionWorker = async () => {
         // do not rethrow to pg-boss so it doesn't wastefully retry.
         const errMsg = error.message || '';
         const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Acceso denegado \(SSRF\)|Protocolo '|more than \d+ redirects/i.test(errMsg);
+        await recordStage({
+          ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, ok: false, errorKind: errorKindOf(error),
+          attrs: { source: isYouTubeUrl(url) ? 'youtube' : 'web', retryable: !isNonRetryable },
+        });
         if (!isNonRetryable) {
           throw error;
         }

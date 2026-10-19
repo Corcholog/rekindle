@@ -9,6 +9,7 @@ export interface RetrievalCandidate {
   thesisText: string;
   notesContent: string;
   /** Best-matching note of the project, when a note is closer than the threshold. */
+  noteSnapshotId: string | null;
   notePath: string | null;
   noteTitle: string | null;
   noteSnippet: string | null;
@@ -24,6 +25,14 @@ export interface RetrievalOptions {
   embedModel?: string;
 }
 
+export interface RetrievalResult {
+  candidates: RetrievalCandidate[];
+  /** Projects within the threshold before the limit was applied. */
+  withinThreshold: number;
+  threshold: number;
+  limit: number;
+}
+
 /**
  * Step 1 of the evaluation: active projects whose latest snapshot, or one of its notes, lies
  * within `threshold` of the content embedding. Only embeddings from `embedModel` are compared
@@ -33,6 +42,14 @@ export async function retrieveCandidates(
   contentEmbedding: number[],
   options: RetrievalOptions = {},
 ): Promise<RetrievalCandidate[]> {
+  return (await retrieveWithStats(contentEmbedding, options)).candidates;
+}
+
+/** retrieveCandidates plus what the limit cut, for the pipeline telemetry. */
+export async function retrieveWithStats(
+  contentEmbedding: number[],
+  options: RetrievalOptions = {},
+): Promise<RetrievalResult> {
   const threshold = options.threshold ?? VECTOR_DISTANCE_THRESHOLD;
   const limit = options.limit ?? TOP_K_PROJECTS_LIMIT;
   const embedModel = options.embedModel ?? env.EMBED_MODEL;
@@ -48,6 +65,7 @@ export async function retrieveCandidates(
     matching_notes AS (
       SELECT DISTINCT ON (pns.project_id)
         pns.project_id,
+        pns.id AS note_snapshot_id,
         pns.note_path,
         pns.note_title,
         pns.content_snippet,
@@ -64,10 +82,12 @@ export async function retrieveCandidates(
       ls.project_id,
       ls.thesis_text,
       ls.notes_content,
+      mn.note_snapshot_id AS matched_note_snapshot_id,
       mn.note_path AS matched_note_path,
       mn.note_title AS matched_note_title,
       mn.content_snippet AS matched_note_snippet,
-      COALESCE(mn.note_distance, (ls.embedding <=> ${targetVector}::vector)) AS best_distance
+      COALESCE(mn.note_distance, (ls.embedding <=> ${targetVector}::vector)) AS best_distance,
+      COUNT(*) OVER () AS within_threshold
     FROM latest_snapshots ls
     JOIN ${projects} p ON ls.project_id = p.id
     LEFT JOIN matching_notes mn ON ls.project_id = mn.project_id
@@ -81,15 +101,18 @@ export async function retrieveCandidates(
     LIMIT ${limit}
   `);
 
-  return result.rows.map((row: any) => ({
+  const candidates: RetrievalCandidate[] = result.rows.map((row: any) => ({
     snapshotId: row.snapshot_id as string,
     projectId: row.project_id as string,
     thesisText: (row.thesis_text as string) || '',
     notesContent: (row.notes_content as string) || '',
+    noteSnapshotId: (row.matched_note_snapshot_id as string) || null,
     notePath: (row.matched_note_path as string) || null,
     noteTitle: (row.matched_note_title as string) || null,
     noteSnippet: (row.matched_note_snippet as string) || null,
     distance: Number(row.best_distance),
     level: row.matched_note_path ? 'note' : 'project',
   }));
+  const withinThreshold = result.rows.length > 0 ? Number((result.rows[0] as any).within_threshold) : 0;
+  return { candidates, withinThreshold, threshold, limit };
 }

@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { boss } from '../../queue';
 import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
+import { newTraceId } from '../../observability/pipeline';
 import { and, eq } from 'drizzle-orm';
 
 const IngestRequestSchema = z.object({
@@ -49,8 +50,11 @@ export default async function (server: FastifyInstance) {
     const url = canonicalizeUrl(rawUrl);
 
     try {
+      // Each ingestion starts a trace that follows the content to its suggestions
+      const traceId = newTraceId();
       const enqueue = (contentId: string) => boss.send('ingest_url', {
         contentId,
+        traceId,
         url,
         initialTitle: passedTitle,
         selection,
@@ -62,6 +66,7 @@ export default async function (server: FastifyInstance) {
           uri: url,
           ingestStatus: 'pending',
           consumedAt: new Date(),
+          traceId,
           ...(passedTitle ? { title: passedTitle } : {}),
           ...(selection ? { rawText: selection } : {}),
         })
@@ -84,6 +89,7 @@ export default async function (server: FastifyInstance) {
           ingestStatus: 'pending',
           ingestStatusReason: null,
           consumedAt: new Date(),
+          traceId,
           ...(passedTitle ? { title: passedTitle } : {}),
           ...(selection ? { rawText: selection } : {}),
         })

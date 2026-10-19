@@ -5,7 +5,8 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss } from '../queue';
 import { z } from 'zod';
-import { retrieveCandidates, RetrievalOptions } from './retrieval';
+import { retrieveWithStats, RetrievalOptions } from './retrieval';
+import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 
 const ollama = sharedAiProvider;
@@ -31,16 +32,69 @@ const unifiedEvaluationSchema = z.object({
  * Step 1: Spatial Semantic Pre-filter (pgvector cosine distance < 0.6 in Postgres)
  * Step 2: Unified LLM Synthesis & Action Formulation (Single LLM invocation)
  */
-export async function evaluateContentMatch(contentId: string, targetProjectId?: string, retrieval: RetrievalOptions = {}) {
+export interface EvaluationTrace {
+  /** Trace started at ingestion; a backlog or direct evaluation starts its own. */
+  traceId?: string;
+  /** pg-boss attempt of the job (1 = first run). */
+  attempt?: number;
+}
+
+export interface EvaluationStats {
+  traceId: string;
+  outcome: 'evaluated' | 'not_found' | 'not_ready' | 'other_embedding_model' | 'no_candidates';
+  candidates: number;
+  evaluated: number;
+  alreadyEvaluated: number;
+  suggestions: number;
+  failures: number;
+}
+
+export async function evaluateContentMatch(
+  contentId: string,
+  targetProjectId?: string,
+  retrieval: RetrievalOptions = {},
+  trace: EvaluationTrace = {},
+): Promise<EvaluationStats> {
+  const traceId = trace.traceId ?? newTraceId();
+  const origin = trace.traceId ? 'ingest' : targetProjectId ? 'backlog' : 'direct';
+  const started = Date.now();
+  const stats: EvaluationStats = { traceId, outcome: 'evaluated', candidates: 0, evaluated: 0, alreadyEvaluated: 0, suggestions: 0, failures: 0 };
+  try {
+    await runEvaluation(contentId, targetProjectId, retrieval, traceId, stats);
+  } catch (err) {
+    await recordStage({
+      traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started, ok: false,
+      errorKind: errorKindOf(err), attempt: trace.attempt, attrs: { origin, targetProjectId, ...stats },
+    });
+    throw err;
+  }
+  await recordStage({
+    traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started,
+    ok: stats.failures === 0, attempt: trace.attempt, attrs: { origin, targetProjectId, ...stats },
+  });
+  return stats;
+}
+
+async function runEvaluation(
+  contentId: string,
+  targetProjectId: string | undefined,
+  retrieval: RetrievalOptions,
+  traceId: string,
+  stats: EvaluationStats,
+): Promise<void> {
   console.log(`[Evaluator] Starting unified evaluation for content ${contentId}${targetProjectId ? ` (target project: ${targetProjectId})` : ''}`);
   
   // 1. Fetch content
   const contentRows = await db.select().from(contents).where(eq(contents.id, contentId));
-  if (contentRows.length === 0) return;
+  if (contentRows.length === 0) {
+    stats.outcome = 'not_found';
+    return;
+  }
   
   const content = contentRows[0];
   if (!content.embedding || !content.summary) {
     console.log(`[Evaluator] Content ${contentId} missing embedding or summary. Aborting.`);
+    stats.outcome = 'not_ready';
     return;
   }
 
@@ -48,19 +102,36 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
   const embedModel = env.EMBED_MODEL;
   if (content.embeddingModel !== embedModel) {
     console.log(`[Evaluator] Content ${contentId} was embedded with ${content.embeddingModel ?? 'an unknown model'}, not ${embedModel}. Skipping.`);
+    stats.outcome = 'other_embedding_model';
     return;
   }
 
   // Step 1: Vector Search: Find relevant project snapshots of active projects using distance threshold (< 0.6)
-  const candidates = await retrieveCandidates(content.embedding, { ...retrieval, targetProjectId, embedModel });
+  const retrieveStarted = Date.now();
+  const found = await retrieveWithStats(content.embedding, { ...retrieval, targetProjectId, embedModel });
+  const candidates = found.candidates;
+  stats.candidates = candidates.length;
+  const retrievalEventId = await recordStage({
+    traceId, stage: 'retrieve', contentId, durationMs: Date.now() - retrieveStarted,
+    attrs: {
+      threshold: found.threshold, limit: found.limit, embedModel, targetProjectId,
+      withinThreshold: found.withinThreshold, returned: candidates.length,
+      candidates: candidates.map((c, i) => ({
+        rank: i + 1, projectId: c.projectId, snapshotId: c.snapshotId, noteSnapshotId: c.noteSnapshotId,
+        level: c.level, distance: Number(c.distance.toFixed(4)),
+      })),
+    },
+  });
 
   if (candidates.length === 0) {
     console.log(`[Evaluator] [Step 1 Filtered] No matching active projects within distance threshold for content ${contentId}.`);
+    stats.outcome = 'no_candidates';
     return;
   }
 
   // Step 2: Unified Synthesis for each matching project (Single LLM Call)
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
+    const rank = index + 1;
     const snapshotId = candidate.snapshotId;
     const projectId = candidate.projectId;
     const thesisText = candidate.thesisText;
@@ -81,6 +152,7 @@ export async function evaluateContentMatch(contentId: string, targetProjectId?: 
 
     if (existing) {
       console.log(`[Evaluator] Evaluation already exists for content ${contentId} and snapshot ${snapshotId}. Skipping.`);
+      stats.alreadyEvaluated++;
       continue;
     }
 
@@ -117,9 +189,14 @@ ${cappedSummary}
 
 Por favor, evalúa de manera crítica la afinidad y propuesta constructiva siguiendo las reglas estructuradas.`;
 
+    const evaluateStarted = Date.now();
+    const evaluateEvent = (ok: boolean, attrs: Record<string, unknown>, errorKind?: string) => recordStage({
+      traceId, stage: 'evaluate', contentId, snapshotId, durationMs: Date.now() - evaluateStarted, ok, errorKind,
+      attrs: { rank, projectId, distance: Number(candidate.distance.toFixed(4)), level: candidate.level, ...attrs },
+    });
     try {
       const { data: result, model: modelUsed, telemetryIds = [] } = await ollama.evaluateContent(
-        systemPrompt, userMessage, unifiedEvaluationSchema, undefined, { component: 'triage', contentId, snapshotId },
+        systemPrompt, userMessage, unifiedEvaluationSchema, undefined, { component: 'triage', traceId, contentId, snapshotId },
       );
 
       // 1. Record Evaluation in DB
@@ -132,11 +209,15 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           confidenceScore: result.confidenceScore,
           triageReasoning: result.triageReasoning,
           consumptionSeq: content.consumptionSeq,
+          traceId,
+          retrievalEventId,
         }).returning({ id: evaluations.id });
         evalId = evalRecord.id;
       } catch (insertError: any) {
         if (insertError.code === '23505') {
           console.log(`[Evaluator] Evaluation already exists for this content and snapshot.`);
+          stats.alreadyEvaluated++;
+          await evaluateEvent(true, { model: modelUsed, duplicate: true });
           continue;
         }
         console.error(`[Evaluator] Error inserting evaluation:`, insertError);
@@ -144,6 +225,9 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
       }
 
       console.log(`[Evaluator] Result for Project ${projectId} via ${modelUsed}: ${result.verdict} (${Math.round((result.confidenceScore || 0) * 100)}%)`);
+      stats.evaluated++;
+      let verdict: string = result.verdict;
+      let suggestionId: string | null = null;
 
       // 2. If actionable and action details provided, record Action Suggestion
       if (result.verdict === 'actionable' && result.action) {
@@ -163,6 +247,8 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
             verdict: 'irrelevant',
             triageReasoning: enhancedReason,
           }).where(eq(evaluations.id, evalId));
+          verdict = 'irrelevant';
+          await evaluateEvent(true, { model: modelUsed, evaluationId: evalId, verdict, suppressedDiscard: true });
           continue;
         }
 
@@ -178,11 +264,16 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           targetFile: resolvedTargetFile,
           status: 'pending',
         }).returning({ id: actionSuggestions.id });
+        suggestionId = sugRecord.id;
+        stats.suggestions++;
         await linkTelemetryToSuggestion(telemetryIds, sugRecord.id);
 
         console.log(`[Evaluator] Action suggestion created for Project ${projectId} targeting "${resolvedTargetFile}" (pending user review)`);
       }
+      await evaluateEvent(true, { model: modelUsed, evaluationId: evalId, verdict, confidence: result.confidenceScore, suggestionId });
     } catch (err) {
+      stats.failures++;
+      await evaluateEvent(false, {}, errorKindOf(err));
       console.error(`[Evaluator] Error evaluating snapshot ${snapshotId} against content ${contentId}:`, err);
     }
   }
