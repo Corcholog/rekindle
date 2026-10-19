@@ -9,6 +9,7 @@ import { getCurrentVaultPath } from '../../vault/config';
 import { env } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/aiProvider';
+import { promptBlock } from '../../ai/promptSafety';
 
 const ProjectItemSchema = z.object({
   id: z.string().uuid(),
@@ -562,19 +563,15 @@ REGLAS:
 2. Utiliza wikilinks de Obsidian ([[nombre_nota]]).
 3. Sé analítico, concreto y pragmático para el autor.`;
 
-    const userMessage = `<PROYECTO_A>
-Título: "${projA.title}"
+    const userMessage = `${promptBlock('PROYECTO_A', `Título: "${projA.title}"
 Tesis: ${snapA?.thesisText || 'Sin tesis formal'}
 Notas clave:
-${notesA.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}
-</PROYECTO_A>
+${notesA.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}`)}
 
-<PROYECTO_B>
-Título: "${projB.title}"
+${promptBlock('PROYECTO_B', `Título: "${projB.title}"
 Tesis: ${snapB?.thesisText || 'Sin tesis formal'}
 Notas clave:
-${notesB.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}
-</PROYECTO_B>
+${notesB.map(n => `- [[${n.noteTitle}]]: ${(n.contentSnippet || '').substring(0, 300)}`).join('\n') || '(Sin notas registradas aún)'}`)}
 
 Propón un puente de investigación unificado entre ambos proyectos.`;
 
@@ -746,17 +743,13 @@ REGLAS:
 3. Utiliza formato Markdown con títulos claros, listas y wikilinks de Obsidian como [[${proj.title}]] o [[notas_relevantes]].
 4. Sé exhaustivo pero conciso, facilitando al autor la redacción de sus borradores.`;
 
-    const userMessage = `<CONTEXTO_DEL_PROYECTO>
-Proyecto: "${proj.title}"
+    const userMessage = `${promptBlock('CONTEXTO_DEL_PROYECTO', `Proyecto: "${proj.title}"
 Notas y Borradores Actuales:
-${projectContext.substring(0, 10000)}
-</CONTEXTO_DEL_PROYECTO>
+${projectContext.substring(0, 10000)}`)}
 
-<SUGERENCIAS_ACEPTADAS_A_SINTETIZAR>
-Total de sugerencias aceptadas: ${acceptedList.length}
+${promptBlock('SUGERENCIAS_ACEPTADAS_A_SINTETIZAR', `Total de sugerencias aceptadas: ${acceptedList.length}
 
-${suggestionsPrompt}
-</SUGERENCIAS_ACEPTADAS_A_SINTETIZAR>`;
+${suggestionsPrompt}`)}`;
 
     let result;
     try {

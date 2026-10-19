@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { sql } from 'drizzle-orm';
 import { sharedAiProvider } from '../../ai/aiProvider';
+import { promptBlock } from '../../ai/promptSafety';
 
 const ollama = sharedAiProvider;
 
@@ -204,17 +205,11 @@ REGLAS ESTRICTAS:
 5. Incluye en "matchedContents" ÚNICAMENTE los contenidos [C#] que realmente aportan a la consulta (no rellenes con ítems irrelevantes), explicando en "whyItConnects" exactamente por qué ese video o artículo conecta con lo que preguntó el usuario.
 6. Incluye en "matchedNotes" ÚNICAMENTE las notas de Obsidian [N#] que realmente conectan con la consulta (incluso si mencionan el tema como referencia, ejemplo o estructura), explicando en "whyItConnects" qué contiene esa nota y cómo aporta.`;
 
-    const userMessage = `<CATALOGO_BIBLIOTECA>
-${libraryPromptBlock}
-</CATALOGO_BIBLIOTECA>
+    const userMessage = `${promptBlock('CATALOGO_BIBLIOTECA', libraryPromptBlock)}
 
-<NOTAS_PROYECTOS_OBSIDIAN>
-${notesPromptBlock}
-</NOTAS_PROYECTOS_OBSIDIAN>
+${promptBlock('NOTAS_PROYECTOS_OBSIDIAN', notesPromptBlock)}
 
-<CONSULTA_DEL_USUARIO>
-${query}
-</CONSULTA_DEL_USUARIO>`;
+${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
 
     try {
       const { data: result } = await ollama.evaluateContent(systemPrompt, userMessage, consultAnswerSchema, undefined, { component: 'consult' });

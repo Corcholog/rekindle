@@ -9,6 +9,7 @@ import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
 import { resolveTargetFile } from '../../evaluator/targetFile';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
+import { promptBlock } from '../../ai/promptSafety';
 
 // "%/<target_file>" with LIKE wildcards in the stored target file escaped: older rows hold
 // model-written text, where "%" or "_" would match unrelated notes (audit F-13)
@@ -689,22 +690,16 @@ REGLAS DE RESOLUCIÓN:
 2. 'already_addressed': El usuario ya escribió, citó o incorporó esta idea o evidencia en las notas actuales del proyecto. Ya no es necesaria. 'refinedAction' debe ser null.
 3. 'obsolete': El proyecto cambió de enfoque, eliminó la sección relevante o la sugerencia ya no tiene sentido con la dirección actual. 'refinedAction' debe ser null.`;
 
-    const userMessage = `<PREVIOUS_SUGGESTION>
-- Tipo de acción: ${sug.actionType}
+    const userMessage = `${promptBlock('PREVIOUS_SUGGESTION', `- Tipo de acción: ${sug.actionType}
 - Archivo objetivo original: ${sug.targetFile}
 - Observación previa: ${sug.observation}
-- Acción sugerida previa: ${sug.suggestedAction}
-</PREVIOUS_SUGGESTION>
+- Acción sugerida previa: ${sug.suggestedAction}`)}
 
-<PROJECT_CONTEXT_ACTUAL>
-Proyecto: ${project.title}
+${promptBlock('PROJECT_CONTEXT_ACTUAL', `Proyecto: ${project.title}
 NOTAS Y BORRADORES ACTUALES:
-${projectNotes.substring(0, 15000)}
-</PROJECT_CONTEXT_ACTUAL>
+${projectNotes.substring(0, 15000)}`)}
 
-<ARTICLE_SUMMARY>
-${(content.summary || '').substring(0, 10000)}
-</ARTICLE_SUMMARY>
+${promptBlock('ARTICLE_SUMMARY', (content.summary || '').substring(0, 10000))}
 
 Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue abordada en el texto, o si quedó obsoleta.`;
 

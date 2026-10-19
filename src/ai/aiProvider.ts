@@ -5,6 +5,7 @@ import { Attempt, CompletionOptions, Usage } from './types';
 import { buildProviderChain, ChainError, runChain } from './chain';
 import { LlmCallContext, recordLlmCall } from '../observability/llmTelemetry';
 import { getLogger } from '../observability/logger';
+import { UNTRUSTED_CONTENT_RULE } from './promptSafety';
 
 const log = getLogger('ai');
 
@@ -77,6 +78,8 @@ export class AiProvider {
   ): Promise<EvaluationOutput<z.infer<T>>> {
     let result: EvaluationOutput<z.infer<T>>;
     const started = Date.now();
+    // Every prompt states that delimited content is data, not instructions (audit F-12)
+    systemPrompt = `${systemPrompt}\n\n${UNTRUSTED_CONTENT_RULE}`;
     try {
       if (this.overrides.evaluate) {
         result = await this.overrides.evaluate(systemPrompt, userText, schema, options);

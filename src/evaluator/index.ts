@@ -10,6 +10,7 @@ import { resolveTargetFile } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 import { getLogger } from '../observability/logger';
+import { promptBlock } from '../ai/promptSafety';
 
 const log = getLogger('evaluator');
 
@@ -196,15 +197,11 @@ REGLAS DE EVALUACIÓN:
       matchedNoteContext = `\nNOTA CON MAYOR AFINIDAD SEMÁNTICA DETECTADA:\n- Archivo: ${matchedNotePath}${matchedNoteTitle ? ` ("${matchedNoteTitle}")` : ''}\n${matchedNoteSnippet ? `- Extracto relevante:\n${matchedNoteSnippet}\n` : ''}`;
     }
 
-    const userMessage = `<PROJECT_CONTEXT>
-${matchedNoteContext}
+    const userMessage = `${promptBlock('PROJECT_CONTEXT', `${matchedNoteContext}
 NOTAS Y BORRADORES DEL PROYECTO:
-${cappedProjectNotes || thesisText || 'Proyecto sin notas adicionales.'}
-</PROJECT_CONTEXT>
+${cappedProjectNotes || thesisText || 'Proyecto sin notas adicionales.'}`)}
 
-<ARTICLE_SUMMARY>
-${cappedSummary}
-</ARTICLE_SUMMARY>
+${promptBlock('ARTICLE_SUMMARY', cappedSummary)}
 
 Por favor, evalúa de manera crítica la afinidad y propuesta constructiva siguiendo las reglas estructuradas.`;
 
