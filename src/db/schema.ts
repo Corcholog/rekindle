@@ -35,6 +35,9 @@ export const ingestStatusEnum = pgEnum('ingest_status', ['pending', 'extracting'
 export const verdictEnum = pgEnum('verdict', ['irrelevant', 'tentative', 'actionable']);
 export const actionTypeEnum = pgEnum('action_type', ['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']);
 export const suggestionStatusEnum = pgEnum('suggestion_status', ['pending', 'accepted', 'discarded']);
+// Why the owner discarded a suggestion (optional); counted by `pnpm usertest:stats`
+export const DISCARD_REASONS = ['unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other'] as const;
+export const discardReasonEnum = pgEnum('discard_reason', DISCARD_REASONS);
 export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action', 'consult', 'synergy', 'synthesis', 'reevaluate']);
 export const pipelineStageEnum = pgEnum('pipeline_stage', ['fetch', 'extract', 'summarize', 'embed', 'retrieve', 'evaluate', 'ingest_job', 'evaluate_job']);
 
@@ -133,6 +136,7 @@ export const actionSuggestions = pgTable('action_suggestions', {
   suggestedAction: text('suggested_action').notNull(),
   status: suggestionStatusEnum('status').default('pending').notNull(),
   userFeedback: text('user_feedback'),
+  discardReason: discardReasonEnum('discard_reason'),
   writtenToVault: boolean('written_to_vault').default(false).notNull(),
   resolvedAt: timestamp('resolved_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

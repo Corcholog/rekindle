@@ -1118,6 +1118,10 @@ function renderSuggestionsList(items) {
               >
             </div>
             <div class="suggestion-actions">
+              <select id="reason-${sug.id}" class="discard-reason" aria-label="Motivo del descarte (opcional)">
+                <option value="">Motivo si descartas…</option>
+                ${DISCARD_REASON_LABELS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+              </select>
               ${(sug.isStale && isPending) ? `
                 <button type="button" class="btn btn-secondary btn-sm btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="Re-evaluar con la versión actual de tus notas">
                   Re-evaluar
@@ -1220,7 +1224,8 @@ function renderSuggestionsList(items) {
       const id = e.currentTarget.dataset.id;
       const feedbackInput = document.getElementById(`feedback-${id}`);
       const feedback = feedbackInput ? feedbackInput.value.trim() : '';
-      resolveSuggestion(id, 'discarded', feedback);
+      const reason = document.getElementById(`reason-${id}`)?.value || undefined;
+      resolveSuggestion(id, 'discarded', feedback, reason);
     });
   });
 }
@@ -1261,7 +1266,16 @@ async function loadSuggestionReasoning(suggestionId) {
   }
 }
 
-async function resolveSuggestion(suggestionId, status, userFeedback = '') {
+// Fixed reasons offered when discarding; the values match DISCARD_REASONS in src/db/schema.ts
+const DISCARD_REASON_LABELS = [
+  ['unrelated', 'No tiene relación'],
+  ['obvious', 'Ya lo sabía / es obvio'],
+  ['wrong_note', 'Nota equivocada'],
+  ['poorly_worded', 'Mal redactada'],
+  ['other', 'Otro motivo'],
+];
+
+async function resolveSuggestion(suggestionId, status, userFeedback = '', discardReason = undefined) {
   const card = document.getElementById(`sug-card-${suggestionId}`);
   if (card) {
     card.classList.add('dismissed');
@@ -1294,6 +1308,7 @@ async function resolveSuggestion(suggestionId, status, userFeedback = '') {
       body: JSON.stringify({
         status,
         userFeedback: userFeedback || undefined,
+        discardReason,
       }),
     });
 

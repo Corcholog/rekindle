@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
-import { actionSuggestions, projects, contents, evaluations, projectSnapshots, projectNoteSnapshots } from '../../db/schema';
+import { actionSuggestions, projects, contents, evaluations, projectSnapshots, projectNoteSnapshots, DISCARD_REASONS } from '../../db/schema';
 import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss, SYNC_JOB_OPTIONS } from '../../queue';
@@ -65,6 +65,10 @@ const ListSuggestionsQuerySchema = z.object({
 const UpdateSuggestionBodySchema = z.object({
   status: z.enum(['accepted', 'discarded']),
   userFeedback: z.string().max(1000).optional(),
+  discardReason: z.enum(DISCARD_REASONS).optional(),
+}).refine(body => body.discardReason === undefined || body.status === 'discarded', {
+  message: 'discardReason only applies when discarding',
+  path: ['discardReason'],
 });
 
 const IdParamSchema = z.object({
@@ -978,7 +982,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
     },
   }, async (request, reply) => {
     const { id } = request.params as z.infer<typeof IdParamSchema>;
-    const { status, userFeedback } = request.body as z.infer<typeof UpdateSuggestionBodySchema>;
+    const { status, userFeedback, discardReason } = request.body as z.infer<typeof UpdateSuggestionBodySchema>;
 
     let [existing] = await db.select()
       .from(actionSuggestions)
@@ -1025,6 +1029,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
           ...resolution,
           status,
           userFeedback: userFeedback ?? null,
+          discardReason: discardReason ?? null,
           writtenToVault: false,
           resolvedAt: new Date(),
         }).onConflictDoNothing({ target: actionSuggestions.evaluationId });
@@ -1049,6 +1054,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         .set({
           status,
           userFeedback: userFeedback ?? existing.userFeedback,
+          discardReason: discardReason ?? null,
           resolvedAt: new Date(),
         })
         .where(and(eq(actionSuggestions.id, existing.id), eq(actionSuggestions.status, 'pending')))

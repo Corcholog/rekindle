@@ -1,0 +1,2 @@
+CREATE TYPE "public"."discard_reason" AS ENUM('unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other');--> statement-breakpoint
+ALTER TABLE "action_suggestions" ADD COLUMN "discard_reason" "discard_reason";

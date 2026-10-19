@@ -1236,6 +1236,17 @@ body {
   gap: 0.55rem;
 }
 
+.discard-reason {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  max-width: 11rem;
+}
+
 /* ==========================================================================
    Chips, Status Indicators & Badges
    ========================================================================== */

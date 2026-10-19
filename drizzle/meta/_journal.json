@@ -50,6 +50,13 @@
       "when": 1792367217411,
       "tag": "0006_observability",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792379278076,
+      "tag": "0007_discard_reason",
+      "breakpoints": true
     }
   ]
 }
