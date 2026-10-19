@@ -205,7 +205,7 @@ What this supports: English output costs nothing measurable (the actionable verd
 | `REKINDLE_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against local Ollama and the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a model |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm preflight` | Checks the install (Node, Postgres, migrations, Ollama models, vault, active providers) and prints the fix for each problem |
-| `pnpm usertest:stats` | Counts only (acceptance rate, discard reasons, time to first suggestion) for [user-test sessions](docs/USER_TEST.md) |
+| `pnpm usertest:stats` | Counts only, from your local database: acceptance rate, discard reasons, time to the first suggestion |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |
@@ -247,7 +247,6 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, untrusted inputs, each mitigation and the test that proves it, residual risks |
 | [docs/DEMO.md](docs/DEMO.md) | Script and shot list for the demo recording |
-| [docs/USER_TEST.md](docs/USER_TEST.md) | Workflow for testing Rekindle with real people, and what is recorded |
 | [docs/JOURNEY.md](docs/JOURNEY.md) | Build log: decisions, dead ends, bugs found and fixed |
 
 ---
@@ -275,7 +274,7 @@ Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM as
 
 **Tokens and cost.** The thinking-off token and cost figures come from that repeat run, because the first one did not record cache hits. Cost is estimated from the tokens DeepSeek reports and its list prices: cached input costs 2% of uncached input, and both runs were off-peak (half price). Before 2026-10-19 the harness priced every token as uncached and peak-hour, so it overstated cost: its estimates for the DeepSeek runs up to then add up to $0.69, while DeepSeek billed $0.25 for all use up to then (the first run, estimated at $0.18, was billed $0.07; figures from the owner's DeepSeek dashboard, not reproducible from this repo). The new estimates have **not** been checked against the bill yet.
 
-**Real-user testing: not measured.** The workflow and the counts to record are defined in [`docs/USER_TEST.md`](docs/USER_TEST.md); no session has been run yet.
+**Real-user testing: not measured.** No session with other people has been run.
 
 ## Observability
 

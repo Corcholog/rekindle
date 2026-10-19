@@ -133,7 +133,7 @@ evals/
 **Deliverables**
 - `.env.example`, documented prerequisites, predictable migrations, a demo vault, and a one-command start (extend `docker-compose.yml` if needed). Verify by following the README from a clean clone.
 - A recorded demo (script and shot list prepared by the agent; recording by the owner).
-- `docs/USER_TEST.md`: a defined workflow for 3–5 testers and what to record: time to first useful suggestion, percentage of suggestions accepted, and the most common reasons for rejection. Testers use the demo vault or their own data; their content is not stored in the repo.
+- `docs/USER_TEST.md` (removed by the owner on 2026-10-19): a defined workflow for 3–5 testers and what to record: time to first useful suggestion, percentage of suggestions accepted, and the most common reasons for rejection. Testers use the demo vault or their own data; their content is not stored in the repo.
 
 **Acceptance criteria**
 - A new machine reaches a first suggestion following only the README.

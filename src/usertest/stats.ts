@@ -8,7 +8,7 @@ import { DISCARD_REASONS } from '../db/schema';
 //
 // Durations use only columns filled by the database clock (consumed_at, created_at). resolved_at
 // is written by Node, and the two clocks are not comparable on a machine outside UTC, so the time
-// to the first accepted suggestion is taken with a stopwatch instead (docs/USER_TEST.md).
+// to the first accepted suggestion is taken with a stopwatch instead.
 
 type Db = typeof defaultDb;
 
