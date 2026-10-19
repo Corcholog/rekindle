@@ -321,6 +321,7 @@ erDiagram
     text suggested_action
     suggestion_status status
     text user_feedback
+    discard_reason discard_reason
     boolean written_to_vault
     timestamp resolved_at
   }
@@ -655,7 +656,7 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 - `GET /api/suggestions/:id`
   - Returns: Suggestion detail with content summary, observation, and confidence score.
 - `PATCH /api/suggestions/:id`
-  - Body: `{ status: 'accepted' | 'discarded', userFeedback? }`
+  - Body: `{ status: 'accepted' | 'discarded', userFeedback?, discardReason? }` (`discardReason`: `unrelated | obvious | wrong_note | poorly_worded | other`, only with `discarded`)
   - Returns: Updated suggestion. On `accepted`, atomically appends callout to `suggestions.md`.
 - `POST /api/suggestions/:id/reevaluate`
   - No body. Only pending suggestions can be re-evaluated.
@@ -706,6 +707,8 @@ pnpm run db:reset          # Drop schemas and re-migrate (destructive)
 pnpm telemetry:report      # Latency, failure/fallback rates and cost over a period (--since 7d)
 pnpm telemetry:trace <id>  # One suggestion or content back through retrieval and ingestion
 pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline events
+pnpm preflight             # Install check: Node, .env, Postgres, migrations, Ollama models, vault, providers (start.sh runs it)
+pnpm usertest:stats        # Counts only for user-test sessions: acceptance rate, discard reasons, time to first suggestion
 ```
 
 ### Automated Test Suites (`tests/`)
@@ -731,6 +734,8 @@ pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline
   - `tests/ui_xss.test.ts`: the real web UI in jsdom against the real API with hostile titles, notes and model output.
   - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`LOOM_LIVE_TESTS=1`); skipped otherwise.
   - `tests/pipeline_trace.test.ts`: Phase 4 acceptance. The real ingest route, queue and workers with stubbed models and fetch: one trace links a suggestion to its content and retrieval event, and a sentinel planted in notes, articles, model output, error messages and URLs never reaches the logs or the telemetry tables.
+  - `tests/first_suggestion.test.ts`: the README path offline: demo vault indexed, article ingested and evaluated, one pending suggestion, one callout after accepting, no suggestion for a control article.
+  - `tests/doctor.test.ts`, `tests/demo_vault.test.ts`, `tests/discard_reason.test.ts`, `tests/usertest_stats.test.ts`: the preflight checks and probes, the shape of the demo vault, discard reasons, and the user-test counts (no text in the output).
   - `tests/observability_schema.test.ts`, `tests/llm_telemetry.test.ts`, `tests/telemetry_report.test.ts`: migration 0006, per-attempt telemetry rows, and the report math on hand-built rows.
 - Under Vitest the default `DATABASE_URL` and `OLLAMA_URL` point at closed ports and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`, and no test reaches a model unless `LOOM_LIVE_TESTS=1`.
 - **CI** (`.github/workflows/ci.yml`): on every push and pull request, frozen-lockfile install, typecheck, lint, the full suite and `pnpm audit --prod --audit-level high`, on Node 22 with Actions pinned to commit SHAs.

@@ -54,21 +54,38 @@ Notes inside project folders are indexed recursively. No mandatory `project.md` 
 
 ## Requirements
 
-- **Node.js** `>= 22`
-- **pnpm** (npm also works)
-- **PostgreSQL 16 with `pgvector`** — `docker compose up -d postgres` provides it
-- **Ollama** running locally with:
-  ```bash
-  ollama pull bge-m3              # embeddings (required, 1024-d)
-  ollama pull qwen2.5:7b-instruct # local LLM (used when no Gemini key, or as fallback)
-  ```
-- **Gemini API key** *(optional)* — faster structured output. See the privacy note below.
+| You need | Why |
+|---|---|
+| **Node.js** `>= 22` | runs the server (CI uses 22; developed on 24) |
+| **pnpm** 12 | `corepack enable` installs the version pinned in `package.json` |
+| **Docker** | PostgreSQL 16 with `pgvector` (`docker compose up -d postgres`); also needed by `pnpm test` |
+| **Ollama** | local embeddings and the local chat model; about 6 GB of downloads |
+| *Optional:* DeepSeek or Gemini API key | faster, better-scored triage. See the privacy note below |
+
+```bash
+ollama pull bge-m3              # embeddings (required, 1024-d, always local)
+ollama pull qwen2.5:7b-instruct # local LLM (used when no cloud key is set, or as fallback)
+```
+
+## Quick start
+
+```bash
+git clone https://github.com/Corcholog/loom.git && cd loom
+corepack enable && pnpm install
+./start.sh        # copies .env.example, starts Postgres, migrates, runs `pnpm preflight`, starts the server
+```
+
+Open <http://127.0.0.1:3000>. Loom uses the synthetic [`demo_vault/`](demo_vault) (4 Spanish projects, 15 notes) until you set `VAULT_PATH`. Paste the links from [`demo_vault/ARTICULOS_DEMO.md`](demo_vault/ARTICULOS_DEMO.md) into **Consumo**, wait for the summaries, and open **Sugerencias**.
+
+`pnpm preflight` is the same check `start.sh` runs: it verifies Node, `.env`, Postgres, migrations, Ollama and its models, the vault, and which LLM providers are active, and prints the command that fixes each problem. `start.bat` does the same on Windows but **has not been tested** on a real Windows machine.
+
+**What a first run looked like** (one run, a fresh clone, no cloud keys, so everything on local `qwen2.5:7b-instruct`; not a benchmark): the nine articles in the list produced 1 `actionable` suggestion, 5 `tentative` ones, and nothing for the two control articles. The first suggestion appeared about 3.5 minutes after the first clip. Other models and machines will differ; the quality numbers that matter are under [Evaluation](#evaluation).
 
 ---
 
-## Getting started
+## Getting started in detail
 
-### 1. Configure
+### 1. Configure (`start.sh` does this for you)
 
 ```bash
 cp .env.example .env
@@ -102,7 +119,7 @@ pnpm run db:migrate        # enables pgvector and applies Drizzle migrations
 
 ```bash
 # On Linux / macOS:
-./start.sh                 # or pnpm run dev / pnpm start
+./start.sh                 # or pnpm preflight && pnpm run dev
 
 # On Windows:
 start.bat                  # checks Docker/Ollama, migrates, opens browser and launches dev
@@ -142,6 +159,8 @@ With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), t
 | `pnpm test:coverage` | Same, with v8 coverage for `src/` |
 | `LOOM_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against local Ollama and the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a model |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
+| `pnpm preflight` | Checks the install (Node, Postgres, migrations, Ollama models, vault, active providers) and prints the fix for each problem |
+| `pnpm usertest:stats` | Counts only (acceptance rate, discard reasons, time to first suggestion) for [user-test sessions](docs/USER_TEST.md) |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
 | `pnpm run db:reset` | ⚠️ Drops `public`, `drizzle` and `pgboss` schemas and re-migrates (`reset_db.sh` / `reset_db.bat`) |
@@ -182,6 +201,8 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **In-depth technical reference**: Architecture, data model, pipelines, API, configuration, and design |
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, untrusted inputs, each mitigation and the test that proves it, residual risks |
+| [docs/DEMO.md](docs/DEMO.md) | Script and shot list for the demo recording |
+| [docs/USER_TEST.md](docs/USER_TEST.md) | Workflow for testing Loom with real people, and what is recorded |
 | [docs/JOURNEY.md](docs/JOURNEY.md) | Build log: decisions, dead ends, bugs found and fixed |
 
 ---
@@ -199,6 +220,8 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 | Cost of 118 triage calls | free tier | about $0.12 at list price | $0 |
 
 DeepSeek leading is why the default chain is `deepseek,gemini,ollama`; it also led when every project within the distance threshold reached the LLM and with the earlier prompts (macro-F1 0.74 vs 0.56 and 0.61, in [`docs/JOURNEY.md`](docs/JOURNEY.md)). Recall counts the relevant pairs that the top-3 cutoff never sends to the LLM (about 1 in 8) as misses. These numbers come from a small, single-labeler dataset, and the models' run-to-run variance is **not measured**: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+
+**Real-user testing: not measured.** The workflow and the counts to record are defined in [`docs/USER_TEST.md`](docs/USER_TEST.md); no session has been run yet.
 
 ## Observability
 

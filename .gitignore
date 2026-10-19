@@ -21,3 +21,6 @@ docs/audit/
 # Private eval data: real notes, article texts, labels and caches (never committed)
 evals/private/
 evals/dataset/runs/
+
+# Files Loom writes into the demo vault while you try it
+demo_vault/**/suggestions.md
