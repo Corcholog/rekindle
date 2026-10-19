@@ -23,7 +23,7 @@ describe('Writeback idempotency and recovery', () => {
     return (text.match(/\[!tip\] Sugerencia Aceptada/g) || []).length;
   };
 
-  async function createAcceptedSuggestion(): Promise<string> {
+  async function createAcceptedSuggestion(status: 'accepted' | 'pending' = 'accepted'): Promise<string> {
     // Each evaluation yields at most one suggestion
     const [evaluation] = await db.insert(schema.evaluations).values({
       contentId, projectSnapshotId: snapshotId, verdict: 'actionable', consumptionSeq: ++seq,
@@ -34,8 +34,8 @@ describe('Writeback idempotency and recovery', () => {
       targetFile: 'ideas.md',
       observation: 'Observación de prueba',
       suggestedAction: 'Citar la fuente en el capítulo 2',
-      status: 'accepted',
-      resolvedAt: new Date(),
+      status,
+      resolvedAt: status === 'accepted' ? new Date() : null,
     }).returning({ id: schema.actionSuggestions.id });
     return row.id;
   }
@@ -138,5 +138,44 @@ describe('Writeback idempotency and recovery', () => {
 
     await expect(writeAcceptedSuggestionToVault(id, vaultPath)).rejects.toThrow(/no existe/);
     expect(await fs.access(path.join(vaultPath, projectFolder)).then(() => true).catch(() => false)).toBe(false);
+  });
+
+  // Audit failure scenario 5, through the route the UI calls
+  it('accepting while the disk write fails answers accepted-but-pending and queues a sync that writes once', async () => {
+    const Fastify = (await import('fastify')).default;
+    const { serializerCompiler, validatorCompiler } = await import('fastify-type-provider-zod');
+    const { boss } = await import('../src/queue/index');
+    const sendSpy = vi.spyOn(boss, 'send').mockResolvedValue('job-id');
+    vi.stubEnv('VAULT_PATH', vaultPath);
+    const server = Fastify();
+    server.setValidatorCompiler(validatorCompiler);
+    server.setSerializerCompiler(serializerCompiler);
+    server.register((await import('../src/api/routes/suggestions')).default);
+    await server.ready();
+
+    const id = await createAcceptedSuggestion('pending');
+    await fs.mkdir(suggestionsFile()); // every read and append of suggestions.md fails
+    const res = await server.inject({ method: 'PATCH', url: `/api/suggestions/${id}`, payload: { status: 'accepted' } });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id, status: 'accepted', writtenToVault: false });
+    expect(sendSpy).toHaveBeenCalledWith('sync_suggestions', { projectId }, expect.objectContaining({ retryLimit: expect.any(Number) }));
+
+    // The disk recovers; the queued sync job (vaultWorker) writes the callout once
+    await fs.rmdir(suggestionsFile());
+    const { syncProjectSuggestions } = await import('../src/vault/updater');
+    await syncProjectSuggestions(projectId, vaultPath);
+    await syncProjectSuggestions(projectId, vaultPath);
+    // Earlier tests left other accepted suggestions in this project; count this one's marker
+    const text = await fs.readFile(suggestionsFile(), 'utf-8');
+    expect(text.split(`%% loom:${id} %%`).length - 1).toBe(1);
+    const { eq } = await import('drizzle-orm');
+    const [row] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.id, id));
+    expect(row.writtenToVault).toBe(true);
+
+    await server.close();
+    sendSpy.mockRestore();
+    vi.unstubAllEnvs();
+    vi.stubEnv('DATABASE_URL', container.getConnectionUri());
   });
 });
