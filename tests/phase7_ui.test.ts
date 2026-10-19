@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest';
+import { installFakeAi } from './helpers/fakeAi';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -29,6 +30,9 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     // 3. Init DB schema
     const { pool, db: drizzleDb } = await import('../src/db/index');
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
+    // Embeddings and model answers are deterministic fakes (tests/helpers/fakeAi.ts)
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    installFakeAi(sharedAiProvider);
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await migrate(drizzleDb, { migrationsFolder: './drizzle' });
 

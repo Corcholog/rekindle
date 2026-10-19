@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import Fastify from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
+import { installFakeAi, fakeEmbedding, FakeAi } from './helpers/fakeAi';
 
 describe('Ingestion Pipeline Integration', () => {
   let container: StartedPostgreSqlContainer;
   let server: any;
   let db: any;
   let boss: any;
+  let fake: FakeAi;
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
@@ -25,6 +27,9 @@ describe('Ingestion Pipeline Integration', () => {
     
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await migrate(db, { migrationsFolder: './drizzle' });
+
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    fake = installFakeAi(sharedAiProvider);
 
     const { boss: pgBoss, startQueue } = await import('../src/queue/index');
     boss = pgBoss;
@@ -78,8 +83,7 @@ describe('Ingestion Pipeline Integration', () => {
     // 2. Poll DB for completion
     let status = 'pending';
     let record: any;
-    // Wait up to 180 seconds since Ollama might take a bit for summarization/embedding (cold start)
-    for (let i = 0; i < 180; i++) { 
+    for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 1000));
       const res = await db.select().from(contents).where(eq(contents.id, contentId));
       if (res.length > 0) {
@@ -98,11 +102,14 @@ describe('Ingestion Pipeline Integration', () => {
     expect(status).toBe('ready');
     expect(record.rawText).toContain('Este es un articulo de prueba sobre inteligencia artificial');
     expect(record.title).toBe('Test Article');
-    expect(record.summary).toBeDefined();
-    
-    // Check vector properties
-    expect(Array.isArray(record.embedding)).toBe(true);
-    expect(record.embedding.length).toBe(1024);
+
+    // The extracted text was summarized, and the summary (not the raw text) was embedded
+    expect(fake.calls.map(c => c.kind)).toEqual(['summary']);
+    expect(fake.calls[0].user).toContain('Este es un articulo de prueba sobre inteligencia artificial');
+    expect(record.summary).toMatch(/^Resumen simulado: /);
+    expect(fake.embeddings).toEqual([record.summary]);
+    expect(record.embedding).toHaveLength(1024);
+    record.embedding.forEach((v: number, i: number) => expect(v).toBeCloseTo(fakeEmbedding(record.summary)[i], 5));
     expect(record.embeddingModel).toBe('bge-m3');
-  }, 240000); // Give the test plenty of time
+  }, 90000);
 });

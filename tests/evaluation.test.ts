@@ -2,11 +2,13 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { randomUUID } from 'crypto';
+import { installFakeAi, FakeAi } from './helpers/fakeAi';
 
 describe('Evaluation Pipeline Integration', () => {
   let container: StartedPostgreSqlContainer;
   let db: any;
   let schemas: any;
+  let fake: FakeAi;
   
   beforeAll(async () => {
     container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
@@ -26,6 +28,8 @@ describe('Evaluation Pipeline Integration', () => {
     await migrate(db, { migrationsFolder: './drizzle' });
 
     schemas = await import('../src/db/schema');
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    fake = installFakeAi(sharedAiProvider);
   }, 120000);
 
   afterAll(async () => {
@@ -78,9 +82,26 @@ describe('Evaluation Pipeline Integration', () => {
       ingestStatus: 'ready'
     });
 
-    // 3. Run Evaluation manually
+    // 3. Run Evaluation manually, with a scripted model answer
+    fake.answerNext({
+      verdict: 'actionable',
+      confidenceScore: 0.85,
+      triageReasoning: 'El artículo aporta evidencia sobre el desacople con pub/sub en sistemas multi-agente.',
+      action: {
+        actionType: 'evidence_citation',
+        observation: 'Muestra cómo pub/sub elimina cuellos de botella entre agentes.',
+        suggestedAction: 'Citar el artículo al justificar el bus de eventos.',
+        targetFile: null,
+      },
+    });
     const { evaluateContentMatch } = await import('../src/evaluator');
     await evaluateContentMatch(contentId);
+
+    // The triage prompt carried the article summary and the project thesis
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0].kind).toBe('triage');
+    expect(fake.calls[0].user).toContain(contentSummary);
+    expect(fake.calls[0].user).toContain(thesisText);
 
     // 4. Assert Results
     const evaluations = await db.select().from(schemas.evaluations).where(eq(schemas.evaluations.contentId, contentId));
@@ -91,11 +112,8 @@ describe('Evaluation Pipeline Integration', () => {
     expect(actions.length).toBe(1);
     expect(actions[0].actionType).toBeDefined();
     
-    // Check Spanish response (heuristic check)
-    // The reasoning and observation should be in Spanish.
-    // We check that the result string length > 5 to assure it's somewhat filled.
-    expect(actions[0].observation.length).toBeGreaterThan(5);
-    expect(actions[0].suggestedAction.length).toBeGreaterThan(5);
-
-  }, 180000); // 180 seconds to allow for LLM execution
+    expect(actions[0].actionType).toBe('evidence_citation');
+    expect(actions[0].observation).toBe('Muestra cómo pub/sub elimina cuellos de botella entre agentes.');
+    expect(actions[0].suggestedAction).toBe('Citar el artículo al justificar el bus de eventos.');
+  }, 60000);
 });

@@ -2,6 +2,7 @@ import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { installFakeAi } from './helpers/fakeAi';
 
 describe('Settings API & Vault Path Change Scenarios', () => {
   let container: any;
@@ -45,6 +46,10 @@ describe('Settings API & Vault Path Change Scenarios', () => {
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await migrate(drizzleDb, { migrationsFolder: './drizzle' });
+
+    // Embeddings and model answers are deterministic fakes (tests/helpers/fakeAi.ts)
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    installFakeAi(sharedAiProvider);
 
     // Seed Project and a Suggestion in Vault A
     const { projects, projectSnapshots, contents, evaluations, actionSuggestions } = await import('../src/db/schema');
