@@ -2,6 +2,8 @@
   "name": "rekindle",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
+  "author": "Giorgio Ivan Loguercio (https://github.com/Corcholog)",
   "scripts": {
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include=src/** --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reportOnFailure",

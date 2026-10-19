@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use Rekindle or build on it, please cite it as below."
+type: software
+title: "Rekindle"
+abstract: >-
+  A local-first, human-in-the-loop research assistant that connects what you read
+  (articles, YouTube) to the writing projects you set aside in an Obsidian vault, using
+  local embeddings and LLM-proposed actions that are written only when you accept them.
+authors:
+  - given-names: "Giorgio Ivan"
+    family-names: "Loguercio"
+    alias: "Corcholog"
+    email: "loguerciogiorgioivan@gmail.com"
+    website: "https://github.com/Corcholog"
+repository-code: "https://github.com/Corcholog/rekindle"
+license: Apache-2.0
+keywords:
+  - obsidian
+  - retrieval-augmented generation
+  - llm evaluation
+  - embeddings
+  - pgvector
+  - human-in-the-loop

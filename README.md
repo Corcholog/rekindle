@@ -312,3 +312,11 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 - **Ingestion fails with "Unsupported content type"**: only HTML/text pages are supported (no binary PDFs).
 - **Secondary Linux drive not detected**: if your vault is on an NTFS/removable partition (`/run/media`), Rekindle attempts auto-mounting via `udisksctl`. Ensure your user has mount permissions.
 - **Slow first request**: Ollama loads models on first invocation (30–40 s cold start).
+
+---
+
+## License and citation
+
+Rekindle is released under the [Apache License 2.0](LICENSE). You may use, modify and redistribute it, including commercially; redistributions and derivative works must keep the [`NOTICE`](NOTICE) file, which credits the author. To cite Rekindle, use GitHub's *Cite this repository* button or [`CITATION.cff`](CITATION.cff).
+
+Built by Giorgio Ivan Loguercio ([GitHub](https://github.com/Corcholog)).
