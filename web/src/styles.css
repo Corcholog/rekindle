@@ -6,7 +6,8 @@
 /*
   Rekindle palette. Ember is reserved for heat: dormant projects, the suggestions that rekindle
   them, and the one primary action per view. Everything else stays in ash and ink.
-  Light is a cool ash-grey paper; dark is warm coal.
+  Light is a cool ash-grey paper; dark is warm coal. Every text token reaches WCAG AA (4.5:1) on
+  the backgrounds it is used on (tests/ui_contrast.test.ts).
 */
 :root {
   --bg: #e7eaec;
@@ -16,9 +17,9 @@
   --line-strong: rgb(29 33 36 / 0.24);
   --ink: #1b1e21;
   --ink-2: #4b5258;
-  --ink-3: #6c747a;
+  --ink-3: #5a6268;
   --ash: #8b949b;
-  --ember: #b8410f;
+  --ember: #a83b0d;
   --ember-ink: #ffffff;
   --ember-hot: #e2731c;
   --ember-soft: rgb(184 65 15 / 0.09);
@@ -27,7 +28,7 @@
   --ok-soft: rgb(44 112 70 / 0.1);
   --danger: #a8281c;
   --danger-soft: rgb(168 40 28 / 0.08);
-  --focus: #b8410f;
+  --focus: #a83b0d;
 }
 
 .dark {
@@ -38,7 +39,7 @@
   --line-strong: rgb(239 228 216 / 0.2);
   --ink: #efe6dc;
   --ink-2: #b7aa9d;
-  --ink-3: #8c8075;
+  --ink-3: #a39689;
   --ash: #7e868c;
   --ember: #f07a30;
   --ember-ink: #1a1714;

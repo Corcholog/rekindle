@@ -9,7 +9,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // Ember is for the one main action of a view
-        primary: 'bg-ember text-ember-ink hover:bg-ember-hot',
+        primary: 'bg-ember text-ember-ink hover:opacity-90',
         secondary: 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
         ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
         danger: 'border border-line-strong bg-surface text-danger hover:bg-danger-soft',
