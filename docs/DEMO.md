@@ -17,12 +17,12 @@ A 2.5 to 3 minute screen recording that shows the whole loop on a synthetic demo
 |---|---|---|---|---|
 | 1 | 0:00 | Obsidian with the four project folders open | "Estos son mis proyectos de escritura: una novela, un ensayo, un juego de mesa y un podcast." | The vault is plain Markdown |
 | 2 | 0:15 | Terminal running `./start.sh`, ending in the preflight list | "Un solo comando: levanta la base de datos, revisa Ollama y los modelos, y arranca." | One-command start and the preflight |
-| 3 | 0:30 | Loom at **Configuración**: vault path and four projects | "Loom lee las notas y calcula embeddings locales." | I3: embeddings stay local |
+| 3 | 0:30 | Rekindle at **Configuración**: vault path and four projects | "Rekindle lee las notas y calcula embeddings locales." | I3: embeddings stay local |
 | 4 | 0:45 | Browser on the Wikipedia article *Faro*, click the extension | "Leo un artículo y lo guardo con la extensión." | Web clipper |
-| 5 | 1:00 | **Consumo**: the article moving from pending to ready, then the summary | "Loom lo resume y lo compara con cada proyecto." | Ingestion pipeline |
+| 5 | 1:00 | **Consumo**: the article moving from pending to ready, then the summary | "Rekindle lo resume y lo compara con cada proyecto." | Ingestion pipeline |
 | 6 | 1:20 | **Sugerencias** on the lighthouse project: the suggestion, its reasoning and the target note | "Propone una acción concreta y explica por qué. Nada se escribe todavía." | Human in the loop, I1 |
 | 7 | 1:45 | Obsidian: no `suggestions.md` yet | "El vault sigue intacto." | I1 |
-| 8 | 1:55 | Back in Loom: choose **Aceptar** (and on another card pick a reason and **Descartar**) | "Acepto una y descarto otra indicando el motivo." | Accept and discard reasons |
+| 8 | 1:55 | Back in Rekindle: choose **Aceptar** (and on another card pick a reason and **Descartar**) | "Acepto una y descarto otra indicando el motivo." | Accept and discard reasons |
 | 9 | 2:10 | Obsidian: the new callout in `suggestions.md` | "Aparece un callout con la acción, la observación y la fuente." | Explicit writeback |
 | 10 | 2:25 | Terminal: `pnpm telemetry:report` | "Y puedo ver cada llamada al modelo: latencia, fallos y coste." | Observability |
 | 11 | 2:40 | `evals/REPORT.md` table | "Mido los modelos contra etiquetas mías. Son pocos datos y una sola persona, y lo digo en el informe." | Honest evaluation |

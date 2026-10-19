@@ -1,6 +1,6 @@
 # Evaluation harness
 
-Answers one question: after changing a prompt, model, threshold or embedding, did Loom get better or worse? Each run executes Loom's real reconciler, retrieval and evaluator against a throwaway Postgres (Testcontainers) and scores the result against **labels written by a person**. The tooling never decides what is correct.
+Answers one question: after changing a prompt, model, threshold or embedding, did Rekindle get better or worse? Each run executes Rekindle's real reconciler, retrieval and evaluator against a throwaway Postgres (Testcontainers) and scores the result against **labels written by a person**. The tooling never decides what is correct.
 
 ## Layout
 
@@ -26,7 +26,7 @@ A dataset is a directory:
 ## Workflow
 
 1. `pnpm eval:snapshot --vault <path> --out evals/private` copies the markdown of your projects (read-only on the vault).
-2. List article URLs in `<dataset>/sources.yaml` (`- {id: x, url: https://…}`) and run `pnpm eval:fetch <dataset>`. Articles are fetched with Loom's own SSRF-safe fetcher and extracted with Readability (YouTube links use transcripts).
+2. List article URLs in `<dataset>/sources.yaml` (`- {id: x, url: https://…}`) and run `pnpm eval:fetch <dataset>`. Articles are fetched with Rekindle's own SSRF-safe fetcher and extracted with Readability (YouTube links use transcripts).
 3. `pnpm eval:label <dataset>` writes `labels.yaml` with every verdict empty. **Fill it in**: for each article and project choose `actionable`, `tentative` or `irrelevant`, and for `actionable` the `target_note` where you would use it. Set `labeled_by`. `pnpm eval:label <dataset> --check --strict` validates it.
 4. `pnpm eval run <dataset> --config evals/configs/<config>.json [--record]` runs a config. `--record` also stores each LLM answer so the run can be replayed.
 5. `pnpm eval:review <dataset>` opens a local page (127.0.0.1 only) with every article, the summary the models saw, each model's verdict, confidence, reasoning and suggested action next to your label, and live metrics. Pressing a verdict button saves it to `labels.yaml` (a timestamped backup is made when the page starts), and the metrics update at once. It reads the per-config detail files in `<dataset>/runs/`, which each run writes; `pnpm eval run … --replay` regenerates them from the cache for free.

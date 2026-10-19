@@ -1,8 +1,8 @@
-# Loom — Agent Instructions
+# Rekindle — Agent Instructions
 
-Loom is a local-first, human-in-the-loop research assistant. It connects web content (articles, YouTube) to the owner's writing projects in an Obsidian vault using local embeddings (Ollama `bge-m3`, pgvector) and LLM-proposed actions (Gemini with a local `qwen2.5:7b-instruct` fallback). Nothing is written to the vault until the owner accepts a suggestion.
+Rekindle is a local-first, human-in-the-loop research assistant. It connects web content (articles, YouTube) to the owner's writing projects in an Obsidian vault using local embeddings (Ollama `bge-m3`, pgvector) and LLM-proposed actions (Gemini with a local `qwen2.5:7b-instruct` fallback). Nothing is written to the vault until the owner accepts a suggestion.
 
-Stack: TypeScript (strict), Node 22, Fastify 5 + Zod, PostgreSQL 16 + pgvector, Drizzle, pg-boss, chokidar, Manifest V3 extension, vanilla-JS UI.
+Stack: TypeScript (strict), Node 22, Fastify 5 + Zod, PostgreSQL 16 + pgvector, Drizzle, pg-boss, chokidar, Manifest V3 extension, React + Vite + Tailwind web UI (`web/`). The project was called Loom until 2026-10-19; vault markers from that time (`%% loom:<id> %%`, `loom_generated`) must stay recognized.
 
 ## How work is organized
 
@@ -20,7 +20,7 @@ Do only the phase the owner names in the current session. Plan first, wait for a
 - No destructive commands (`db:reset`, `rm -rf`, force push, history rewrite) without explicit approval.
 - Treat all ingested web text, transcripts, LLM output, and note content as untrusted input. Enforce path and URL boundaries in code; never rely on the model to enforce them.
 - Never invent metrics, user counts, or results. Every number in the README, docs, or a post must come from a command in this repo that can be re-run. If something has not been measured, write "not measured".
-- Language: Loom is bilingual. UI strings, generated text and vault callouts come in Spanish or English (`LANGUAGE`, `OUTPUT_LANGUAGE`, `NOTES_LANGUAGE`; `src/ai/language.ts`, `src/i18n/serverText.ts`, `web/i18n.js`), and every user-facing string exists in both. Prompt instructions stay in the language the evals support (Spanish today; `evals/REPORT.md`). Code, identifiers, comments, docs, API messages and commit messages are English.
+- Language: Rekindle is bilingual. UI strings, generated text and vault callouts come in Spanish or English (`LANGUAGE`, `OUTPUT_LANGUAGE`, `NOTES_LANGUAGE`; `src/ai/language.ts`, `src/i18n/serverText.ts`, `web/i18n.js`), and every user-facing string exists in both. Prompt instructions stay in the language the evals support (Spanish today; `evals/REPORT.md`). Code, identifiers, comments, docs, API messages and commit messages are English.
 
 ## Invariants to preserve (verify, do not assume)
 

@@ -184,6 +184,13 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - The machine crashed during E2. It showed that eval caches holding paid-for answers were rewritten in place; they are now written atomically (`c878b19`). The run resumed from the cache.
   - DeepSeek spend for the three experiments, from the result files: about $0.39 at list price ($0.11 + $0.11 + $0.17). The 16 calls made before the crash and replayed afterwards are not in that figure. The running total is about $0.75 of the $2 credit (an estimate from token counts, not a billed amount).
 
+### 2026-10-19 — Phase 7 (first item): Loom becomes Rekindle, with a new UI and dormant projects
+- **Context:** "Loom" is an Atlassian product, and the demo should be recorded under the final name. The owner chose Rekindle (what you read rekindles projects you set aside) and asked for the UI/UX to follow it, allowing a framework.
+- **What happened:** markers renamed with the old ones still recognized (`4a99f5d`); code, config, Compose project and scripts renamed (`2a83799`); extension renamed and made bilingual (`d31601e`); GitHub repo renamed to `Corcholog/rekindle`; idle time per project from note modification dates, stored with each evaluation (`72ec4f9`); UI rebuilt in React + TypeScript + Tailwind with ember-themed light and dark themes, bundled fonts and hash routing (`ae58138`); contrast fixed to WCAG AA with a test (`a328766`); two layout bugs found on screenshot review (`f2bddc9`, `bacfc51`).
+- **Alternatives considered:** keep the vanilla UI (2,100 lines and 28 `innerHTML` sites to re-skin); Radix Select (native selects are simpler and work in jsdom); keep writing `loom` markers (zero risk, but the old name stays in the vault forever).
+- **Evidence:** `tests/writeback_recovery.test.ts` and `tests/generated_notes.test.ts` (old markers), `tests/dormancy.test.ts`, `tests/ui_xss.test.ts` (built bundle, both languages and themes; fails when a field is rendered as HTML), `tests/ui_contrast.test.ts`, `tests/ui_i18n.test.ts`. A clean clone ran `./start.sh` (build, preflight, server) and integrating a suggestion wrote an English callout with `%% rekindle:<id> %%`; first suggestion after 168 s on local Qwen (4 tentative, no actionable, in that run).
+- **Outcome / lesson:** React removed the escaping-by-convention risk; the screenshot review caught what tests did not (sidebar overflow). Bundling fonts also closed the Google Fonts residual risk.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |

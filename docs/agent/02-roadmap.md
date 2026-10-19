@@ -11,7 +11,7 @@ Order rationale: less code first (cleanup) makes every later step cheaper; secur
 - [x] **Phase 4 — AI observability**
 - [x] **Phase 5 — CI, integration and failure-scenario tests, threat model**
 - [ ] **Phase 6 — Reproducibility, demo, and real-user workflow test** (code and docs done 2026-10-19; open: demo recording, user sessions, Windows check)
-- [x] **Phase 6.5 — Bilingual Loom (Spanish / English)** (added and done 2026-10-19)
+- [x] **Phase 6.5 — Bilingual Rekindle (Spanish / English)** (added and done 2026-10-19)
 - [ ] **Phase 7 — Publication package**
 - [ ] **Optional — Evidence-driven improvements** (only if Phase 3 shows the need)
 
@@ -128,7 +128,7 @@ evals/
 
 ## Phase 6 — Reproducibility, demo, and real-user workflow test
 
-**Goal:** someone else can run Loom and judge it.
+**Goal:** someone else can run Rekindle and judge it.
 
 **Deliverables**
 - `.env.example`, documented prerequisites, predictable migrations, a demo vault, and a one-command start (extend `docker-compose.yml` if needed). Verify by following the README from a clean clone.
@@ -141,7 +141,7 @@ evals/
 
 ---
 
-## Phase 6.5 — Bilingual Loom (Spanish / English)
+## Phase 6.5 — Bilingual Rekindle (Spanish / English)
 
 **Goal:** an English-speaking reader can run the demo end to end in English, and the language the model is instructed in is chosen by measurement.
 
@@ -187,7 +187,7 @@ Only start these if Phase 3 results show a need, and always report before/after 
 Items decided or noticed in conversation that belong to no finished phase. Each says where it fits.
 
 **Phase 7 (publication)**
-- **Rename the project.** "Loom" is an Atlassian product. A rename touches the repo name (GitHub keeps redirects), `package.json`, UI and extension names, docs, the `loomdb` database and Docker setup. It must keep recognizing the existing `%% loom:<id> %%` markers and `loom_generated` frontmatter in the owner's vault, or writeback idempotency (I5) breaks.
+- **Rename the project.** Done 2026-10-19: Rekindle (repo `Corcholog/rekindle`); old vault markers stay recognized.
 - **Make the repo public** only after the Phase 7 checks (license, secret scan of the whole history). It is private until then; commits keep the owner's Gmail address (owner decision).
 - **LinkedIn post caveats:** one labeler, small n, Flash Lite tier, private data not reproducible by readers, run-to-run variance not measured, real article titles not named.
 

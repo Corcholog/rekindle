@@ -1,21 +1,21 @@
-# Loom — Architecture & Technical Reference
+# Rekindle — Architecture & Technical Reference
 
-> **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Loom.  
+> **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Rekindle.  
 > **State described:** git `master` after Phase 2 (security and integrity fixes; see `docs/agent/02-roadmap.md`). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
 > **Verification:** run `pnpm typecheck`, `pnpm lint` and `pnpm test`; per-phase results are recorded in `docs/JOURNEY.md`.
 
 ---
 
-## 1. What Loom Is
+## 1. What Rekindle Is
 
-Loom is a **local-first, human-in-the-loop intelligence layer** that connects what you read on the web with what you write in your personal knowledge base (Obsidian).
+Rekindle is a **local-first, human-in-the-loop intelligence layer** that connects what you read on the web with what you write in your personal knowledge base (Obsidian).
 
 The workflow centers on writer agency:
 1. **Writing projects as folders in Obsidian**: You maintain projects as collections of Markdown notes under `Projects/<ProjectName>/` (or `Proyectos/<ProjectName>/`).
 2. **Seamless link capture**: You ingest web articles, essays, and YouTube videos via the web UI or the **Manifest V3 Web Clipper extension** (which queues clippings locally when offline and auto-syncs on reconnect).
-3. **Structured summarization & local embedding**: Loom extracts the readable article text or video transcript, synthesizes a structured summary (in the notes language, Spanish by default), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
-4. **Hierarchical semantic matching**: Loom compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL using `pgvector` cosine distance.
-5. **Constructive triage & action proposal**: When cosine distance indicates semantic affinity (< 0.6), Loom prompts an LLM (Gemini with automatic local Ollama fallback) to formulate a concrete, constructive action targeting a specific note in your project (e.g., *"Citar evidencia en research/combat.md"*, *"Contraargumento para Acto 2"*).
+3. **Structured summarization & local embedding**: Rekindle extracts the readable article text or video transcript, synthesizes a structured summary (in the notes language, Spanish by default), and calculates a 1024-dimensional dense vector embedding locally via Ollama (`bge-m3`).
+4. **Hierarchical semantic matching**: Rekindle compares the incoming content against both whole-project embeddings and granular note-level embeddings (`project_note_snapshots`) in PostgreSQL using `pgvector` cosine distance.
+5. **Constructive triage & action proposal**: When cosine distance indicates semantic affinity (< 0.6), Rekindle prompts an LLM (Gemini with automatic local Ollama fallback) to formulate a concrete, constructive action targeting a specific note in your project (e.g., *"Citar evidencia en research/combat.md"*, *"Contraargumento para Acto 2"*).
 6. **Explicit writeback**: Pending and tentative suggestions **never alter your vault**. Only suggestions you explicitly click **Aceptar** on are appended to your vault as native Obsidian callouts (`> [!tip]`) inside `<project>/suggestions.md`. Synergy bridge notes and research briefs are only written when you click **Guardar en Obsidian** (§11).
 7. **Living knowledge synchronization**:
    - **Vector-gated staleness detection**: Detects when notes evolve in Obsidian and flags older suggestions as stale (`isStale`).
@@ -26,7 +26,7 @@ The workflow centers on writer agency:
 ### Core Design Principles
 - **Obsidian is the primary source of truth**: The filesystem holds your creative writing. PostgreSQL holds derived vector index state, immutable snapshots, and triage history.
 - **Zero unapproved mutations** (invariant I1): AI cannot write or edit notes without your explicit action. Suggestions are written only after **Aceptar**; generated notes only after **Guardar en Obsidian**, as new files that never overwrite anything. Model text is sanitized before it reaches the vault (`src/vault/sanitize.ts`).
-- **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. Without `GEMINI_API_KEY`, every LLM call (summaries, evaluations, re-evaluations, Consultor, synergies, synthesis) runs locally with Ollama. Non-LLM outbound traffic remains: fetching the pages and YouTube metadata/transcripts you ingest, and the web fonts the UI loads from Google Fonts.
+- **Privacy & local-first foundation**: Vector embeddings are strictly calculated on-device via Ollama. Without `GEMINI_API_KEY`, every LLM call (summaries, evaluations, re-evaluations, Consultor, synergies, synthesis) runs locally with Ollama. Non-LLM outbound traffic remains: fetching the pages and YouTube metadata/transcripts you ingest. The UI's fonts are bundled.
 - **Two languages, chosen by measurement**: the interface, generated text and vault callouts come in Spanish or English (section 18). Prompt instructions stay Spanish because the evals measured them that way; summaries follow the language of the notes they are compared with. Source code, API messages, developer documentation and commits are in **English**.
 
 ---
@@ -45,14 +45,14 @@ The workflow centers on writer agency:
 | **LLM Provider** | Gemini (`@google/genai`) with fallback to local `ChatOllama` (`qwen2.5:7b-instruct`) | Structured output with Zod schemas. Seamless fallback if Gemini quota, key, or network fails. |
 | **Filesystem Watcher** | `chokidar` 5.x | Real-time debounced watching of Obsidian project directories. |
 | **Browser Extension** | Manifest V3 (Chrome / Chromium / Edge / Brave) | Background service worker, offline queueing in `chrome.storage.local`, auto-sync alarms. |
-| **Web Frontend** | Vanilla ES Modules + HTML5 + custom CSS | Newsreader, Plus Jakarta Sans and JetBrains Mono (loaded from Google Fonts), Obsidian callout styling, no UI framework. |
+| **Web Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Radix (shadcn/ui style) | Literata and Hanken Grotesk bundled with the app; light and dark themes |
 
 ---
 
 ## 3. Repository Layout
 
 ```
-loom/
+rekindle/
 ├─ extension/                         Manifest V3 Web Clipper browser extension
 │  ├─ manifest.json                   Extension manifest, permissions & host declarations
 │  ├─ background.js                   Service worker with offline queue & auto-sync engine
@@ -106,10 +106,11 @@ loom/
 │     ├─ ingestionWorker.ts           Job processor for 'ingest_url' queue
 │     ├─ evaluationWorker.ts          Job processor for 'evaluate_content' queue
 │     └─ vaultWorker.ts               Job processor for 'sync_suggestions' recovery queue
-├─ web/                               Single Page Application (served via Fastify static)
-│  ├─ index.html                      Semantic HTML with 4 views (Consumo, Sugerencias, Consultor, Config)
-│  ├─ app.js                          Frontend controller, state management, modal handlers
-│  └─ styles.css                      Editorial design system
+├─ web/                               React + TypeScript UI (Vite), built into web/dist and served via Fastify static
+│  ├─ src/views/                      Reading, Suggestions, Consultant, Settings
+│  ├─ src/components/                 Suggestion card, ember meter, dialogs, ui/ primitives
+│  ├─ src/i18n/dict.ts                Spanish and English strings
+│  └─ src/styles.css                  Tailwind v4 and the light/dark design tokens
 ├─ scripts/
 │  └─ run_server.ts                   Server entrypoint for development & production
 ├─ drizzle/                           SQL migrations (never edited once applied)
@@ -128,13 +129,13 @@ loom/
 ```mermaid
 flowchart TD
   subgraph Clients["Clients"]
-    UI["Web UI<br/>(web/app.js)"]
+    UI["Web UI<br/>(web/src, React)"]
     EXT["Web Clipper Extension<br/>(Manifest V3)"]
     OFFLINE[("Offline Storage<br/>chrome.storage.local")]
     EXT <-->|Queue / Sync| OFFLINE
   end
 
-  subgraph Server["Loom Server (Single Node.js Process)"]
+  subgraph Server["Rekindle Server (Single Node.js Process)"]
     API["Fastify API Router<br/>(Zod Validated Routes)"]
     WATCH["Vault Watcher<br/>(chokidar, debounced 3s)"]
     REC["Project Reconciler<br/>(Hierarchical Parser & Lock)"]
@@ -202,14 +203,14 @@ flowchart TD
 
 ## 5. Configuration & Constants
 
-Loom reads configuration through `src/config.ts`, which validates `process.env` against a strict Zod schema at startup:
+Rekindle reads configuration through `src/config.ts`, which validates `process.env` against a strict Zod schema at startup:
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `NODE_ENV` | `enum` | `'development'` | Application environment (`development`, `production`, `test`). |
 | `HOST` | `string` | `'127.0.0.1'` | Network bind address. Must be `127.0.0.1`, `localhost` or `::1`; startup fails otherwise (the API has no authentication). |
 | `PORT` | `number` | `3000` | HTTP listen port. |
-| `DATABASE_URL` | `string` | `postgres://loom:loompassword@localhost:5432/loomdb` | PostgreSQL connection URI. |
+| `DATABASE_URL` | `string` | `postgres://rekindle:rekindlepassword@localhost:5432/rekindledb` | PostgreSQL connection URI. |
 | `OLLAMA_URL` | `string` | `http://127.0.0.1:11434` | Ollama service endpoint. |
 | `EMBED_MODEL` | `string` | `'bge-m3'` | Dense embedding model name (must produce 1024-dimensional vectors). |
 | `CHAT_MODEL` | `string` | `'gemini-3.1-flash-lite'` | Gemini model identifier. The Ollama chat model is `qwen2.5:7b-instruct`. |
@@ -378,7 +379,7 @@ erDiagram
    - Indexes: HNSW cosine index `project_snapshots_embedding_idx`; btree on `(project_id, captured_at)`.
 4. **`project_note_snapshots` (Hierarchical Note Embeddings)**:
    - Stores granular 1024-d embeddings for **individual Markdown notes** inside project directories and subdirectories.
-   - Enables fine-grained targeting: Loom matches content directly to specific notes (`research/combat.md`, `ideas.md`) instead of diluting them into an aggregate project blob.
+   - Enables fine-grained targeting: Rekindle matches content directly to specific notes (`research/combat.md`, `ideas.md`) instead of diluting them into an aggregate project blob.
    - Indexes: HNSW cosine index `project_note_snapshots_embedding_idx`; foreign key indexes on `project_snapshot_id` and `project_id`.
 5. **`evaluations`**:
    - The verdict (`actionable`, `tentative`, `irrelevant`) and reasoning of the LLM for a given `(content_id, project_snapshot_id)`.
@@ -397,12 +398,12 @@ erDiagram
 ## 7. The Obsidian Integration (`src/vault/`)
 
 ### 7.1 Recursive Vault Layout & Project Recognition
-Loom monitors two top-level directories: `Projects/` and `Proyectos/`.
+Rekindle monitors two top-level directories: `Projects/` and `Proyectos/`.
 - **Recursive note structure**: Projects are represented by directory folders (e.g. `Projects/SciFi_Novel/`). Notes can live at the root of the project or in nested subdirectories (e.g. `Projects/SciFi_Novel/worldbuilding/factions.md`).
-- **No mandatory `project.md`**: Loom does not force a rigid `project.md` file. The project thesis and title are derived heuristically:
+- **No mandatory `project.md`**: Rekindle does not force a rigid `project.md` file. The project thesis and title are derived heuristically:
   1. If a note carries the `#project` tag (inline or frontmatter `tags: [project]`), its text is the thesis and its H1 title becomes the project title.
   2. Otherwise the project title is the folder name and the thesis is the first 800 characters of the concatenated notes.
-- **Excluded patterns**: Hidden files/folders (`.obsidian/`, `.trash/`, `.git/`), attachments, Loom's own output file (`suggestions.md`) and notes Loom generated (frontmatter `loom_generated: true`, or `type: research_brief` / `cross_project_synergy` from earlier versions) are ignored during parsing and hashing, so generated text never feeds back into project context.
+- **Excluded patterns**: Hidden files/folders (`.obsidian/`, `.trash/`, `.git/`), attachments, Rekindle's own output file (`suggestions.md`) and notes Rekindle generated (frontmatter `rekindle_generated: true`, or `type: research_brief` / `cross_project_synergy` from earlier versions) are ignored during parsing and hashing, so generated text never feeds back into project context.
 
 ### 7.2 Parser (`parser.ts`)
 - Strips YAML frontmatter anchored at file start.
@@ -441,10 +442,10 @@ Policy: **Only accepted suggestions write to the vault.**
   > **Fuente:** [Título del Artículo](https://example.com/article)
   > **Feedback:** Considerar también el contraargumento de la página 4.
   ```
-- Each callout ends with a hidden Obsidian comment, `%% loom:<suggestion id> %%`.
+- Each callout ends with a hidden Obsidian comment, `%% rekindle:<suggestion id> %%`.
 - The write runs in a transaction that locks the suggestion row (`SELECT … FOR UPDATE`): read `suggestions.md`; append the callout only if its marker is absent; then set `written_to_vault = true`. A crash after the append leaves the marker, so the retry only sets the flag (invariant I5).
 - If the write fails, the flag stays `false` and a `sync_suggestions` job retries; every pending writeback is also retried when the server starts.
-- The project folder must already exist inside the vault; Loom never creates it (this matters after switching vaults).
+- The project folder must already exist inside the vault; Rekindle never creates it (this matters after switching vaults).
 - Model text is passed through `sanitizeForVault()`: code fences, `![[embeds]]` and remote images, raw HTML, Templater tags, `%%` comments, forged `[!callouts]` and Dataview inline queries are neutralized; prose, links and `[[wikilinks]]` are kept.
 
 ---
@@ -482,11 +483,11 @@ pg-boss 'evaluate_content' job
 ```
 
 ### 8.2 Web Clipper Extension (`extension/`)
-Loom includes a full Manifest V3 browser extension for 1-click clipping from Chromium-based browsers:
+Rekindle includes a full Manifest V3 browser extension for 1-click clipping from Chromium-based browsers:
 - **Instant Clipping**: Action popup and context menu let users clip the active tab URL or highlighted text selection.
-- **Offline Resilience**: If the Loom server is offline or unreachable, clippings are not lost; they are stored in `chrome.storage.local` with an amber badge indicator showing the queued count.
+- **Offline Resilience**: If the Rekindle server is offline or unreachable, clippings are not lost; they are stored in `chrome.storage.local` with an amber badge indicator showing the queued count.
 - **Background Auto-Sync**: The service worker (`extension/background.js`) flushes queued clippings to `POST /api/ingest` from a `chrome.alarms` timer (every minute while the queue is non-empty), on tab activation, on browser startup and right after enqueueing. The popup (`popup.js`) can also flush the queue directly. **Known issue:** both flush paths read and rewrite the same storage key without coordination, so a clip can be sent twice or dropped.
-- The extension reaches Loom through its `host_permissions` (`localhost:3000`, `127.0.0.1:3000`), so the server sends no CORS headers. It is the only supported browser clipper.
+- The extension reaches Rekindle through its `host_permissions` (`localhost:3000`, `127.0.0.1:3000`), so the server sends no CORS headers. It is the only supported browser clipper.
 
 ---
 
@@ -495,7 +496,7 @@ Loom includes a full Manifest V3 browser extension for 1-click clipping from Chr
 Evaluation is triggered by the `evaluate_content` queue (either for newly ingested content or during project backlog reconciliation).
 
 ### Step 1: Spatial Semantic Pre-filter (PostgreSQL pgvector)
-Loom performs a combined vector search querying both project-level and note-level embeddings:
+Rekindle performs a combined vector search querying both project-level and note-level embeddings:
 ```sql
 WITH latest_snapshots AS (
   SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, captured_at
@@ -542,7 +543,7 @@ For each candidate project under the 0.6 cutoff:
    });
    ```
 3. **Target File Resolution** (`targetFile.ts`): the LLM's `targetFile` is kept only if it names one of the snapshot's notes (exact path, path plus `.md`, or a file name only one note has); anything else, including paths outside the project, falls back to `matchedNotePath`, then `ideas.md`. Re-evaluation refinements go through the same check.
-4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Loom automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
+4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Rekindle automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
 5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`; a concurrent duplicate hits the unique index and is skipped. An evaluation and its suggestion are written in one transaction, so an interrupted job leaves neither. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`). The pg-boss queues use the standard policy, where `singletonKey` does not de-duplicate, so duplicate jobs rely on this idempotency.
 6. **Failure handling**: an LLM error for one project is recorded (a failed `evaluate` event, the failed LLM attempts, `failures` on the `evaluate_job` event), the other projects are still evaluated, and then the worker fails the job so pg-boss retries it (3 retries, backoff from 30 s). Projects already evaluated are skipped on retry. After the last retry the job stays failed and the pair waits for a backlog run; the UI does not show it, `telemetry:report` does.
 7. **Embedding model**: only embeddings produced by the current `EMBED_MODEL` are compared; contents and snapshots from another model are skipped until re-embedded (invariant I7).
@@ -550,7 +551,7 @@ For each candidate project under the 0.6 cutoff:
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
 When a project's notes change:
 - `findBacklogUnevaluatedContents`: Evaluates ready contents that were never checked against the project.
-- **Tentative Promotion Engine**: If a past evaluation was `tentative`, Loom automatically checks if:
+- **Tentative Promotion Engine**: If a past evaluation was `tentative`, Rekindle automatically checks if:
   - The project moved closer to the content by at least `PROMOTION_DELTA_THRESHOLD` (`0.08`), OR
   - A new or updated note in the project has strong affinity (`< 0.50` distance).
   If so, the content is queued for re-evaluation, allowing tentative items to naturally promote to `actionable`.
@@ -577,14 +578,14 @@ stateDiagram-v2
 ```
 
 ### Vector-Gated Staleness Detection
-As the user writes notes in Obsidian, previously generated suggestions may become out of date. Loom dynamically computes `isStale` and `driftScore` in SQL without requiring manual invalidation:
+As the user writes notes in Obsidian, previously generated suggestions may become out of date. Rekindle dynamically computes `isStale` and `driftScore` in SQL without requiring manual invalidation:
 - **Snapshot Drift**: If the current snapshot embedding diverges from the snapshot at evaluation time by `>= STALE_DRIFT_THRESHOLD` (`0.04`).
 - **Target Note Drift / Deletion**: If the specific note targeted by `targetFile` has drifted by `>= 0.04` or was deleted from the vault.
 - Stale suggestions display a visual badge in the UI and provide a **Reevaluar** action.
 
 ### Context-Aware Re-evaluation (`POST /api/suggestions/:id/reevaluate`)
 When re-evaluating a stale suggestion:
-1. Loom loads the original suggestion, the content summary, and the **latest project snapshot** from the database (all notes concatenated, capped at 15,000 characters).
+1. Rekindle loads the original suggestion, the content summary, and the **latest project snapshot** from the database (all notes concatenated, capped at 15,000 characters).
 2. The LLM evaluates whether the suggestion should be:
    - `keep_or_refine`: Kept and updated with refined observations matching the new draft.
    - `already_addressed`: Auto-resolved because the writer already incorporated the ideas.
@@ -595,14 +596,14 @@ When re-evaluating a stale suggestion:
 ## 11. Synergies, Backlog Synthesis & Archive Consultant
 
 ### 11.1 Cross-Project Thematic Synergies (`/api/projects/synergies`)
-Loom discovers hidden connections across separate projects by calculating the cosine distance between notes of different projects (`project_note_snapshots` where `pA.id != pB.id`):
+Rekindle discovers hidden connections across separate projects by calculating the cosine distance between notes of different projects (`project_note_snapshots` where `pA.id != pB.id`):
 - `GET /api/projects/synergies`: Returns high-affinity project pairs, closest matching notes, and semantic similarity scores.
 - `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects and returns a bridge note (shared problems, mutual benefits, markdown). It does **not** write to the vault. If a bridge note already exists on disk, it is returned instead of calling the LLM (`forceRegenerate` skips that).
-- `POST /api/projects/synergies/save` (the **Guardar en Obsidian** button): writes the note shown in the UI as `synergy_<A>_<B>.md` in project A's projects directory (`Projects/` or `Proyectos/`), sanitized and marked `loom_generated: true`. An existing file is never overwritten; a timestamped name is used instead.
+- `POST /api/projects/synergies/save` (the **Guardar en Obsidian** button): writes the note shown in the UI as `synergy_<A>_<B>.md` in project A's projects directory (`Projects/` or `Proyectos/`), sanitized and marked `rekindle_generated: true`. An existing file is never overwritten; a timestamped name is used instead.
 - **Known issue:** the note-to-note comparison and the notes sent to the LLM are taken from all historical snapshots, not just the latest one, so deleted notes can still appear.
 
 ### 11.2 Project Backlog Synthesis (`/api/projects/:id/synthesize`)
-Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM and returns it without writing anything. `POST /api/projects/:id/synthesis/save` (the **Guardar en Obsidian** button) writes it to the project folder as `research_brief.md`, or a timestamped name if that file exists. Saved briefs are sanitized, marked `loom_generated: true`, and excluded from the project's notes and embeddings.
+Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM and returns it without writing anything. `POST /api/projects/:id/synthesis/save` (the **Guardar en Obsidian** button) writes it to the project folder as `research_brief.md`, or a timestamped name if that file exists. Saved briefs are sanitized, marked `rekindle_generated: true`, and excluded from the project's notes and embeddings.
 
 ### 11.3 Archive & Vault Research Partner ("Consultor" - `/api/library/consult`)
 A dedicated research consultant that reasons over your entire intellectual repository:
@@ -678,20 +679,19 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 
 ## 13. Web UI Architecture (`web/`)
 
-The Loom frontend is a responsive single-page application built with modern vanilla ES Modules and custom CSS:
-- **Editorial Design System**: Newsreader (serif), Plus Jakarta Sans (sans) and JetBrains Mono (code), loaded from Google Fonts.
-- **Four Core Views**:
-  1. **Consumo (`#view-inbox`)**: Input card for pasting URLs, active worker progress indicator, and chronological reading history feed with status pills.
-  2. **Sugerencias (`#view-triage`)**: Project sidebar with unread counters, status tabs (Activas, Pendientes, Tentativas, Aceptadas, Descartadas), suggestion cards with inline Obsidian callouts, staleness pills, and one-click accept/discard/reevaluate actions. Includes the **Sintetizar Backlog** trigger.
-  3. **Consultor (`#view-consultant`)**: Natural language research partner interface with interactive prompt chips, structured diagnosis card, and split-column citation cards linking library items and Obsidian notes.
-  4. **Configuración (`#view-settings`)**: Vault path configuration, drive status indicator, rescan action, and detected projects table.
-- **Dynamic Modals**:
-  - Content Detail Modal (full text snippet, summary, per-project verdicts).
-  - Extension Guide Modal (how to load the Manifest V3 clipper).
-  - Synergy Bridge Modal (cross-project bridge note, written to the vault).
-  - Synthesis Result Modal (research brief summary and next steps).
-- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only). `tests/ui_xss.test.ts` runs the real page against the real API with hostile data, in both interface languages.
-- **Languages**: `web/i18n.js` (a classic script loaded before `app.js`) holds the Spanish and English dictionaries and `t()`. Static markup carries `data-i18n`, `data-i18n-attrs` or `data-i18n-html` (markup from the dictionary only, never data). The interface language is stored per browser in `localStorage` and defaults to the server's `LANGUAGE`; API errors are shown through their `code`. `tests/ui_i18n.test.ts` checks that both dictionaries have the same keys and that every key used exists.
+A React 19 + TypeScript single-page app, built by Vite into `web/dist` and served by the API server from the same origin (the request guard stays strict: no dev server on another port). `pnpm dev` runs `vite build --watch` next to the server.
+
+- **Build** (`web/vite.config.ts`): one classic IIFE bundle with fixed names (`assets/app.js`, CSS injected by it) so the tests can load the real build in jsdom. Fonts (Literata for text to read, Hanken Grotesk for the interface) are bundled from `@fontsource`, so the UI contacts nothing outside the machine.
+- **Styling**: Tailwind CSS v4 with the design tokens as CSS variables (`web/src/styles.css`): a cool ash-grey "paper" light theme and a warm "coal" dark theme, switched by a `.dark` class from the system setting or the choice in Settings. Ember is reserved for heat (dormant projects, rekindling suggestions, the one primary action of a view). Every text token reaches WCAG AA on every background (`tests/ui_contrast.test.ts`).
+- **Components**: Radix primitives in the shadcn/ui style, copied into `web/src/components/ui/` (Dialog, Tabs) plus native selects; icons from lucide-react; toasts from sonner.
+- **Views** (`web/src/views/`), addressed by the URL hash (`#reading`, `#suggestions`, `#consultant`, `#settings`):
+  1. **Reading** (*Consumo*): clip a URL, first-run guidance pointing at the demo articles, the reading feed with per-project verdicts, and the content detail dialog.
+  2. **Suggestions** (*Sugerencias*): project sidebar sorted by `sortProjects` (dormant projects with something to review first) with an ember meter per project, status tabs, collapsible synergies, and `SuggestionCard`: the action first in Literata, a "rekindles a project idle for N days" badge, reasoning folded, accept / discard with a reason / re-evaluate.
+  3. **Consultant** (*Consultor*): question, example chips, the answer with `[C1]`/`[N1]` references turned into jump links by splitting the text (never markup), and the cited cards.
+  4. **Settings** (*Configuración*): vault path, projects with their last edit, languages, theme.
+- **Data**: a typed client (`web/src/lib/api.ts`); views reload when background work finishes (the status poll bumps a refresh key).
+- **Safety (threat T9)**: React escapes all text; no component uses `dangerouslySetInnerHTML` or `innerHTML` (`tests/ui_i18n.test.ts`); only `http(s)` URLs become an `href` (`safeHref`). `tests/ui_xss.test.ts` runs the built bundle against the real API with hostile titles, notes and model output, in both languages and both themes.
+- **Languages**: `web/src/i18n/dict.ts` holds the Spanish and English dictionaries; `t()` for text and `tRich()` for text with React nodes in placeholders (code, emphasis). The interface language is stored per browser and defaults to the server's `LANGUAGE`; API errors are shown through their `code`.
 
 ---
 
@@ -699,7 +699,8 @@ The Loom frontend is a responsive single-page application built with modern vani
 
 ### Development & Operational Commands
 ```bash
-pnpm run dev               # Start server in watch mode with tsx
+pnpm dev                   # Watch-build the web UI and restart the server on changes
+pnpm build:web             # Build the React UI into web/dist (served by the server)
 pnpm start                 # Start production server
 pnpm typecheck             # Run tsc --noEmit
 pnpm lint                  # Run ESLint over codebase
@@ -733,15 +734,15 @@ pnpm usertest:stats        # Counts only for user-test sessions: acceptance rate
   - `tests/writeback_recovery.test.ts`, `tests/tentative_accept_race.test.ts`: crash-safe, single-callout writeback (I5).
   - `tests/reingest_idempotency.test.ts`, `tests/embedding_model.test.ts`: invariants I6 and I7.
   - `tests/error_responses.test.ts`: 500 responses do not leak internal errors.
-  - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks. Opt-in (`LOOM_LIVE_TESTS=1`).
+  - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks. Opt-in (`REKINDLE_LIVE_TESTS=1`).
   - `tests/failure_evaluation.test.ts`, `tests/failure_jobs.test.ts`, `tests/failure_reconcile.test.ts`, `tests/failure_injection.test.ts`, `tests/failure_target_path.test.ts`: the audit's failure scenarios (invalid output and timeouts, every provider failing, duplicate and interrupted jobs, a note edited mid-reconcile, prompt injection, target paths outside the project); scenario 5 is in `writeback_recovery`, scenario 7 in `safe_fetch`. Mapping in `docs/THREAT_MODEL.md`.
   - `tests/ui_xss.test.ts`: the real web UI in jsdom against the real API with hostile titles, notes and model output.
-  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`LOOM_LIVE_TESTS=1`); skipped otherwise.
+  - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`REKINDLE_LIVE_TESTS=1`); skipped otherwise.
   - `tests/pipeline_trace.test.ts`: Phase 4 acceptance. The real ingest route, queue and workers with stubbed models and fetch: one trace links a suggestion to its content and retrieval event, and a sentinel planted in notes, articles, model output, error messages and URLs never reaches the logs or the telemetry tables.
   - `tests/first_suggestion.test.ts`: the README path offline: demo vault indexed, article ingested and evaluated, one pending suggestion, one callout after accepting, no suggestion for a control article.
   - `tests/doctor.test.ts`, `tests/demo_vault.test.ts`, `tests/discard_reason.test.ts`, `tests/usertest_stats.test.ts`: the preflight checks and probes, the shape of the demo vault, discard reasons, and the user-test counts (no text in the output).
   - `tests/observability_schema.test.ts`, `tests/llm_telemetry.test.ts`, `tests/telemetry_report.test.ts`: migration 0006, per-attempt telemetry rows, and the report math on hand-built rows.
-- Under Vitest the default `DATABASE_URL` and `OLLAMA_URL` point at closed ports and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`, and no test reaches a model unless `LOOM_LIVE_TESTS=1`.
+- Under Vitest the default `DATABASE_URL` and `OLLAMA_URL` point at closed ports and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`, and no test reaches a model unless `REKINDLE_LIVE_TESTS=1`.
 - **CI** (`.github/workflows/ci.yml`): on every push and pull request, frozen-lockfile install, typecheck, lint, the full suite and `pnpm audit --prod --audit-level high`, on Node 22 with Actions pinned to commit SHAs.
 
 ---
@@ -767,11 +768,15 @@ Three choices, read at call time so a change in Settings applies to the next mod
 
 | Choice | Setting | What it changes | Why |
 |---|---|---|---|
-| Output language | `OUTPUT_LANGUAGE` (default `LANGUAGE`) | The "answer in X" line of every prompt and the schema descriptions of the text fields; fixed texts Loom writes itself (`src/i18n/serverText.ts`): callout labels and dates, generated-note headings, placeholder observations | What the user reads |
+| Output language | `OUTPUT_LANGUAGE` (default `LANGUAGE`) | The "answer in X" line of every prompt and the schema descriptions of the text fields; fixed texts Rekindle writes itself (`src/i18n/serverText.ts`): callout labels and dates, generated-note headings, placeholder observations | What the user reads |
 | Notes language | `NOTES_LANGUAGE` (default `LANGUAGE`) | The language of summaries | The summary is what gets embedded and compared with the note embeddings. Summarizing every article into the notes' language, whatever the article's language, keeps the comparison within one language |
 | Instruction language | `PROMPT_LANGUAGE` (internal, eval-only) | Spanish or English instructions for the summary and triage prompts (`src/ai/summarize.ts`, `src/evaluator/triagePrompt.ts`) | Kept on whatever measures best (`evals/REPORT.md`) |
 
 With all three in Spanish the prompts are byte-identical to the ones measured before languages were configurable; `tests/eval_replay.test.ts`, whose recordings are keyed by exact prompt, proves it. Logic that used to read the model's Spanish (the disguised-discard filter, the parser of saved synergy notes) accepts both languages. API messages are English with a stable `code` for the errors a user can hit. Text already stored keeps the language it was written in.
+
+## 19. Dormant projects (`src/vault/dormancy.ts`)
+
+The problem Rekindle exists for is a project left alone for weeks. Each snapshot stores `notes_modified_at` (a `timestamptz`): the newest modification time among the project's own notes, with `suggestions.md` and Rekindle-generated notes excluded, so Rekindle's writes never make a project look active. Snapshots taken before this column existed are dated on the next reconcile without a new snapshot. `/api/projects` returns `notesModifiedAt`, `idleDays` and `isDormant` (`DORMANT_AFTER_DAYS = 14`). Each evaluation stores `project_idle_days`, computed in Node from that absolute instant (the database and Node clocks are never mixed), so "rekindles a project idle for N days" stays true after the project is edited again. Tests: `tests/dormancy.test.ts`, `tests/ui_dormancy.test.ts`.
 
 ## 17. Known Considerations & Future Roadmap
 
@@ -782,4 +787,4 @@ With all three in Spanish the prompts are byte-identical to the ones measured be
 | **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
 | **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
 | **Prompt injection** | Untrusted text (pages, transcripts, summaries, notes, earlier suggestions, queries) is wrapped by `promptBlock` (`src/ai/promptSafety.ts`), which neutralizes tag-like sequences; `AiProvider` appends a rule to every system prompt that delimited content is data. Code-side limits (sanitized writes on accept only, validated target notes) are the real boundary. See `docs/THREAT_MODEL.md`. | Measure how often injected pages change verdicts (not measured). |
-| **Multi-Vault Support** | Loom operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |
+| **Multi-Vault Support** | Rekindle operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |

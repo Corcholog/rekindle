@@ -1,8 +1,8 @@
-# Articles to try Loom with this vault
+# Articles to try Rekindle with this vault
 
 All of them are public English Wikipedia pages. Paste them one at a time into **Reading** (or clip them with the extension) and then open **Suggestions**.
 
-The "Should connect with" column is only what the author of this vault expects, not a guarantee: what Loom proposes depends on the model you use.
+The "Should connect with" column is only what the author of this vault expects, not a guarantee: what Rekindle proposes depends on the model you use.
 
 | Article | Should connect with |
 |---|---|

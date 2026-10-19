@@ -1,8 +1,8 @@
-# Artículos para probar Loom con este vault
+# Artículos para probar Rekindle con este vault
 
 Todos son páginas públicas de Wikipedia en español. Pégalos uno a uno en **Consumo** (o clípalos con la extensión) y revisa **Sugerencias**.
 
-La columna "Debería conectar con" es solo una expectativa del autor del vault, no una garantía: lo que Loom proponga depende del modelo que uses.
+La columna "Debería conectar con" es solo una expectativa del autor del vault, no una garantía: lo que Rekindle proponga depende del modelo que uses.
 
 | Artículo | Debería conectar con |
 |---|---|

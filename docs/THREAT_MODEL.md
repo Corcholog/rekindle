@@ -1,6 +1,6 @@
-# Loom threat model
+# Rekindle threat model
 
-Loom is a single-user tool that runs on the owner's machine. It reads web pages and the owner's Obsidian vault, asks LLMs for suggestions, and writes to the vault only when the owner accepts one. This document lists what is worth protecting, where untrusted data comes from, what stops each threat, and which test proves it. It follows the threat model in `docs/agent/01-audit.md` and the Phase 0 audit findings (F-numbers).
+Rekindle is a single-user tool that runs on the owner's machine. It reads web pages and the owner's Obsidian vault, asks LLMs for suggestions, and writes to the vault only when the owner accepts one. This document lists what is worth protecting, where untrusted data comes from, what stops each threat, and which test proves it. It follows the threat model in `docs/agent/01-audit.md` and the Phase 0 audit findings (F-numbers).
 
 Last reviewed: 2026-10-19 (Phase 6.5, languages).
 
@@ -8,10 +8,10 @@ Last reviewed: 2026-10-19 (Phase 6.5, languages).
 
 | Asset | Why it matters |
 |---|---|
-| **Vault integrity** | The owner's notes are the product of years of work. Loom must never overwrite, corrupt or silently add to them. |
+| **Vault integrity** | The owner's notes are the product of years of work. Rekindle must never overwrite, corrupt or silently add to them. |
 | **Private notes and reading history** | Note text, project names and the list of ingested URLs are personal. They reach an LLM provider only when the owner configures one. |
 | **API keys** | `DEEPSEEK_API_KEY` and `GEMINI_API_KEY` in `.env` cost money if leaked. |
-| **Local files and the local network** | Loom fetches URLs on the owner's behalf; it must not become a way to read local files or reach services on the LAN. |
+| **Local files and the local network** | Rekindle fetches URLs on the owner's behalf; it must not become a way to read local files or reach services on the LAN. |
 | **Trust in suggestions** | A suggestion is useful only if the owner can believe where it came from and where it points. |
 
 ## Untrusted inputs
@@ -48,12 +48,12 @@ Last reviewed: 2026-10-19 (Phase 6.5, languages).
 | T6 | The model proposes a target note outside the project (`../../Personal/diario.md`) or a wildcard that matches unrelated notes (F-13) | 2 | The target note must be one of the snapshot's notes, otherwise the retrieved note is used; accepted callouts always go to `<project>/suggestions.md`; `LIKE` wildcards in stored targets are escaped | `src/evaluator/targetFile.ts`, `src/api/routes/suggestions.ts` | `tests/failure_target_path.test.ts` |
 | T7 | A generated note name or the vault-path setting escapes the vault or injects lines into `.env` (F-10) | 2, 3 | Generated notes are confined to the vault and use exclusive-create; the vault path is checked for control characters, written atomically with mode 0600, and must exist | `src/vault/generatedNotes.ts`, `src/vault/config.ts` | `tests/generated_notes.test.ts`, `tests/env_writer.test.ts`, `tests/settings_vault.test.ts` |
 | T8 | A symlink inside a project pulls a file from outside the vault into prompts | 6 | The reconciler's walk skips symlinked files and folders; hidden folders (`.obsidian`) are ignored | `src/vault/reconciler.ts`, `src/vault/watcher.ts` | `tests/failure_reconcile.test.ts` (symlinks), `tests/invariants.test.ts` (I4) |
-| T9 | Page titles, notes or model output become HTML or script in the web UI | 1, 2, 6 | Every string from pages, notes or models is escaped before `innerHTML`; links go through `safeUrl` (http(s) only); translated markup (`data-i18n-html`) comes only from the static dictionary in `web/i18n.js`, never from data; the eval review page uses `textContent` only | `web/app.js`, `web/i18n.js`, `evals/review/app.js` | `tests/ui_xss.test.ts` (both interface languages), `tests/ui_i18n.test.ts`, `tests/eval_review_ui.test.ts` |
+| T9 | Page titles, notes or model output become HTML or script in the web UI | 1, 2, 6 | The UI is React: all text is escaped; no component uses `dangerouslySetInnerHTML` or `innerHTML`; only http(s) URLs become an `href`; the eval review page uses `textContent` only | `web/src/`, `evals/review/app.js` | `tests/ui_xss.test.ts` (built bundle, both languages and themes), `tests/ui_i18n.test.ts` (no HTML rendering), `tests/eval_review_ui.test.ts` |
 | T10 | A malicious extension message or page script abuses the extension | 5 | Host permissions limited to `localhost:3000`/`127.0.0.1:3000`; no `externally_connectable`; the extension origin may only call `/api/ingest` | `extension/manifest.json`, `src/api/requestGuard.ts` | `tests/request_guard.test.ts` (extension origin), `tests/extension_offline.test.ts` (manifest) |
 | T11 | Note text, article text, prompts, URLs or error details leak into logs, telemetry or HTTP errors (F-26, F-27) | 1, 2, 6 | One redacting logger (text-like fields censored at any depth, errors reduced to name/kind/status); telemetry stores IDs, counts, lengths and hashes; 500 responses are generic | `src/observability/logger.ts`, `src/observability/llmTelemetry.ts`, `src/api/server.ts` | `tests/logger_redaction.test.ts`, `tests/pipeline_trace.test.ts`, `tests/error_responses.test.ts` |
 | T12 | Notes reach a cloud LLM without the owner choosing it; embeddings leave the machine | — | No cloud LLM traffic without a cloud key (I2); embeddings are always computed by local Ollama (I3) | `src/ai/chain.ts`, `src/ai/aiProvider.ts` | `tests/invariants.test.ts` |
-| T13 | API keys leak through git or tests | — | `.env` is git-ignored; tests blank the cloud keys and point `DATABASE_URL` and `OLLAMA_URL` at closed ports unless `LOOM_LIVE_TESTS=1`; no code path logs the keys (checked by reading, not by a test) | `.gitignore`, `vitest.config.ts` | `tests/invariants.test.ts` (no cloud traffic with blank keys); key logging: no test |
-| T14 | A crash, retry or race duplicates or loses a vault write, a suggestion or an evaluation (F-06, F-07, F-08, I5, I6) | — | Callouts carry a `%% loom:<id> %%` marker and are written under `SELECT … FOR UPDATE` with boot recovery; one suggestion per evaluation (unique index); an evaluation and its suggestion are written in one transaction; re-ingesting never re-evaluates | `src/vault/updater.ts`, `src/evaluator/index.ts`, `src/api/routes/ingest.ts` | `tests/writeback_recovery.test.ts`, `tests/tentative_accept_race.test.ts`, `tests/reingest_idempotency.test.ts`, `tests/failure_jobs.test.ts` |
+| T13 | API keys leak through git or tests | — | `.env` is git-ignored; tests blank the cloud keys and point `DATABASE_URL` and `OLLAMA_URL` at closed ports unless `REKINDLE_LIVE_TESTS=1`; no code path logs the keys (checked by reading, not by a test) | `.gitignore`, `vitest.config.ts` | `tests/invariants.test.ts` (no cloud traffic with blank keys); key logging: no test |
+| T14 | A crash, retry or race duplicates or loses a vault write, a suggestion or an evaluation (F-06, F-07, F-08, I5, I6) | — | Callouts carry a `%% rekindle:<id> %%` marker and are written under `SELECT … FOR UPDATE` with boot recovery; one suggestion per evaluation (unique index); an evaluation and its suggestion are written in one transaction; re-ingesting never re-evaluates | `src/vault/updater.ts`, `src/evaluator/index.ts`, `src/api/routes/ingest.ts` | `tests/writeback_recovery.test.ts`, `tests/tentative_accept_race.test.ts`, `tests/reingest_idempotency.test.ts`, `tests/failure_jobs.test.ts` |
 | T15 | Model failures silently drop evaluations, so the owner trusts an incomplete picture (F-09) | 2 | Failed project evaluations fail the job, which is retried with backoff; every attempt and failure is recorded and shown by `pnpm telemetry:report` | `src/workers/evaluationWorker.ts`, `src/observability/` | `tests/failure_evaluation.test.ts` |
 | T16 | A vulnerable or malicious dependency | — | `pnpm audit --prod --audit-level high` in CI; GitHub Actions pinned to commit SHAs with a read-only token; pnpm runs install scripts only for an allowlist | `.github/workflows/ci.yml`, `pnpm-workspace.yaml` | CI job (not a unit test) |
 
@@ -66,7 +66,7 @@ Last reviewed: 2026-10-19 (Phase 6.5, languages).
 | 1 | The LLM returns invalid structured output or times out | `tests/failure_evaluation.test.ts`, `tests/providers.test.ts` |
 | 2 | Every LLM provider fails | `tests/failure_evaluation.test.ts` |
 | 3 | A queued job runs twice, concurrently, or is interrupted | `tests/failure_jobs.test.ts` |
-| 4 | Obsidian changes a note while Loom reconciles it | `tests/failure_reconcile.test.ts` |
+| 4 | Obsidian changes a note while Rekindle reconciles it | `tests/failure_reconcile.test.ts` |
 | 5 | An accepted suggestion's disk write fails | `tests/writeback_recovery.test.ts` |
 | 6 | Retrieved content contains prompt-injection instructions | `tests/failure_injection.test.ts` |
 | 7 | URL fetching targets a private service or abuses redirects | `tests/safe_fetch.test.ts` |
@@ -85,4 +85,3 @@ These are known and accepted for a single-user local tool, or not fixed yet:
 - **The extension can send a queued clip twice** (F-21). Re-ingesting is harmless (I6).
 - **Unicode normalization and platform path differences** in vault sync (F-28) and regex denial of service in the parser were not tested.
 - **Development dependencies** are not audited in CI (only production ones are).
-- **The web UI loads fonts from Google Fonts**, which reveals to Google that the UI was opened.
