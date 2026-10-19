@@ -35,6 +35,8 @@ const SuggestionItemSchema = z.object({
   createdAt: z.string(),
   triageReasoning: z.string().nullable().optional(),
   confidenceScore: z.number().nullable().optional(),
+  /** Days the project had been idle when this item was evaluated (null: unknown). */
+  projectIdleDays: z.number().nullable().optional(),
   isStale: z.boolean().default(false).optional(),
   driftScore: z.number().default(0).optional(),
 });
@@ -128,6 +130,7 @@ export default async function (server: FastifyInstance) {
         createdAt: actionSuggestions.createdAt,
         confidenceScore: evaluations.confidenceScore,
         triageReasoning: evaluations.triageReasoning,
+        projectIdleDays: evaluations.projectIdleDays,
       })
       .from(actionSuggestions)
       .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
@@ -201,6 +204,7 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.project_idle_days AS "projectIdleDays",
           CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
             ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
           COALESCE(
@@ -301,6 +305,7 @@ export default async function (server: FastifyInstance) {
             e.verdict,
             e.confidence_score AS "confidenceScore",
             e.triage_reasoning AS "triageReasoning",
+          e.project_idle_days AS "projectIdleDays",
             e.evaluated_at AS "createdAt"
           FROM evaluations e
           JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
@@ -324,7 +329,8 @@ export default async function (server: FastifyInstance) {
           NULL::timestamp AS "resolvedAt",
           lpe."createdAt",
           lpe."confidenceScore",
-          lpe."triageReasoning"
+          lpe."triageReasoning",
+          lpe."projectIdleDays"
         FROM latest_project_evals lpe
         JOIN projects p ON lpe.project_id = p.id
         JOIN contents c ON lpe.content_id = c.id
@@ -417,6 +423,7 @@ export default async function (server: FastifyInstance) {
           e.verdict,
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.project_idle_days AS "projectIdleDays",
           e.evaluated_at AS "createdAt"
         FROM evaluations e
         JOIN project_snapshots ps ON e.project_snapshot_id = ps.id
@@ -442,6 +449,7 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.project_idle_days AS "projectIdleDays",
           CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
             ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
           COALESCE(
@@ -500,6 +508,7 @@ export default async function (server: FastifyInstance) {
           lpe."createdAt",
           lpe."confidenceScore",
           lpe."triageReasoning",
+          lpe."projectIdleDays",
           0.0::float AS "driftScore",
           false AS "isStale"
         FROM latest_project_evals lpe
@@ -558,6 +567,7 @@ export default async function (server: FastifyInstance) {
       resolvedAt: actionSuggestions.resolvedAt,
       createdAt: actionSuggestions.createdAt,
       triageReasoning: evaluations.triageReasoning,
+      projectIdleDays: evaluations.projectIdleDays,
       triageVerdict: evaluations.verdict,
       confidenceScore: evaluations.confidenceScore,
     })
@@ -579,6 +589,7 @@ export default async function (server: FastifyInstance) {
         contentUri: contents.uri,
         contentSummary: contents.summary,
         triageReasoning: evaluations.triageReasoning,
+        projectIdleDays: evaluations.projectIdleDays,
         triageVerdict: evaluations.verdict,
         confidenceScore: evaluations.confidenceScore,
         createdAt: evaluations.evaluatedAt,
@@ -804,6 +815,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       createdAt: actionSuggestions.createdAt,
       confidenceScore: evaluations.confidenceScore,
       triageReasoning: evaluations.triageReasoning,
+      projectIdleDays: evaluations.projectIdleDays,
     })
     .from(actionSuggestions)
     .innerJoin(projects, eq(actionSuggestions.projectId, projects.id))
@@ -998,6 +1010,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         projectId: projectSnapshots.projectId,
         contentId: evaluations.contentId,
         triageReasoning: evaluations.triageReasoning,
+        projectIdleDays: evaluations.projectIdleDays,
         verdict: evaluations.verdict,
         confidenceScore: evaluations.confidenceScore,
         createdAt: evaluations.evaluatedAt,
@@ -1111,6 +1124,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       resolvedAt: actionSuggestions.resolvedAt,
       createdAt: actionSuggestions.createdAt,
       triageReasoning: evaluations.triageReasoning,
+      projectIdleDays: evaluations.projectIdleDays,
       confidenceScore: evaluations.confidenceScore,
     })
     .from(actionSuggestions)

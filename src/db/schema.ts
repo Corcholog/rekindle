@@ -85,6 +85,9 @@ export const projectSnapshots = pgTable('project_snapshots', {
   embedding: vector('embedding'),
   embeddingModel: text('embedding_model'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
+  // Newest modification time of the project's own notes (Rekindle's files excluded). With a time
+  // zone, so it compares correctly with Node's clock; null on snapshots taken before it existed.
+  notesModifiedAt: timestamp('notes_modified_at', { withTimezone: true }),
 }, (table) => [
   index('project_snapshots_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
   index('project_snapshots_proj_captured_idx').on(table.projectId, table.capturedAt)
@@ -120,6 +123,9 @@ export const evaluations = pgTable('evaluations', {
   traceId: uuid('trace_id'),
   // The retrieval step that selected this project for the content
   retrievalEventId: uuid('retrieval_event_id').references(() => pipelineEvents.id, { onDelete: 'set null' }),
+  // Whole days the project's notes had been untouched when this evaluation ran (null: unknown).
+  // Kept on the evaluation, so "rekindles a project idle for N days" stays true after later edits.
+  projectIdleDays: integer('project_idle_days'),
 }, (table) => [
   unique('evaluations_idempotency_idx').on(table.contentId, table.projectSnapshotId, table.consumptionSeq)
 ]);

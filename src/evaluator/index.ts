@@ -11,6 +11,7 @@ import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DI
 import { getLogger } from '../observability/logger';
 import { outputLanguage, promptLanguage } from '../ai/language';
 import { serverText } from '../i18n/serverText';
+import { idleDays } from '../vault/dormancy';
 import { isDiscardAction, triageSchema, triageSystemPrompt, triageUserMessage } from './triagePrompt';
 
 const log = getLogger('evaluator');
@@ -188,9 +189,12 @@ async function runEvaluation(
       let written: { evaluationId: string; suggestionId: string | null };
       try {
         written = await db.transaction(async (tx) => {
+          const [snapshotDates] = await tx.select({ notesModifiedAt: projectSnapshots.notesModifiedAt })
+            .from(projectSnapshots).where(eq(projectSnapshots.id, snapshotId));
           const [evalRecord] = await tx.insert(evaluations).values({
             contentId,
             projectSnapshotId: snapshotId,
+            projectIdleDays: idleDays(snapshotDates?.notesModifiedAt),
             verdict,
             confidenceScore: result.confidenceScore,
             triageReasoning,

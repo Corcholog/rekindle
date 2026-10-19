@@ -8,6 +8,7 @@ import { parseMarkdownFile } from './parser';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
 import { PROJECT_DIR_NAMES, env } from '../config';
+import { newestModification } from './dormancy';
 import { isGeneratedNote } from './generatedNotes';
 import { getLogger, pathKey } from '../observability/logger';
 
@@ -76,6 +77,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       const [latestSnapshot] = await db.select({
         id: projectSnapshots.id,
         embedding: projectSnapshots.embedding,
+        notesModifiedAt: projectSnapshots.notesModifiedAt,
       })
       .from(projectSnapshots)
       .where(eq(projectSnapshots.projectId, existingProject.id))
@@ -83,7 +85,13 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       .limit(1);
 
       if (latestSnapshot && latestSnapshot.embedding !== null) {
-        // Truly up to date with valid embedding
+        // Truly up to date. Snapshots from before dormancy tracking get their date filled in once.
+        if (!latestSnapshot.notesModifiedAt) {
+          const notesModifiedAt = await newestModification((await getProjectMarkdownFiles(projectPath)).map(f => f.fullPath));
+          if (notesModifiedAt) {
+            await db.update(projectSnapshots).set({ notesModifiedAt }).where(eq(projectSnapshots.id, latestSnapshot.id));
+          }
+        }
         return;
       }
     }
@@ -102,8 +110,10 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       contentSnippet: string;
     }[] = [];
     
+    let notesModifiedAt: Date | null = null;
     try {
       const mdFiles = await getProjectMarkdownFiles(projectPath);
+      notesModifiedAt = await newestModification(mdFiles.map(f => f.fullPath));
 
       for (const file of mdFiles) {
         const parsed = await parseMarkdownFile(file.fullPath);
@@ -212,6 +222,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         noteTitles,
         embedding,
         embeddingModel: env.EMBED_MODEL,
+        notesModifiedAt,
       }).returning({ id: projectSnapshots.id });
 
       // Insert hierarchical note-level snapshots

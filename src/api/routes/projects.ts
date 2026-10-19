@@ -11,6 +11,7 @@ import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../.
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { languageName, outputLanguage } from '../../ai/language';
 import { SERVER_TEXT, serverText } from '../../i18n/serverText';
+import { idleDays, isDormant } from '../../vault/dormancy';
 import { promptBlock } from '../../ai/promptSafety';
 
 const ProjectItemSchema = z.object({
@@ -30,6 +31,12 @@ const ProjectItemSchema = z.object({
   }),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Newest change to the project's own notes, if known. */
+  notesModifiedAt: z.string().nullable(),
+  /** Whole days since then (null: unknown). */
+  idleDays: z.number().nullable(),
+  /** Idle for DORMANT_AFTER_DAYS or more. */
+  isDormant: z.boolean(),
 });
 
 const ListProjectsQuerySchema = z.object({
@@ -187,22 +194,25 @@ export default async function (server: FastifyInstance) {
       thesis_text: string | null;
       note_titles: any;
       captured_at: string | null;
+      notes_modified_at: Date | null;
     }>(sql`
       SELECT DISTINCT ON (project_id)
         project_id,
         thesis_text,
         note_titles,
-        captured_at
+        captured_at,
+        notes_modified_at
       FROM project_snapshots
       WHERE project_id IN ${sql`(${sql.join(projectIds.map(id => sql`${id}`), sql`, `)})`}
       ORDER BY project_id, captured_at DESC
     `);
 
-    const snapshotMap = new Map<string, { thesisText: string | null; noteTitles: string[] }>();
+    const snapshotMap = new Map<string, { thesisText: string | null; noteTitles: string[]; notesModifiedAt: Date | null }>();
     for (const r of snapshotRows.rows) {
       snapshotMap.set(r.project_id, {
         thesisText: r.thesis_text ?? null,
         noteTitles: Array.isArray(r.note_titles) ? r.note_titles : [],
+        notesModifiedAt: r.notes_modified_at ? new Date(r.notes_modified_at) : null,
       });
     }
 
@@ -264,8 +274,10 @@ export default async function (server: FastifyInstance) {
       }
     }
 
+    const now = Date.now();
     const results = projectList.map(proj => {
       const snap = snapshotMap.get(proj.id);
+      const idle = idleDays(snap?.notesModifiedAt, now);
       const pending = sugCounts.get(`${proj.id}:pending`) ?? 0;
       const accepted = sugCounts.get(`${proj.id}:accepted`) ?? 0;
       const discardedSug = sugCounts.get(`${proj.id}:discarded`) ?? 0;
@@ -292,6 +304,9 @@ export default async function (server: FastifyInstance) {
         },
         createdAt: proj.createdAt.toISOString(),
         updatedAt: proj.updatedAt.toISOString(),
+        notesModifiedAt: snap?.notesModifiedAt?.toISOString() ?? null,
+        idleDays: idle,
+        isDormant: isDormant(idle),
       };
     });
 

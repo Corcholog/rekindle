@@ -57,6 +57,13 @@
       "when": 1792379278076,
       "tag": "0007_discard_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792428801954,
+      "tag": "0008_dormancy",
+      "breakpoints": true
     }
   ]
 }
