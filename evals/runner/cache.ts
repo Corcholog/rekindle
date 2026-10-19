@@ -35,7 +35,10 @@ export class JsonCache<T> {
     if (!this.dirty) return;
     await fs.mkdir(path.dirname(this.file), { recursive: true });
     const sorted = Object.fromEntries([...this.entries].sort(([a], [b]) => a.localeCompare(b)));
-    await fs.writeFile(this.file, JSON.stringify(sorted), 'utf-8');
+    // Temp file + rename: a crash mid-write must not destroy paid-for recordings
+    const tmp = `${this.file}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(sorted), 'utf-8');
+    await fs.rename(tmp, this.file);
     this.dirty = false;
   }
 }
