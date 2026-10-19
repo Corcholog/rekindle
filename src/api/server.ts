@@ -39,6 +39,7 @@ server.setErrorHandler((error: any, request, reply) => {
     reply.status(400).send({
       error: 'Bad Request',
       message: issueMsg ? `Validation failed: ${issueMsg}` : 'Validation failed',
+      code: 'validation_failed',
       issues: error.validation
     });
     return;

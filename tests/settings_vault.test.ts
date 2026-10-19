@@ -151,7 +151,7 @@ describe('Settings API & Vault Path Change Scenarios', () => {
 
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body);
-    expect(body.message).toContain('no existe o no es un directorio válido');
+    expect(body).toMatchObject({ code: 'vault_path_invalid' });
   });
 
   it('POST /api/settings/vault cambia al Vault B: proyecto ausente se desactiva pero conserva sugerencias', async () => {

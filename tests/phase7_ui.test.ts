@@ -318,7 +318,8 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.payload).toContain('direcciones locales o privadas no permitidas');
+    expect(res.json()).toMatchObject({ code: 'validation_failed' });
+    expect(res.payload).toContain('no local or private addresses');
   });
 
   it('POST /api/settings/vault rechaza peticiones cross-origin no autorizadas (K4)', async () => {
@@ -592,7 +593,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.payload);
     expect(body.error).toBe('Bad Request');
-    expect(body.message).toContain('No hay sugerencias aceptadas');
+    expect(body).toMatchObject({ code: 'nothing_to_synthesize' });
   });
 
   it('Feature 4: POST /api/projects/:id/synthesize genera el brief sin escribir en el Vault; guardar crea un archivo nuevo', async () => {

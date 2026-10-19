@@ -88,7 +88,7 @@ function guardedLookup(isAllowed: AddressPolicy) {
 
 function assertFetchableUrl(url: URL, isAllowed: AddressPolicy): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error(`Protocolo '${url.protocol}' no permitido. Solo se admite http y https.`);
+    throw new Error(`Protocol '${url.protocol}' is not allowed; only http and https are supported.`);
   }
   // Node skips DNS lookup for IP literals, so they are checked here.
   const host = url.hostname.replace(/^\[|\]$/g, '');

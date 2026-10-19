@@ -10,6 +10,7 @@ import { env } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { languageName, outputLanguage } from '../../ai/language';
+import { SERVER_TEXT, serverText } from '../../i18n/serverText';
 import { promptBlock } from '../../ai/promptSafety';
 
 const ProjectItemSchema = z.object({
@@ -100,7 +101,13 @@ function getSynergyFileNames(titleA: string, titleB: string): [string, string] {
   return [`synergy_${cleanA}_${cleanB}.md`, `synergy_${cleanB}_${cleanA}.md`];
 }
 
-function parseExistingBridgeFile(fileName: string, content: string) {
+// Saved notes may be in either language: match the headings of both
+const headingAlternatives = (key: 'synergyProblems' | 'synergyBenefits') =>
+  Object.values(SERVER_TEXT).map(text => text[key]).join('|');
+const PROBLEMS_HEADING = headingAlternatives('synergyProblems');
+const BENEFITS_HEADING = headingAlternatives('synergyBenefits');
+
+export function parseExistingBridgeFile(fileName: string, content: string) {
   const titleMatch = content.match(/^title:\s*"([^"]+)"/m) || content.match(/^#\s+(.+)$/m);
   const bridgeTitle = titleMatch ? titleMatch[1].trim() : path.basename(fileName, '.md');
 
@@ -115,7 +122,7 @@ function parseExistingBridgeFile(fileName: string, content: string) {
   }
 
   const sharedProblems: string[] = [];
-  const problemsMatch = content.match(/## Preguntas y Problemas Compartidos\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
+  const problemsMatch = content.match(new RegExp(`## (?:${PROBLEMS_HEADING})[ \\t]*\\n((?:[ \\t]*[-*][^\\n]*(?:\\n|$))*)`, 'i'));
   if (problemsMatch) {
     const lines = problemsMatch[1].split('\n');
     for (const l of lines) {
@@ -125,7 +132,7 @@ function parseExistingBridgeFile(fileName: string, content: string) {
   }
 
   const mutualBenefits: string[] = [];
-  const benefitsMatch = content.match(/## Beneficios Mutuos y Transferencia\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
+  const benefitsMatch = content.match(new RegExp(`## (?:${BENEFITS_HEADING})[ \\t]*\\n((?:[ \\t]*[-*][^\\n]*(?:\\n|$))*)`, 'i'));
   if (benefitsMatch) {
     const lines = benefitsMatch[1].split('\n');
     for (const l of lines) {
@@ -135,7 +142,7 @@ function parseExistingBridgeFile(fileName: string, content: string) {
   }
 
   let markdownContent = '';
-  const afterBenefitsMatch = content.match(/## Beneficios Mutuos y Transferencia[\s\S]*?\n\n([\s\S]*?)(?=\n---\n\*Generado|$)/i);
+  const afterBenefitsMatch = content.match(new RegExp(`## (?:${BENEFITS_HEADING})[\\s\\S]*?\\n\\n([\\s\\S]*?)(?=\\n---\\n\\*(?:Generado|Generated)|$)`, 'i'));
   if (afterBenefitsMatch) {
     markdownContent = afterBenefitsMatch[1].trim();
   } else {
@@ -144,9 +151,9 @@ function parseExistingBridgeFile(fileName: string, content: string) {
 
   return {
     bridgeTitle,
-    overview: overview || 'Sinergia temática existente en el Vault.',
-    sharedProblems: sharedProblems.length > 0 ? sharedProblems : ['Integración conceptual y metodológica'],
-    mutualBenefits: mutualBenefits.length > 0 ? mutualBenefits : ['Complementariedad de notas e investigación'],
+    overview: overview || serverText().savedSynergyOverview,
+    sharedProblems: sharedProblems.length > 0 ? sharedProblems : [serverText().savedSynergyProblem],
+    mutualBenefits: mutualBenefits.length > 0 ? mutualBenefits : [serverText().savedSynergyBenefit],
     markdownContent,
   };
 }
@@ -321,7 +328,8 @@ export default async function (server: FastifyInstance) {
       return reply.send({
         synergies: [],
         totalCount: 0,
-        message: 'Se requieren al menos dos proyectos activos con notas indexadas para calcular sinergias.',
+        message: 'At least two active projects with indexed notes are needed to compute synergies.',
+        code: 'synergy_needs_two_projects',
       });
     }
 
@@ -409,9 +417,9 @@ export default async function (server: FastifyInstance) {
 
         let rationale = '';
         if (closestNotes.length > 0) {
-          rationale = `Afinidad conceptual detectada entre [[${closestNotes[0].noteATitle}]] (${pA.title}) y [[${closestNotes[0].noteBSTitle}]] (${pB.title}).`;
+          rationale = serverText().synergyNoteRationale(closestNotes[0].noteATitle, pA.title, closestNotes[0].noteBSTitle, pB.title);
         } else {
-          rationale = `Resonancia temática detectada entre ${pA.title} y ${pB.title}.`;
+          rationale = serverText().synergyProjectRationale(pA.title, pB.title);
         }
 
         const [f1, f2] = getSynergyFileNames(pA.title, pB.title);
@@ -485,8 +493,8 @@ export default async function (server: FastifyInstance) {
           writtenToVault: z.boolean(),
           isCached: z.boolean().optional(),
         }),
-        404: z.object({ error: z.string(), message: z.string() }),
-        500: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        500: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -498,7 +506,8 @@ export default async function (server: FastifyInstance) {
     if (!projA || !projB) {
       return reply.status(404).send({
         error: 'Not Found',
-        message: 'Uno o ambos proyectos no fueron encontrados.',
+        message: 'One or both projects were not found.',
+        code: 'project_not_found',
       });
     }
 
@@ -584,7 +593,8 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       server.log.error({ err }, 'Error in cross-project synergy evaluation');
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Error al sintetizar la sinergia entre proyectos con el modelo de IA.',
+        message: 'The language model failed to synthesize the synergy between the projects.',
+        code: 'llm_failed',
       });
     }
 
@@ -616,8 +626,8 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       }),
       response: {
         200: z.object({ success: z.boolean(), filePath: z.string() }),
-        400: z.object({ error: z.string(), message: z.string() }),
-        404: z.object({ error: z.string(), message: z.string() }),
+        400: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -629,12 +639,12 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
     const [projA] = await db.select().from(projects).where(eq(projects.id, body.projectAId)).limit(1);
     const [projB] = await db.select().from(projects).where(eq(projects.id, body.projectBId)).limit(1);
     if (!projA || !projB) {
-      return reply.status(404).send({ error: 'Not Found', message: 'Uno o ambos proyectos no fueron encontrados.' });
+      return reply.status(404).send({ error: 'Not Found', message: 'One or both projects were not found.', code: 'project_not_found' });
     }
 
     const vaultPath = getCurrentVaultPath();
     if (!vaultPath) {
-      return reply.status(400).send({ error: 'Bad Request', message: 'No hay un Vault de Obsidian configurado.' });
+      return reply.status(400).send({ error: 'Bad Request', message: 'No Obsidian vault is configured.', code: 'vault_not_configured' });
     }
 
     const [fileName] = getSynergyFileNames(projA.title, projB.title);
@@ -674,14 +684,17 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
         400: z.object({
           error: z.string(),
           message: z.string().optional(),
+          code: z.string().optional(),
         }),
         404: z.object({
           error: z.string(),
           message: z.string().optional(),
+          code: z.string().optional(),
         }),
         500: z.object({
           error: z.string(),
           message: z.string().optional(),
+          code: z.string().optional(),
         }),
       },
     },
@@ -690,7 +703,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
 
     const [proj] = await db.select().from(projects).where(eq(projects.id, id));
     if (!proj) {
-      return reply.status(404).send({ error: 'Not Found', message: 'Proyecto no encontrado' });
+      return reply.status(404).send({ error: 'Not Found', message: 'Project not found', code: 'project_not_found' });
     }
 
     // 1. Fetch all accepted suggestions
@@ -714,7 +727,8 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
     if (acceptedList.length === 0) {
       return reply.status(400).send({
         error: 'Bad Request',
-        message: 'No hay sugerencias aceptadas para sintetizar en este proyecto. Acepta al menos una sugerencia en el panel.',
+        message: 'This project has no accepted suggestions to synthesize. Accept at least one suggestion first.',
+        code: 'nothing_to_synthesize',
       });
     }
 
@@ -760,7 +774,8 @@ ${suggestionsPrompt}`)}`;
       server.log.error({ err }, 'Error generating project synthesis via LLM');
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Error al generar la síntesis del proyecto con el modelo de lenguaje.',
+        message: 'The language model failed to generate the project synthesis.',
+        code: 'llm_failed',
       });
     }
 
@@ -790,8 +805,8 @@ ${suggestionsPrompt}`)}`;
       }),
       response: {
         200: z.object({ success: z.boolean(), filePath: z.string() }),
-        400: z.object({ error: z.string(), message: z.string() }),
-        404: z.object({ error: z.string(), message: z.string() }),
+        400: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -803,12 +818,12 @@ ${suggestionsPrompt}`)}`;
 
     const [proj] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
     if (!proj) {
-      return reply.status(404).send({ error: 'Not Found', message: 'Proyecto no encontrado' });
+      return reply.status(404).send({ error: 'Not Found', message: 'Project not found', code: 'project_not_found' });
     }
 
     const vaultPath = getCurrentVaultPath();
     if (!vaultPath) {
-      return reply.status(400).send({ error: 'Bad Request', message: 'No hay un Vault de Obsidian configurado.' });
+      return reply.status(400).send({ error: 'Bad Request', message: 'No Obsidian vault is configured.', code: 'vault_not_configured' });
     }
 
     const filePath = await writeGeneratedNote(

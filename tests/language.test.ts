@@ -97,3 +97,14 @@ describe('vault text', () => {
     expect(synergy).toContain('loom_generated: true');
   });
 });
+
+describe('saved synergy notes', () => {
+  it('are read back in either language', async () => {
+    const { parseExistingBridgeFile } = await import('../src/api/routes/projects');
+    const note = { bridgeTitle: 'Puente', overview: 'Resumen del puente', sharedProblems: ['p1', 'p2'], mutualBenefits: ['b1'], markdownContent: 'Cuerpo del borrador' };
+    for (const lang of ['es', 'en'] as const) {
+      const parsed = parseExistingBridgeFile('synergy_a_b.md', formatSynergyNote(note, 'Alfa', 'Beta', lang));
+      expect(parsed, lang).toMatchObject({ bridgeTitle: 'Puente', overview: 'Resumen del puente', sharedProblems: ['p1', 'p2'], mutualBenefits: ['b1'], markdownContent: 'Cuerpo del borrador' });
+    }
+  });
+});

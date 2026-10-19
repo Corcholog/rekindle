@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { promptBlock } from '../../ai/promptSafety';
 import { Language, languageName, outputLanguage } from '../../ai/language';
+import { serverText } from '../../i18n/serverText';
 
 const ollama = sharedAiProvider;
 
@@ -63,10 +64,12 @@ export default async function (server: FastifyInstance) {
         400: z.object({
           error: z.string(),
           message: z.string().optional(),
+          code: z.string().optional(),
         }),
         500: z.object({
           error: z.string(),
           message: z.string().optional(),
+          code: z.string().optional(),
         }),
       },
     },
@@ -146,7 +149,7 @@ export default async function (server: FastifyInstance) {
           id: row.note_id as string,
           projectId: row.project_id as string,
           projectTitle: row.project_title as string,
-          noteTitle: (row.note_title as string) || 'Nota sin título',
+          noteTitle: (row.note_title as string) || serverText().untitledNote,
           notePath: (row.note_path as string) || '',
           contentSnippet: (row.content_snippet as string) || null,
         });
@@ -167,7 +170,7 @@ export default async function (server: FastifyInstance) {
     if (libraryCatalog.length === 0 && notesCatalog.length === 0) {
       return {
         query,
-        diagnosis: 'Tu biblioteca y tu Vault de Obsidian aún no tienen contenidos ni notas procesadas para consultar.',
+        diagnosis: serverText().emptyLibrary,
         projectViability: null,
         totalLibraryEvaluated: 0,
         totalNotesEvaluated: 0,
@@ -275,7 +278,8 @@ ${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
       server.log.error({ err }, 'Error during Consult Library & Vault LLM evaluation');
       return reply.status(500).send({
         error: 'Failed to consult library and vault',
-        message: 'Error al analizar tu biblioteca y notas con el modelo de lenguaje.',
+        message: 'The language model failed to analyze the library and notes.',
+        code: 'llm_failed',
       });
     }
   });

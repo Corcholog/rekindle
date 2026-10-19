@@ -108,7 +108,7 @@ export async function extractYouTubeContent(url: string): Promise<{ title: strin
   // 2. Fetch transcript via YoutubeTranscript
   const parts = await YoutubeTranscript.fetchTranscript(canonicalUrl);
   if (!parts || parts.length === 0) {
-    throw new Error('No se encontraron subtítulos o transcripción disponible para este video de YouTube');
+    throw new Error('No subtitles or transcript are available for this YouTube video');
   }
 
   const rawText = parts.map(p => p.text).join(' ').trim().substring(0, 50000);
@@ -140,10 +140,10 @@ export const setupIngestionWorker = async () => {
         // 1. Fast rejection of obviously local targets (fetchPublicPage re-checks after DNS)
         const parsedUrl = new URL(url);
         if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-          throw new Error(`Protocolo '${parsedUrl.protocol}' no permitido. Solo se admite http y https.`);
+          throw new Error(`Protocol '${parsedUrl.protocol}' is not allowed; only http and https are supported.`);
         }
         if (isPrivateOrLoopbackHost(parsedUrl.hostname)) {
-          throw new Error(`Acceso denegado (SSRF): no se permite la ingesta de direcciones locales o privadas (${parsedUrl.hostname}).`);
+          throw new Error(`Access denied (SSRF): local or private addresses cannot be ingested (${parsedUrl.hostname}).`);
         }
 
         // 2. Update status to extracting
@@ -239,7 +239,7 @@ export const setupIngestionWorker = async () => {
         // For permanent / non-retryable errors (e.g. 404, bad URL, unsupported format, no transcripts),
         // do not rethrow to pg-boss so it doesn't wastefully retry.
         const errMsg = error.message || '';
-        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Acceso denegado \(SSRF\)|Protocolo '|more than \d+ redirects/i.test(errMsg);
+        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No subtitles or transcript|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Access denied \(SSRF\)|Acceso denegado \(SSRF\)|Protocol '|Protocolo '|more than \d+ redirects/i.test(errMsg);
         log.error({ err: error, traceId, contentId, attempt, retryable: !isNonRetryable }, 'Ingestion failed');
         await recordStage({
           ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, ok: false, errorKind: errorKindOf(error),

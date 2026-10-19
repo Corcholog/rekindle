@@ -48,11 +48,12 @@ export default async function (server: FastifyInstance) {
     const totalActive = activeJobs + activeContents;
     const isProcessing = totalActive > 0;
 
-    let message = 'En línea';
+    // The UI builds its own localized text from the counts; this is for API users
+    let message = 'Online';
     if (evaluatingJobs > 0) {
-      message = `Evaluando ${evaluatingJobs} contenido${evaluatingJobs === 1 ? '' : 's'} con IA...`;
+      message = `Evaluating ${evaluatingJobs} item${evaluatingJobs === 1 ? '' : 's'} with AI...`;
     } else if (ingestingJobs > 0 || activeContents > 0) {
-      message = `Procesando ingesta de enlaces...`;
+      message = 'Ingesting links...';
     }
 
     return reply.send({

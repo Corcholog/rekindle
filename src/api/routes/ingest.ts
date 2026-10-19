@@ -16,7 +16,7 @@ const IngestRequestSchema = z.object({
     } catch {
       return false;
     }
-  }, { message: 'Solo se admiten URLs públicas http y https (direcciones locales o privadas no permitidas)' }),
+  }, { message: 'Only public http(s) URLs are accepted (no local or private addresses)' }),
   title: z.string().optional(),
   selection: z.string().optional(),
 });
@@ -38,7 +38,8 @@ export default async function (server: FastifyInstance) {
         }),
         400: z.object({
           error: z.string(),
-          message: z.string().optional()
+          message: z.string().optional(),
+          code: z.string().optional(),
         }),
         500: z.object({
           error: z.string()
@@ -76,7 +77,7 @@ export default async function (server: FastifyInstance) {
       if (created) {
         await enqueue(created.id);
         return reply.status(202).send({
-          message: 'URL aceptada para procesar',
+          message: 'URL accepted for processing',
           contentId: created.id,
           status: 'pending',
         });
@@ -99,7 +100,7 @@ export default async function (server: FastifyInstance) {
       if (retried) {
         await enqueue(retried.id);
         return reply.status(200).send({
-          message: 'Reintentando la ingesta de una URL que había fallado',
+          message: 'Retrying a URL that failed before',
           contentId: retried.id,
           status: 'pending',
         });
@@ -111,7 +112,7 @@ export default async function (server: FastifyInstance) {
         .returning({ id: contents.id, ingestStatus: contents.ingestStatus });
 
       return reply.status(200).send({
-        message: 'La URL ya está en tu biblioteca',
+        message: 'The URL is already in the library',
         contentId: existing.id,
         status: existing.ingestStatus,
       });

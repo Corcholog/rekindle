@@ -161,7 +161,7 @@ export async function persistEnvSetting(key: string, value: string): Promise<voi
 export async function persistVaultPath(newVaultPath: string): Promise<string> {
   const resolved = path.resolve(newVaultPath.trim());
   if (!isSafeEnvValue(resolved)) {
-    throw new Error('La ruta del vault contiene caracteres de control');
+    throw new Error('The vault path contains control characters');
   }
   await persistEnvSetting('VAULT_PATH', resolved);
   return resolved;

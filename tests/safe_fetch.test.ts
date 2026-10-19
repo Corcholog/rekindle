@@ -97,6 +97,6 @@ describe('safeFetch against local servers', () => {
 
   it('rejects non-http schemes', async () => {
     const { fetchPublicPage } = await import('../src/net/safeFetch');
-    await expect(fetchPublicPage('file:///etc/passwd')).rejects.toThrow(/Protocolo/);
+    await expect(fetchPublicPage('file:///etc/passwd')).rejects.toThrow(/Protocol/);
   });
 });

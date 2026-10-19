@@ -33,7 +33,7 @@ describe('generated vault notes', () => {
 
   it('refuses to write outside the vault', async () => {
     const { writeGeneratedNote } = await import('../src/vault/generatedNotes');
-    await expect(writeGeneratedNote(path.join(vault, '..'), vault, 'escape', 'x')).rejects.toThrow(/fuera del Vault/);
+    await expect(writeGeneratedNote(path.join(vault, '..'), vault, 'escape', 'x')).rejects.toThrow(/outside the vault/);
   });
 
   it('marks notes as generated and keeps them out of the project hash', async () => {

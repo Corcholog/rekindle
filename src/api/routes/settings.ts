@@ -40,8 +40,8 @@ const GetVaultSettingsResponseSchema = z.object({
 
 const UpdateVaultBodySchema = z.object({
   vaultPath: z.string()
-    .min(1, 'La ruta del vault es obligatoria')
-    .refine(isSafeEnvValue, 'La ruta del vault no puede contener saltos de línea ni caracteres de control'),
+    .min(1, 'The vault path is required')
+    .refine(isSafeEnvValue, 'The vault path cannot contain line breaks or control characters'),
 });
 
 const LanguageSettingsSchema = z.object({
@@ -157,7 +157,8 @@ export default async function (server: FastifyInstance) {
     if (!validation.isValid || !validation.vaultPath) {
       return reply.status(400).send({
         error: 'Bad Request',
-        message: 'La ruta especificada no existe o no es un directorio válido en el sistema de archivos.',
+        message: 'The path does not exist or is not a directory.',
+        code: 'vault_path_invalid',
       });
     }
 
@@ -173,9 +174,9 @@ export default async function (server: FastifyInstance) {
     const activeCount = syncStatuses.filter(p => p.isActive && p.existsOnDisk).length;
     const missingCount = syncStatuses.filter(p => !p.existsOnDisk).length;
 
-    let message = `Vault configurado y sincronizado. Se detectaron ${activeCount} proyecto(s) activo(s).`;
+    let message = `Vault configured and synchronized: ${activeCount} active project(s).`;
     if (missingCount > 0) {
-      message += ` (${missingCount} proyecto(s) previo(s) no se encuentran en este directorio y fueron marcados como inactivos).`;
+      message += ` ${missingCount} earlier project(s) are not in this folder and were marked inactive.`;
     }
 
     return {
@@ -200,7 +201,8 @@ export default async function (server: FastifyInstance) {
     if (!currentVaultPath) {
       return reply.status(400).send({
         error: 'Bad Request',
-        message: 'No hay ninguna ruta de Vault configurada para escanear.',
+        message: 'No vault path is configured to scan.',
+        code: 'vault_not_configured',
       });
     }
 
@@ -208,7 +210,8 @@ export default async function (server: FastifyInstance) {
     if (!validation.isValid) {
       return reply.status(400).send({
         error: 'Bad Request',
-        message: 'La ruta actual del Vault ya no existe o no es accesible.',
+        message: 'The current vault path no longer exists or is not accessible.',
+        code: 'vault_path_missing',
       });
     }
 

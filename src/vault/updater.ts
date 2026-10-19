@@ -88,7 +88,7 @@ async function resolveSuggestionsFile(vaultPath: string, folderPath: string): Pr
   const projectDir = path.resolve(root, folderPath);
   const rel = path.relative(root, projectDir);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error(`La carpeta del proyecto está fuera del Vault: ${folderPath}`);
+    throw new Error(`The project folder is outside the vault: ${folderPath}`);
   }
   // Never create project folders: after a vault switch the project may simply not be here
   const stat = await fs.stat(projectDir).catch(() => null);

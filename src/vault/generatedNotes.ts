@@ -39,7 +39,7 @@ export async function writeGeneratedNote(targetDir: string, vaultRoot: string, b
   const dir = path.resolve(targetDir);
   const rel = path.relative(root, dir);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error('Ruta de destino fuera del Vault');
+    throw new Error('Target path is outside the vault');
   }
 
   await fs.mkdir(dir, { recursive: true });
@@ -55,7 +55,7 @@ export async function writeGeneratedNote(targetDir: string, vaultRoot: string, b
       if (err.code !== 'EEXIST') throw err;
     }
   }
-  throw new Error(`No se encontró un nombre libre para ${baseName}.md`);
+  throw new Error(`No free file name found for ${baseName}.md`);
 }
 
 const bulletList = (items: string[]) => items.map(item => `- ${sanitizeForVault(item).replace(/\n/g, ' ')}`).join('\n');

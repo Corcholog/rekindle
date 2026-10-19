@@ -233,7 +233,7 @@ export default async function (server: FastifyInstance) {
       params: IdParamSchema,
       response: {
         200: ContentDetailSchema,
-        404: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {

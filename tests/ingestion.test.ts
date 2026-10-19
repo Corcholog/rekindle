@@ -74,7 +74,7 @@ describe('Ingestion Pipeline Integration', () => {
     const body = response.json();
     console.log('Response body:', body);
     expect(body.contentId).toBeDefined();
-    expect(body.message).toBe('URL aceptada para procesar');
+    expect(body.message).toBe('URL accepted for processing');
 
     const contentId = body.contentId;
     const { contents } = await import('../src/db/schema');

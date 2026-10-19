@@ -534,7 +534,7 @@ export default async function (server: FastifyInstance) {
       params: IdParamSchema,
       response: {
         200: SuggestionDetailSchema,
-        404: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -661,18 +661,18 @@ export default async function (server: FastifyInstance) {
     .limit(1);
 
     if (!sug) {
-      return { error: 'Not Found', statusCode: 404, message: `Sugerencia ${suggestionId} no encontrada.` };
+      return { error: 'Not Found', statusCode: 404, message: `Suggestion ${suggestionId} not found.`, code: 'suggestion_not_found' };
     }
 
     if (sug.status !== 'pending') {
-      return { error: 'Bad Request', statusCode: 400, message: `Solo se pueden re-evaluar sugerencias pendientes.` };
+      return { error: 'Bad Request', statusCode: 400, message: 'Only pending suggestions can be re-evaluated.', code: 'not_pending' };
     }
 
     const [project] = await db.select().from(projects).where(eq(projects.id, sug.projectId)).limit(1);
     const [content] = await db.select().from(contents).where(eq(contents.id, sug.contentId)).limit(1);
 
     if (!project || !content) {
-      return { error: 'Not Found', statusCode: 404, message: 'Proyecto o contenido asociado no encontrado.' };
+      return { error: 'Not Found', statusCode: 404, message: 'Associated project or content not found.', code: 'project_not_found' };
     }
 
     const [latestSnapshot] = await db.select()
@@ -682,7 +682,7 @@ export default async function (server: FastifyInstance) {
       .limit(1);
 
     if (!latestSnapshot) {
-      return { error: 'Bad Request', statusCode: 400, message: 'El proyecto no tiene ningún snapshot disponible para re-evaluar.' };
+      return { error: 'Bad Request', statusCode: 400, message: 'The project has no snapshot to re-evaluate against.', code: 'no_snapshot' };
     }
 
     const projectNotes = latestSnapshot.notesContent || latestSnapshot.thesisText || 'Sin notas adicionales.';
@@ -837,9 +837,9 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
           reasoning: z.string(),
           suggestion: SuggestionItemSchema,
         }),
-        400: z.object({ error: z.string(), message: z.string() }),
-        404: z.object({ error: z.string(), message: z.string() }),
-        500: z.object({ error: z.string(), message: z.string() }),
+        400: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        500: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -851,6 +851,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         return reply.status(outcome.statusCode as any).send({
           error: outcome.error,
           message: outcome.message,
+          code: outcome.code,
         });
       }
 
@@ -859,7 +860,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       server.log.error({ err }, `Error re-evaluating suggestion ${id}`);
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Error al re-evaluar la sugerencia con el modelo de IA.',
+        message: 'The language model failed to re-evaluate the suggestion.',
+        code: 'llm_failed',
       });
     }
   });
@@ -878,8 +880,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
             reasoning: z.string(),
           })),
         }),
-        404: z.object({ error: z.string(), message: z.string() }),
-        500: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        500: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {
@@ -887,7 +889,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
 
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
     if (!project) {
-      return reply.status(404).send({ error: 'Not Found', message: `Proyecto ${projectId} no encontrado.` });
+      return reply.status(404).send({ error: 'Not Found', message: `Project ${projectId} not found.`, code: 'project_not_found' });
     }
 
     try {
@@ -961,7 +963,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       server.log.error({ err }, `Error in batch re-evaluation for project ${projectId}`);
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Error en la re-evaluación por lotes de sugerencias desactualizadas.',
+        message: 'Batch re-evaluation of stale suggestions failed.',
+        code: 'llm_failed',
       });
     }
   });
@@ -975,8 +978,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       body: UpdateSuggestionBodySchema,
       response: {
         200: SuggestionItemSchema,
-        404: z.object({ error: z.string(), message: z.string() }),
-        409: z.object({ error: z.string(), message: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        409: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
       },
     },
   }, async (request, reply) => {

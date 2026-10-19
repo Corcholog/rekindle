@@ -73,7 +73,7 @@ describe('usertest:stats', () => {
 
     const text = stats.renderUserTestStats(result);
     expect(text).toContain('Acceptance rate (accepted / resolved): 40%');
-    expect(text).toContain('no tiene relación: 2');
+    expect(text).toContain('unrelated: 2');
     expect(text + JSON.stringify(result)).not.toContain(SENTINEL);
   });
 });

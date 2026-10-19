@@ -71,7 +71,7 @@ export async function buildUserTestStats(db: Db = defaultDb): Promise<UserTestSt
 }
 
 const REASON_LABELS: Record<string, string> = {
-  unrelated: 'no tiene relación', obvious: 'ya lo sabía / obvio', wrong_note: 'nota equivocada', poorly_worded: 'mal redactada', other: 'otro motivo',
+  unrelated: 'unrelated', obvious: 'already known / obvious', wrong_note: 'wrong note', poorly_worded: 'poorly worded', other: 'other',
 };
 
 export function renderUserTestStats(s: UserTestStats): string {
@@ -86,7 +86,7 @@ export function renderUserTestStats(s: UserTestStats): string {
     '',
     'Discard reasons:',
     ...Object.entries(s.discardReasons).map(([reason, n]) => `  ${REASON_LABELS[reason] ?? reason}: ${n}`),
-    `  sin motivo: ${s.discardsWithoutReason}`,
+    `  no reason given: ${s.discardsWithoutReason}`,
   ];
   return lines.join('\n');
 }
