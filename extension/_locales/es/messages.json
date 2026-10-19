@@ -1,0 +1,129 @@
+{
+  "extName": {
+    "message": "Rekindle Clipper"
+  },
+  "extDescription": {
+    "message": "Recorta artículos, ensayos y videos para resumirlos y cruzarlos con tus notas de Obsidian."
+  },
+  "actionTitle": {
+    "message": "Enviar a Rekindle"
+  },
+  "checking": {
+    "message": "Comprobando..."
+  },
+  "queueEmpty": {
+    "message": "0 recortes en cola"
+  },
+  "sync": {
+    "message": "Sincronizar"
+  },
+  "titleLabel": {
+    "message": "Título"
+  },
+  "titlePlaceholder": {
+    "message": "Título del artículo..."
+  },
+  "selectionLabel": {
+    "message": "Cita o selección (opcional)"
+  },
+  "selectionPlaceholder": {
+    "message": "Texto destacado o anotación rápida..."
+  },
+  "saveToRekindle": {
+    "message": "Guardar en Rekindle"
+  },
+  "open": {
+    "message": "Abrir"
+  },
+  "openTitle": {
+    "message": "Abrir Rekindle"
+  },
+  "offlineHint": {
+    "message": "Rekindle está desconectado. Tu recorte se guardará en una cola local y se enviará automáticamente en cuanto Rekindle inicie."
+  },
+  "queuePending": {
+    "message": "$VALUE$ recorte(s) pendientes en cola",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "queueWaiting": {
+    "message": "$VALUE$ en cola (esperando a Rekindle)",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "ready": {
+    "message": "Rekindle listo"
+  },
+  "offlineMode": {
+    "message": "Modo offline"
+  },
+  "saveToQueue": {
+    "message": "Guardar en cola"
+  },
+  "sending": {
+    "message": "Enviando..."
+  },
+  "saving": {
+    "message": "Guardando..."
+  },
+  "sent": {
+    "message": "✓ $VALUE$ enviado(s) a Rekindle",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "savedOnline": {
+    "message": "✦ ¡Guardado en Rekindle! Cruzándolo con tus notas de Obsidian..."
+  },
+  "saved": {
+    "message": "✓ Guardado"
+  },
+  "queuedNoResponse": {
+    "message": "✦ Rekindle no respondió. Guardado en la cola local: se enviará automáticamente."
+  },
+  "queuedOffline": {
+    "message": "✦ Guardado en la cola local. Se enviará a Rekindle automáticamente cuando inicie."
+  },
+  "queued": {
+    "message": "✓ En cola"
+  },
+  "queueError": {
+    "message": "Error al guardar en cola: $VALUE$",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "unknownError": {
+    "message": "Error desconocido"
+  },
+  "retry": {
+    "message": "Reintentar"
+  },
+  "badgeQueued": {
+    "message": "Rekindle Clipper: $VALUE$ recorte(s) en cola offline (esperando conexión)",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "menuPage": {
+    "message": "✦ Enviar esta página a Rekindle"
+  },
+  "menuSelection": {
+    "message": "✦ Guardar la cita seleccionada en Rekindle"
+  },
+  "menuLink": {
+    "message": "✦ Enviar este enlace a Rekindle"
+  }
+}

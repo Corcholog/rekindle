@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loom Web Clipper</title>
+  <title>Rekindle Clipper</title>
   <style>
     * {
       box-sizing: border-box;
@@ -249,26 +249,26 @@
   <div class="header">
     <div class="brand">
       <div class="brand-icon">✦</div>
-      <span class="brand-name">Loom Clipper</span>
+      <span class="brand-name">Rekindle Clipper</span>
     </div>
     <div class="server-status" id="server-status">
       <span class="status-dot" id="status-dot"></span>
-      <span id="status-text">Comprobando...</span>
+      <span id="status-text" data-i18n="checking">Checking...</span>
     </div>
   </div>
 
   <div id="queue-banner" class="queue-card" style="display: none;">
     <div class="queue-info">
       <span>⏳</span>
-      <span id="queue-msg">0 recortes en cola</span>
+      <span id="queue-msg" data-i18n="queueEmpty">0 clips queued</span>
     </div>
-    <button type="button" id="btn-sync-queue" class="queue-sync-btn" style="display: none;">Sincronizar</button>
+    <button type="button" id="btn-sync-queue" class="queue-sync-btn" style="display: none;" data-i18n="sync">Sync</button>
   </div>
 
   <form id="clip-form">
     <div class="form-group">
-      <label for="clip-title">Título</label>
-      <input type="text" id="clip-title" placeholder="Título del artículo..." required autocomplete="off">
+      <label for="clip-title" data-i18n="titleLabel">Title</label>
+      <input type="text" id="clip-title" placeholder="Article title..." data-i18n-placeholder="titlePlaceholder" required autocomplete="off">
     </div>
 
     <div class="form-group">
@@ -277,20 +277,18 @@
     </div>
 
     <div class="form-group">
-      <label for="clip-selection">Cita o Selección (Opcional)</label>
-      <textarea id="clip-selection" placeholder="Texto destacado o anotación rápida..."></textarea>
+      <label for="clip-selection" data-i18n="selectionLabel">Quote or selection (optional)</label>
+      <textarea id="clip-selection" placeholder="Highlighted text or a quick note..." data-i18n-placeholder="selectionPlaceholder"></textarea>
     </div>
 
     <div class="actions">
       <button type="submit" class="btn btn-primary" id="btn-submit">
-        <span id="btn-text">Guardar en Loom</span>
+        <span id="btn-text" data-i18n="saveToRekindle">Save to Rekindle</span>
       </button>
-      <a href="http://localhost:3000" target="_blank" class="btn btn-secondary" title="Abrir taller de Loom">Abrir</a>
+      <a href="http://localhost:3000" target="_blank" class="btn btn-secondary" title="Open Rekindle" data-i18n-title="openTitle" data-i18n="open">Open</a>
     </div>
 
-    <p class="offline-hint" id="offline-hint">
-      ✦ Loom está desconectado. Tu recorte se guardará en tu cola local y se enviará automáticamente tan pronto como Loom inicie.
-    </p>
+    <p class="offline-hint" id="offline-hint" data-i18n="offlineHint">✦ Rekindle is offline.</p>
 
     <div class="feedback" id="feedback"></div>
   </form>

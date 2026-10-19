@@ -1,0 +1,129 @@
+{
+  "extName": {
+    "message": "Rekindle Clipper"
+  },
+  "extDescription": {
+    "message": "Clip articles, essays and videos to summarize them and match them against your Obsidian notes."
+  },
+  "actionTitle": {
+    "message": "Send to Rekindle"
+  },
+  "checking": {
+    "message": "Checking..."
+  },
+  "queueEmpty": {
+    "message": "0 clips queued"
+  },
+  "sync": {
+    "message": "Sync"
+  },
+  "titleLabel": {
+    "message": "Title"
+  },
+  "titlePlaceholder": {
+    "message": "Article title..."
+  },
+  "selectionLabel": {
+    "message": "Quote or selection (optional)"
+  },
+  "selectionPlaceholder": {
+    "message": "Highlighted text or a quick note..."
+  },
+  "saveToRekindle": {
+    "message": "Save to Rekindle"
+  },
+  "open": {
+    "message": "Open"
+  },
+  "openTitle": {
+    "message": "Open Rekindle"
+  },
+  "offlineHint": {
+    "message": "Rekindle is offline. Your clip will be kept in a local queue and sent automatically as soon as Rekindle starts."
+  },
+  "queuePending": {
+    "message": "$VALUE$ clip(s) waiting in the queue",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "queueWaiting": {
+    "message": "$VALUE$ queued (waiting for Rekindle)",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "ready": {
+    "message": "Rekindle ready"
+  },
+  "offlineMode": {
+    "message": "Offline mode"
+  },
+  "saveToQueue": {
+    "message": "Save to queue"
+  },
+  "sending": {
+    "message": "Sending..."
+  },
+  "saving": {
+    "message": "Saving..."
+  },
+  "sent": {
+    "message": "✓ $VALUE$ sent to Rekindle",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "savedOnline": {
+    "message": "✦ Saved to Rekindle! Matching it against your Obsidian notes..."
+  },
+  "saved": {
+    "message": "✓ Saved"
+  },
+  "queuedNoResponse": {
+    "message": "✦ Rekindle did not answer. Saved to the local queue: it will be sent automatically."
+  },
+  "queuedOffline": {
+    "message": "✦ Saved to the local queue. It will be sent to Rekindle automatically when it starts."
+  },
+  "queued": {
+    "message": "✓ Queued"
+  },
+  "queueError": {
+    "message": "Could not save to the queue: $VALUE$",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "unknownError": {
+    "message": "Unknown error"
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "badgeQueued": {
+    "message": "Rekindle Clipper: $VALUE$ clip(s) queued offline (waiting for a connection)",
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
+  },
+  "menuPage": {
+    "message": "✦ Send this page to Rekindle"
+  },
+  "menuSelection": {
+    "message": "✦ Save the selected quote to Rekindle"
+  },
+  "menuLink": {
+    "message": "✦ Send this link to Rekindle"
+  }
+}

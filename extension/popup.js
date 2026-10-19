@@ -1,9 +1,15 @@
-// Loom Web Clipper - Popup Script (Manifest V3)
+// Rekindle Clipper - Popup Script (Manifest V3)
 // Direct storage-backed offline queue with background sync
 
 const SERVER_URL = 'http://localhost:3000';
 const STORAGE_QUEUE_KEY = 'offline_queue';
-const SYNC_ALARM_NAME = 'loom-offline-sync';
+const SYNC_ALARM_NAME = 'rekindle-offline-sync';
+
+// Strings come from _locales/<browser language>/messages.json
+const msg = (key, value) => chrome.i18n.getMessage(key, value === undefined ? undefined : [String(value)]);
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = msg(el.dataset.i18n); });
+document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = msg(el.dataset.i18nPlaceholder); });
+document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = msg(el.dataset.i18nTitle); });
 
 document.addEventListener('DOMContentLoaded', async () => {
   const statusDot = document.getElementById('status-dot');
@@ -51,11 +57,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (queue.length > 0) {
       queueBanner.style.display = 'flex';
       if (isOnline) {
-        queueMsg.textContent = `${queue.length} recorte(s) pendientes en cola`;
+        queueMsg.textContent = msg('queuePending', queue.length);
         btnSyncQueue.style.display = 'inline-block';
-        btnSyncQueue.textContent = 'Sincronizar';
+        btnSyncQueue.textContent = msg('sync');
       } else {
-        queueMsg.textContent = `${queue.length} en cola (esperando a Loom)`;
+        queueMsg.textContent = msg('queueWaiting', queue.length);
         btnSyncQueue.style.display = 'none';
       }
     } else {
@@ -171,8 +177,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res.ok) {
         isOnline = true;
         statusDot.className = 'status-dot online';
-        statusText.textContent = 'Loom Listo';
-        btnText.textContent = 'Guardar en Loom';
+        statusText.textContent = msg('ready');
+        btnText.textContent = msg('saveToRekindle');
         offlineHint.classList.remove('visible');
         await refreshQueueUI();
         return true;
@@ -183,8 +189,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     isOnline = false;
     statusDot.className = 'status-dot offline';
-    statusText.textContent = 'Modo Offline';
-    btnText.textContent = 'Guardar en Cola';
+    statusText.textContent = msg('offlineMode');
+    btnText.textContent = msg('saveToQueue');
     submitBtn.disabled = false;
     offlineHint.classList.add('visible');
     await refreshQueueUI();
@@ -203,11 +209,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Manual sync button
   btnSyncQueue.addEventListener('click', async () => {
     btnSyncQueue.disabled = true;
-    btnSyncQueue.textContent = 'Enviando...';
+    btnSyncQueue.textContent = msg('sending');
     try {
       const res = await flushDirectly();
       if (res && res.success) {
-        queueMsg.textContent = `✓ ${res.flushed} enviado(s) a Loom`;
+        queueMsg.textContent = msg('sent', res.flushed);
         setTimeout(async () => {
           await refreshQueueUI();
         }, 1500);
@@ -265,7 +271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!url) return;
 
     submitBtn.disabled = true;
-    btnText.textContent = isOnline ? 'Enviando...' : 'Guardando...';
+    btnText.textContent = isOnline ? msg('sending') : msg('saving');
     feedback.className = 'feedback';
     feedback.textContent = '';
 
@@ -290,8 +296,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         feedback.className = 'feedback success';
-        feedback.textContent = '✦ ¡Guardado en Loom! Analizando contra tus notas de Obsidian...';
-        btnText.textContent = '✓ Guardado';
+        feedback.textContent = msg('savedOnline');
+        btnText.textContent = msg('saved');
 
         // Also flush any items that were queued previously
         flushDirectly().catch(() => {});
@@ -313,9 +319,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       feedback.className = 'feedback warning';
       feedback.textContent = isOnline 
-        ? '✦ Loom no respondió. Guardado en cola local: se enviará automáticamente.'
-        : '✦ Guardado en cola local. Se enviará a Loom automáticamente cuando inicie la aplicación.';
-      btnText.textContent = '✓ En cola';
+        ? msg('queuedNoResponse')
+        : msg('queuedOffline');
+      btnText.textContent = msg('queued');
 
       await refreshQueueUI();
 
@@ -326,9 +332,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       console.error('Failed to enqueue item:', err);
       feedback.className = 'feedback error';
-      feedback.textContent = `Error al guardar en cola: ${err.message || 'Error desconocido'}`;
+      feedback.textContent = msg('queueError', err.message || msg('unknownError'));
       submitBtn.disabled = false;
-      btnText.textContent = 'Reintentar';
+      btnText.textContent = msg('retry');
     }
   });
 });

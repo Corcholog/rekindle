@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Loom Web Clipper",
-  "version": "1.0.0",
-  "description": "Corta artículos, ensayos y videos para sintetizarlos y cruzarlos con tus notas de Obsidian.",
+  "name": "__MSG_extName__",
+  "version": "1.1.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -10,7 +11,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Enviar a Loom",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",

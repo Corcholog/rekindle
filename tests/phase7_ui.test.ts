@@ -511,7 +511,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const manifest = JSON.parse(manifestContent);
 
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.name).toBe('Loom Web Clipper');
+    expect(manifest.name).toBe('__MSG_extName__');
     expect(manifest.action.default_popup).toBe('popup.html');
     expect(manifest.background.service_worker).toBe('background.js');
 
@@ -534,7 +534,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     // 2. Background worker contains queue and sync mechanisms
     const bgJs = await fs.readFile(path.join(extensionDir, 'background.js'), 'utf-8');
     expect(bgJs).toContain('offline_queue');
-    expect(bgJs).toContain('loom-offline-sync');
+    expect(bgJs).toContain('rekindle-offline-sync');
     expect(bgJs).toContain('tryFlushQueue');
     expect(bgJs).toContain('enqueueItem');
     expect(bgJs).toContain('chrome.alarms.onAlarm');
@@ -548,7 +548,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const popupJs = await fs.readFile(path.join(extensionDir, 'popup.js'), 'utf-8');
     expect(popupJs).toContain('enqueueDirectly');
     expect(popupJs).toContain('TRIGGER_SYNC');
-    expect(popupJs).toContain('Modo Offline');
+    expect(popupJs).toContain("msg('offlineMode')");
   });
 
   it('Feature 2: Frontend sirve la guía de la extensión y ya no incluye el bookmarklet', async () => {

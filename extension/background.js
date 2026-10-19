@@ -1,8 +1,11 @@
-// Loom Web Clipper - Background Service Worker (Manifest V3)
-// Provides offline queueing with auto-sync when Loom server reconnects
+// Rekindle Clipper - Background Service Worker (Manifest V3)
+// Provides offline queueing with auto-sync when the Rekindle server reconnects
 
 const SERVER_URL = 'http://localhost:3000';
-const SYNC_ALARM_NAME = 'loom-offline-sync';
+const SYNC_ALARM_NAME = 'rekindle-offline-sync';
+// Alarm name used before the rename (Loom); cleared on update so it stops firing
+const LEGACY_ALARM_NAME = 'loom-offline-sync';
+const msg = (key, value) => chrome.i18n.getMessage(key, value === undefined ? undefined : [String(value)]);
 const STORAGE_QUEUE_KEY = 'offline_queue';
 
 // --- Queue & Badge Helpers ---
@@ -23,14 +26,14 @@ async function updateBadge(queueLength) {
       await chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' }); // Amber warning/offline
       await chrome.action.setBadgeText({ text: String(queueLength) });
       await chrome.action.setTitle({
-        title: `Loom Clipper: ${queueLength} recorte(s) en cola offline (esperando conexión)`
+        title: msg('badgeQueued', queueLength)
       });
     } else {
       await chrome.action.setBadgeText({ text: '' });
-      await chrome.action.setTitle({ title: 'Loom Web Clipper' });
+      await chrome.action.setTitle({ title: msg('extName') });
     }
   } catch (err) {
-    console.warn('[Loom Clipper SW] Badge update error:', err);
+    console.warn('[Rekindle Clipper SW] Badge update error:', err);
   }
 }
 
@@ -43,7 +46,7 @@ async function enqueueItem(item) {
   );
 
   if (isDuplicate) {
-    console.log('[Loom Clipper SW] Skipping duplicate enqueue for:', item.url);
+    console.log('[Rekindle Clipper SW] Skipping duplicate enqueue for:', item.url);
     return queue.length;
   }
 
@@ -80,7 +83,7 @@ async function tryFlushQueue() {
     return { success: true, count: 0, flushed: 0 };
   }
 
-  // 1. Check Loom server connectivity
+  // 1. Check Rekindle server connectivity
   let isOnline = false;
   try {
     const healthRes = await fetch(`${SERVER_URL}/health`, {
@@ -93,12 +96,12 @@ async function tryFlushQueue() {
   }
 
   if (!isOnline) {
-    // Loom is still down; keep queue and notify badge
+    // Rekindle is still down; keep queue and notify badge
     await updateBadge(queue.length);
     return { success: false, reason: 'offline', remaining: queue.length };
   }
 
-  // 2. Loom is reachable: process queue items sequentially
+  // 2. Rekindle is reachable: process queue items sequentially
   const remaining = [];
   let flushedCount = 0;
 
@@ -124,7 +127,7 @@ async function tryFlushQueue() {
         if ((item.retries || 0) < 3) {
           remaining.push({ ...item, retries: (item.retries || 0) + 1 });
         } else {
-          console.warn('[Loom Clipper SW] Dropping permanently failed item:', item.url);
+          console.warn('[Rekindle Clipper SW] Dropping permanently failed item:', item.url);
         }
       } else {
         // Server 5xx or temporary failure: retain item and stop current batch
@@ -132,7 +135,7 @@ async function tryFlushQueue() {
         break;
       }
     } catch (err) {
-      console.warn('[Loom Clipper SW] Network error sending queued item:', err);
+      console.warn('[Rekindle Clipper SW] Network error sending queued item:', err);
       remaining.push(item);
       break;
     }
@@ -208,32 +211,33 @@ async function sendOrQueue(payload) {
     }, 3000);
 
   } catch (err) {
-    console.warn('[Loom Clipper SW] Loom server offline, enqueueing locally:', err.message);
+    console.warn('[Rekindle Clipper SW] Rekindle server offline, enqueueing locally:', err.message);
     const count = await enqueueItem(payload);
-    console.log(`[Loom Clipper SW] Item queued for future sync. Total in queue: ${count}`);
+    console.log(`[Rekindle Clipper SW] Item queued for future sync. Total in queue: ${count}`);
   }
 }
 
 // --- Top-Level Lifecycle & Event Listeners ---
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await chrome.alarms.clear(LEGACY_ALARM_NAME);
   // Re-create context menus
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: 'loom-clip-page',
-      title: '✦ Enviar página actual a Loom',
+      id: 'rekindle-clip-page',
+      title: msg('menuPage'),
       contexts: ['page']
     });
 
     chrome.contextMenus.create({
-      id: 'loom-clip-selection',
-      title: '✦ Guardar cita seleccionada en Loom',
+      id: 'rekindle-clip-selection',
+      title: msg('menuSelection'),
       contexts: ['selection']
     });
 
     chrome.contextMenus.create({
-      id: 'loom-clip-link',
-      title: '✦ Enviar enlace a Loom',
+      id: 'rekindle-clip-link',
+      title: msg('menuLink'),
       contexts: ['link']
     });
   });
@@ -274,10 +278,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let targetTitle = tab?.title || '';
   let selection = '';
 
-  if (info.menuItemId === 'loom-clip-link' && info.linkUrl) {
+  if (info.menuItemId === 'rekindle-clip-link' && info.linkUrl) {
     targetUrl = info.linkUrl;
     targetTitle = '';
-  } else if (info.menuItemId === 'loom-clip-selection') {
+  } else if (info.menuItemId === 'rekindle-clip-selection') {
     selection = info.selectionText || '';
   }
 
