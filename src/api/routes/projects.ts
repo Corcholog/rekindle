@@ -9,6 +9,7 @@ import { getCurrentVaultPath } from '../../vault/config';
 import { env } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/aiProvider';
+import { languageName, outputLanguage } from '../../ai/language';
 import { promptBlock } from '../../ai/promptSafety';
 
 const ProjectItemSchema = z.object({
@@ -559,7 +560,7 @@ export default async function (server: FastifyInstance) {
     const systemPrompt = `Eres un estratega de investigación interdisciplinaria y gestor de conocimiento para Obsidian.
 Tu objetivo es analizar dos proyectos independientes de investigación y descubrir puentes conceptuales, transferencias metodológicas y sinergias creativas.
 REGLAS:
-1. Responde SIEMPRE en ESPAÑOL.
+1. Responde SIEMPRE en ${languageName(outputLanguage()).upper}.
 2. Utiliza wikilinks de Obsidian ([[nombre_nota]]).
 3. Sé analítico, concreto y pragmático para el autor.`;
 
@@ -738,7 +739,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
     const systemPrompt = `Eres un editor jefe y sintetizador de investigación para Obsidian.
 Tu objetivo es compilar y unificar todas las sugerencias aceptadas en un informe de investigación estructurado y coherente (Research Brief).
 REGLAS:
-1. Responde SIEMPRE en ESPAÑOL.
+1. Responde SIEMPRE en ${languageName(outputLanguage()).upper}.
 2. Integra los aportes, citas de evidencia y contraargumentos en una narrativa de investigación lógica.
 3. Utiliza formato Markdown con títulos claros, listas y wikilinks de Obsidian como [[${proj.title}]] o [[notas_relevantes]].
 4. Sé exhaustivo pero conciso, facilitando al autor la redacción de sus borradores.`;

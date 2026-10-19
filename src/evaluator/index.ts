@@ -4,49 +4,24 @@ import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
-import { z } from 'zod';
 import { retrieveWithStats, RetrievalOptions } from './retrieval';
 import { resolveTargetFile } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 import { getLogger } from '../observability/logger';
-import { promptBlock } from '../ai/promptSafety';
+import { outputLanguage, promptLanguage } from '../ai/language';
+import { serverText } from '../i18n/serverText';
+import { isDiscardAction, triageSchema, triageSystemPrompt, triageUserMessage } from './triagePrompt';
 
 const log = getLogger('evaluator');
 
 const ollama = sharedAiProvider;
-
-const evaluationActionSchema = z.object({
-  actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']).describe("Tipo de acción constructiva para Obsidian"),
-  observation: z.string().describe("Observación específica de lo que aporta constructivamente el artículo al proyecto"),
-  suggestedAction: z.string().describe("Instrucción concreta de redacción o integración en las notas de Obsidian (ej. citar en Acto 2, crear puente narrativo)."),
-  targetFile: z.string().nullish().describe("Archivo de nota de Obsidian al que apunta la acción (ej. ideas.md o research/combat.md). Si no se especifica, se usará la nota con mayor afinidad."),
-});
-
-const unifiedEvaluationSchema = z.object({
-  verdict: z.enum(['actionable', 'tentative', 'irrelevant']).describe(
-    "Veredicto: 'actionable' si aporta ideas, citas o argumentos concretos para enriquecer el borrador; 'tentative' si es tangencial o dudoso; 'irrelevant' si no aporta nada o está fuera de foco."
-  ),
-  confidenceScore: z.number().min(0).max(1).describe("Puntaje decimal entre 0.0 y 1.0 que mide el grado de afinidad temática y relevancia con el proyecto: 0.0-0.3 si es irrelevant, 0.4-0.6 si es tentative, 0.7-1.0 si es actionable."),
-  triageReasoning: z.string().describe("Razonamiento detallado en español explicando por qué es útil o por qué es irrelevante"),
-  action: evaluationActionSchema.nullable().describe("Propuesta de acción concreta. REQUERIDO si verdict es 'actionable'. Debe ser null si verdict es 'tentative' o 'irrelevant'."),
-});
 
 /**
  * Main evaluation engine (2-Step Pipeline):
  * Step 1: Spatial Semantic Pre-filter (pgvector cosine distance < 0.6 in Postgres)
  * Step 2: Unified LLM Synthesis & Action Formulation (Single LLM invocation)
  */
-/** An "actionable" answer whose action is really to drop the article. */
-function isDiscardAction(action: { actionType: string; observation: string; suggestedAction: string }): boolean {
-  const actionText = (action.suggestedAction || '').toLowerCase().trim();
-  const observation = (action.observation || '').toLowerCase().trim();
-  return actionText.startsWith('descartar')
-    || actionText.includes('descartar el artículo')
-    || actionText.includes('no incluir')
-    || (action.actionType === 'other' && observation.includes('no aporta'));
-}
-
 export interface EvaluationTrace {
   /** Trace started at ingestion; a backlog or direct evaluation starts its own. */
   traceId?: string;
@@ -178,32 +153,15 @@ async function runEvaluation(
 
     log.info({ traceId, contentId, snapshotId, rank, matchLevel: candidate.level, distance: candidate.distance }, 'Triage started');
 
-    const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a los BORRADORES Y NOTAS DEL PROYECTO.
-Debes responder SIEMPRE en ESPAÑOL.
-
-REGLAS DE EVALUACIÓN:
-1. 'actionable': ÚSALO SOLAMENTE si encuentras una forma concreta y útil de integrar el artículo en las notas (citar evidencia, contraargumento, puente narrativo entre actos). Si es 'actionable', el objeto 'action' DEBE estar completo con una acción constructiva. ¡NUNCA sugieras 'descartar'!
-2. 'tentative': El contenido tiene relación temática pero no ofrece una contribución clara ni prioritaria. El campo 'action' debe ser null.
-3. 'irrelevant': El artículo trata otro tema, no aporta nada o debe ser ignorado. El campo 'action' debe ser null.
-
-[MUY IMPORTANTE]: El campo 'confidenceScore' DEBE ser un número decimal entre 0.0 y 1.0 que cuantifique la afinidad con el proyecto: 0.0 a 0.3 si es 'irrelevant', 0.4 a 0.6 si es 'tentative', y 0.7 a 1.0 si es 'actionable'.`;
-
+    // Read at call time, so a language change in the settings applies to the next evaluation
+    const languages = { prompt: promptLanguage(), output: outputLanguage() };
+    const systemPrompt = triageSystemPrompt(languages);
     // Cap context strings to prevent overflowing model token limits
-    const cappedProjectNotes = notesContent.substring(0, 15000);
-    const cappedSummary = (content.summary || '').substring(0, 10000);
-
-    let matchedNoteContext = '';
-    if (matchedNotePath) {
-      matchedNoteContext = `\nNOTA CON MAYOR AFINIDAD SEMÁNTICA DETECTADA:\n- Archivo: ${matchedNotePath}${matchedNoteTitle ? ` ("${matchedNoteTitle}")` : ''}\n${matchedNoteSnippet ? `- Extracto relevante:\n${matchedNoteSnippet}\n` : ''}`;
-    }
-
-    const userMessage = `${promptBlock('PROJECT_CONTEXT', `${matchedNoteContext}
-NOTAS Y BORRADORES DEL PROYECTO:
-${cappedProjectNotes || thesisText || 'Proyecto sin notas adicionales.'}`)}
-
-${promptBlock('ARTICLE_SUMMARY', cappedSummary)}
-
-Por favor, evalúa de manera crítica la afinidad y propuesta constructiva siguiendo las reglas estructuradas.`;
+    const userMessage = triageUserMessage(languages.prompt, {
+      matchedNotePath, matchedNoteTitle, matchedNoteSnippet, thesisText,
+      projectNotes: notesContent.substring(0, 15000),
+      summary: (content.summary || '').substring(0, 10000),
+    });
 
     const evaluateStarted = Date.now();
     const evaluateEvent = (ok: boolean, attrs: Record<string, unknown>, errorKind?: string) => recordStage({
@@ -212,7 +170,7 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
     });
     try {
       const { data: result, model: modelUsed, telemetryIds = [] } = await ollama.evaluateContent(
-        systemPrompt, userMessage, unifiedEvaluationSchema, undefined, { component: 'triage', traceId, contentId, snapshotId },
+        systemPrompt, userMessage, triageSchema(languages), undefined, { component: 'triage', traceId, contentId, snapshotId },
       );
 
       // Safety filter against paradoxical "discard" recommendations: stored as irrelevant
@@ -220,7 +178,7 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
       const suppressedDiscard = action !== null && isDiscardAction(action);
       const verdict = suppressedDiscard ? 'irrelevant' : result.verdict;
       const triageReasoning = suppressedDiscard
-        ? `${result.triageReasoning}\n\n[Motivo de descarte]: ${action!.observation || action!.suggestedAction}`.trim()
+        ? `${result.triageReasoning}\n\n${serverText(languages.output).discardReasonLabel}: ${action!.observation || action!.suggestedAction}`.trim()
         : result.triageReasoning;
       if (suppressedDiscard) log.info({ traceId, projectId }, 'Suppressed a discard action; verdict set to irrelevant');
 

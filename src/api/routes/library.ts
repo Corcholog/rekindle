@@ -5,6 +5,7 @@ import { contents } from '../../db/schema';
 import { sql } from 'drizzle-orm';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { promptBlock } from '../../ai/promptSafety';
+import { Language, languageName, outputLanguage } from '../../ai/language';
 
 const ollama = sharedAiProvider;
 
@@ -12,16 +13,17 @@ const LibraryAskBodySchema = z.object({
   query: z.string().min(2, 'La pregunta debe tener al menos 2 caracteres'),
 });
 
-const consultAnswerSchema = z.object({
-  diagnosis: z.string().describe('Diagnóstico y respuesta razonada en español a la consulta del usuario, integrando y citando explícitamente los contenidos de la biblioteca como [C1], [C2] y las notas de Obsidian como [N1], [N2]. Si no hay coincidencias directas, explícalo con honestidad y menciona si hay conexiones tangenciales.'),
+// Built per call: the explanations are written in the current output language
+const consultAnswerSchema = (lang: Language) => z.object({
+  diagnosis: z.string().describe(`Diagnóstico y respuesta razonada en ${languageName(lang).lower} a la consulta del usuario, integrando y citando explícitamente los contenidos de la biblioteca como [C1], [C2] y las notas de Obsidian como [N1], [N2]. Si no hay coincidencias directas, explícalo con honestidad y menciona si hay conexiones tangenciales.`),
   projectViability: z.string().nullish().describe('Si el usuario pregunta por la viabilidad de un proyecto, ensayo o idea (o si hay una oportunidad clara de conectar sus fuentes), propón un enfoque, tesis o ángulo concreto combinando sus lecturas y notas. Si no aplica, devuelve null.'),
   matchedContents: z.array(z.object({
     refId: z.string().describe('Identificador de referencia del contenido en el catálogo, ej: "C1", "C2"'),
-    whyItConnects: z.string().describe('Explicación concreta y específica (1 a 3 oraciones en español) de por qué este video o artículo responde o aporta a lo que busca el usuario'),
+    whyItConnects: z.string().describe(`Explicación concreta y específica (1 a 3 oraciones en ${languageName(lang).lower}) de por qué este video o artículo responde o aporta a lo que busca el usuario`),
   })).describe('Lista de contenidos de la biblioteca que realmente conectan con la consulta (vacía si ninguno conecta)'),
   matchedNotes: z.array(z.object({
     refId: z.string().describe('Identificador de referencia de la nota de proyecto en el catálogo, ej: "N1", "N2"'),
-    whyItConnects: z.string().describe('Explicación concreta y específica (1 a 3 oraciones en español) de cómo esta nota de Obsidian conecta con la consulta o con los contenidos de la biblioteca'),
+    whyItConnects: z.string().describe(`Explicación concreta y específica (1 a 3 oraciones en ${languageName(lang).lower}) de cómo esta nota de Obsidian conecta con la consulta o con los contenidos de la biblioteca`),
   })).describe('Lista de notas de proyectos de Obsidian que realmente conectan con la consulta (vacía si ninguna conecta)'),
 });
 
@@ -190,6 +192,7 @@ export default async function (server: FastifyInstance) {
         }).join('\n\n---\n\n')
       : 'No hay notas de proyectos activas en el Vault de Obsidian.';
 
+    const lang = outputLanguage();
     const systemPrompt = `Eres el Consultor de Investigación de Loom, un compañero intelectual que conoce a fondo tanto la Biblioteca de contenidos guardados por el usuario (videos, artículos, ensayos) como las Notas de sus Proyectos activos en su Vault de Obsidian.
 
 Tu objetivo es responder con precisión, criterio analítico y honestidad a preguntas como:
@@ -200,7 +203,7 @@ Tu objetivo es responder con precisión, criterio analítico y honestidad a preg
 REGLAS ESTRICTAS:
 1. Evalúa TANTO el <CATALOGO_BIBLIOTECA> (referencias [C1], [C2]...) COMO las <NOTAS_PROYECTOS_OBSIDIAN> (referencias [N1], [N2]...).
 2. No dependas solo de coincidencias literales de palabras: reconoce relaciones conceptuales, de categoría o de obra/autor (por ejemplo, si preguntan por "videojuegos", un ensayo sobre "Shadow of the Colossus" o una nota que menciona juegos indie ES directamente relevante).
-3. En "diagnosis", responde en ESPAÑOL de forma clara, conversacional y estructurada. Cita explícitamente en el texto las referencias relevantes usando sus etiquetas exactas entre corchetes, por ejemplo [C1], [N1].
+3. En "diagnosis", responde en ${languageName(lang).upper} de forma clara, conversacional y estructurada. Cita explícitamente en el texto las referencias relevantes usando sus etiquetas exactas entre corchetes, por ejemplo [C1], [N1].
 4. Si el usuario pregunta si puede armar un proyecto sobre un tema (o si detectas un puente fértil entre lo que tiene en la biblioteca y sus notas de Obsidian), completa "projectViability" con una propuesta concreta de enfoque, ángulo o estructura. Si es solo una consulta de inventario simple y no aplica o no hay material, puedes dejar "projectViability" en null o sugerir brevemente qué ángulo podría explorar con lo encontrado.
 5. Incluye en "matchedContents" ÚNICAMENTE los contenidos [C#] que realmente aportan a la consulta (no rellenes con ítems irrelevantes), explicando en "whyItConnects" exactamente por qué ese video o artículo conecta con lo que preguntó el usuario.
 6. Incluye en "matchedNotes" ÚNICAMENTE las notas de Obsidian [N#] que realmente conectan con la consulta (incluso si mencionan el tema como referencia, ejemplo o estructura), explicando en "whyItConnects" qué contiene esa nota y cómo aporta.`;
@@ -212,7 +215,7 @@ ${promptBlock('NOTAS_PROYECTOS_OBSIDIAN', notesPromptBlock)}
 ${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
 
     try {
-      const { data: result } = await ollama.evaluateContent(systemPrompt, userMessage, consultAnswerSchema, undefined, { component: 'consult' });
+      const { data: result } = await ollama.evaluateContent(systemPrompt, userMessage, consultAnswerSchema(lang), undefined, { component: 'consult' });
 
       const contentMap = new Map(libraryCatalog.map(c => [c.refId.toUpperCase(), c]));
       const noteMap = new Map(notesCatalog.map(n => [n.refId.toUpperCase(), n]));

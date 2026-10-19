@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { sanitizeForVault, yamlString } from './sanitize';
+import { Language, outputLanguage } from '../ai/language';
+import { serverText } from '../i18n/serverText';
 
 // Earlier versions wrote these types without the loom_generated marker.
 const GENERATED_FRONTMATTER = /^---\r?\n[\s\S]*?^(loom_generated:\s*true|type:\s*(research_brief|cross_project_synergy))\s*$/m;
@@ -66,14 +68,16 @@ export interface ResearchBriefContent {
   suggestedNextSteps: string[];
 }
 
-export function formatResearchBrief(brief: ResearchBriefContent, acceptedCount: number): string {
+export function formatResearchBrief(brief: ResearchBriefContent, acceptedCount: number, lang: Language = outputLanguage()): string {
+  const text = serverText(lang);
+  const count = Math.max(0, Math.floor(acceptedCount));
   const title = sanitizeForVault(brief.title, 300).replace(/\n/g, ' ');
   return `---
 title: ${yamlString(brief.title)}
 type: research_brief
 loom_generated: true
 synthesized_at: "${new Date().toISOString()}"
-accepted_suggestions_count: ${Math.max(0, Math.floor(acceptedCount))}
+accepted_suggestions_count: ${count}
 tags:
   - loom/synthesis
   - loom/research-brief
@@ -81,16 +85,16 @@ tags:
 
 # ${title}
 
-> [!abstract] Resumen Ejecutivo
+> [!abstract] ${text.briefSummary}
 > ${quoteBlock(brief.executiveSummary)}
 
 ${sanitizeForVault(brief.markdownContent, MAX_BODY_LENGTH)}
 
-## Próximos Pasos Recomendados
+## ${text.briefNextSteps}
 ${brief.suggestedNextSteps.map(step => `- [ ] ${sanitizeForVault(step).replace(/\n/g, ' ')}`).join('\n')}
 
 ---
-*Generado por Loom a partir de ${Math.max(0, Math.floor(acceptedCount))} sugerencias aceptadas.*
+*${text.briefFooter(count)}*
 `;
 }
 
@@ -102,7 +106,8 @@ export interface SynergyNoteContent {
   markdownContent: string;
 }
 
-export function formatSynergyNote(note: SynergyNoteContent, titleA: string, titleB: string): string {
+export function formatSynergyNote(note: SynergyNoteContent, titleA: string, titleB: string, lang: Language = outputLanguage()): string {
+  const text = serverText(lang);
   const title = sanitizeForVault(note.bridgeTitle, 300).replace(/\n/g, ' ');
   const linkA = sanitizeForVault(titleA, 200).replace(/[[\]\n]/g, '');
   const linkB = sanitizeForVault(titleB, 200).replace(/[[\]\n]/g, '');
@@ -120,18 +125,18 @@ tags:
 
 # ${title}
 
-> [!abstract] Resonancia Temática
+> [!abstract] ${text.synergyOverview}
 > ${quoteBlock(note.overview)}
 
-## Preguntas y Problemas Compartidos
+## ${text.synergyProblems}
 ${bulletList(note.sharedProblems)}
 
-## Beneficios Mutuos y Transferencia
+## ${text.synergyBenefits}
 ${bulletList(note.mutualBenefits)}
 
 ${sanitizeForVault(note.markdownContent, MAX_BODY_LENGTH)}
 
 ---
-*Generado por Loom mediante análisis de sinergia cruzada entre [[${linkA}]] y [[${linkB}]].*
+*${text.synergyFooter(`[[${linkA}]]`, `[[${linkB}]]`)}*
 `;
 }

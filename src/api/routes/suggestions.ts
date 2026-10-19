@@ -10,6 +10,8 @@ import { newTraceId } from '../../observability/pipeline';
 import { resolveTargetFile } from '../../evaluator/targetFile';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
+import { answerInLine, Language, languageName, outputLanguage } from '../../ai/language';
+import { serverText } from '../../i18n/serverText';
 
 // "%/<target_file>" with LIKE wildcards in the stored target file escaped: older rows hold
 // model-written text, where "%" or "_" would match unrelated notes (audit F-13)
@@ -37,11 +39,12 @@ const SuggestionItemSchema = z.object({
   driftScore: z.number().default(0).optional(),
 });
 
-const reevaluationSchema = z.object({
+// Built per call: the reasoning is written in the current output language
+const reevaluationSchema = (lang: Language) => z.object({
   resolution: z.enum(['keep_or_refine', 'already_addressed', 'obsolete']).describe(
     "Resolución de la sugerencia ante el borrador actual: 'keep_or_refine' si sigue aportando valor y debe mantenerse o pulirse; 'already_addressed' si el usuario ya redactó o incluyó esta idea en sus notas; 'obsolete' si el proyecto cambió de enfoque y la sugerencia ya no tiene sentido."
   ),
-  reasoning: z.string().describe("Razonamiento detallado en español explicando la resolución."),
+  reasoning: z.string().describe(`Razonamiento detallado en ${languageName(lang).lower} explicando la resolución.`),
   refinedAction: z.object({
     actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
     observation: z.string(),
@@ -91,6 +94,8 @@ export default async function (server: FastifyInstance) {
     },
   }, async (request, reply) => {
     const { projectId, status, limit, offset } = request.query as z.infer<typeof ListSuggestionsQuerySchema>;
+    // Placeholder texts for evaluations without a suggestion row, in the current output language
+    const txt = serverText();
     const projectFilterA = projectId ? sql`AND a.project_id = ${projectId}` : sql``;
     const projectFilterE = projectId ? sql`AND ps.project_id = ${projectId}` : sql``;
 
@@ -311,8 +316,8 @@ export default async function (server: FastifyInstance) {
           c.uri AS "contentUri",
           'other'::text AS "actionType",
           'tentative'::text AS "targetFile",
-          'Evaluación tentativa: relación temática o exploratoria'::text AS observation,
-          COALESCE(lpe."triageReasoning", 'Aporte exploratorio sin acción concreta definida.')::text AS "suggestedAction",
+          ${txt.tentativeObservation}::text AS observation,
+          COALESCE(lpe."triageReasoning", ${txt.tentativeDefaultAction})::text AS "suggestedAction",
           'tentative'::text AS status,
           NULL::text AS "userFeedback",
           false AS "writtenToVault",
@@ -348,12 +353,8 @@ export default async function (server: FastifyInstance) {
     const isDiscarded = status === 'discarded';
     const evalVerdict = isDiscarded ? 'irrelevant' : 'tentative';
     const evalTarget = isDiscarded ? 'discarded' : 'tentative';
-    const evalObs = isDiscarded 
-      ? 'Descarte por modelo: no aporta evidencia ni argumentos a la tesis' 
-      : 'Evaluación tentativa: relación temática o exploratoria';
-    const evalDefaultAction = isDiscarded 
-      ? 'Descartado por el modelo LLM' 
-      : 'Aporte exploratorio sin acción concreta definida.';
+    const evalObs = isDiscarded ? txt.modelDiscardObservation : txt.tentativeObservation;
+    const evalDefaultAction = isDiscarded ? txt.modelDiscardAction : txt.tentativeDefaultAction;
     const finalEvalStatus = isDiscarded ? 'discarded' : 'tentative';
 
     const countRes = await db.execute<{ count: number }>(sql`
@@ -602,7 +603,7 @@ export default async function (server: FastifyInstance) {
           contentSummary: ev.contentSummary,
           actionType: 'other' as const,
           targetFile: status,
-          observation: status === 'tentative' ? 'Evaluación tentativa' : 'Descarte analítico',
+          observation: status === 'tentative' ? serverText().tentativeShort : serverText().discardShort,
           suggestedAction: ev.triageReasoning || '',
           status,
           userFeedback: null,
@@ -687,7 +688,7 @@ export default async function (server: FastifyInstance) {
     const projectNotes = latestSnapshot.notesContent || latestSnapshot.thesisText || 'Sin notas adicionales.';
 
     const systemPrompt = `Eres un asistente de redacción y análisis crítico en Obsidian. Tu misión es RE-EVALUAR una sugerencia previa a la luz de los cambios y notas más recientes del proyecto.
-Debes responder SIEMPRE en ESPAÑOL.
+${answerInLine(outputLanguage())}
 
 REGLAS DE RESOLUCIÓN:
 1. 'keep_or_refine': La sugerencia sigue siendo útil y válida. Si el borrador actual requiere ajustar el tipo de acción, la redacción, la observación o el archivo objetivo, actualízalos en 'refinedAction'.
@@ -709,7 +710,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
 
     // A re-evaluation starts its own trace; the content keeps the trace of its ingestion
     const traceId = newTraceId();
-    const { data: evalResult } = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, reevaluationSchema, undefined, {
+    const { data: evalResult } = await sharedAiProvider.evaluateContent(systemPrompt, userMessage, reevaluationSchema(outputLanguage()), undefined, {
       component: 'reevaluate', traceId, contentId: sug.contentId, snapshotId: latestSnapshot.id, suggestionId: sug.id,
     });
 
@@ -749,7 +750,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
 
     } else {
       const isAddressed = evalResult.resolution === 'already_addressed';
-      const reasonPrefix = isAddressed ? '[Ya abordado]' : '[Obsoleto tras cambios]';
+      const reasonPrefix = isAddressed ? serverText().reevalAddressed : serverText().reevalObsolete;
 
       const [insertedEval] = await db.insert(evaluations).values({
         contentId: sug.contentId,
@@ -771,9 +772,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
 
       newEvaluationId = insertedEval.id;
 
-      const prefixTag = isAddressed 
-        ? '[Ya abordado en el borrador actual]' 
-        : '[Obsoleto tras cambios en el proyecto]';
+      const prefixTag = isAddressed ? serverText().reevalAddressedTag : serverText().reevalObsoleteTag;
       const updatedObs = sug.observation.startsWith(prefixTag) 
         ? sug.observation 
         : `${prefixTag} ${sug.observation}`;
@@ -1012,14 +1011,14 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
           ? {
             actionType: 'narrative_bridge' as const,
             targetFile: 'ideas.md',
-            observation: 'Afinidad temática aceptada por el usuario',
-            suggestedAction: evalRow.triageReasoning || 'Integrar conceptos clave en el proyecto',
+            observation: serverText().acceptedTentativeObservation,
+            suggestedAction: evalRow.triageReasoning || serverText().acceptedTentativeAction,
           }
           : {
             actionType: 'other' as const,
             targetFile: 'discarded',
-            observation: 'Descarte por el usuario',
-            suggestedAction: evalRow.triageReasoning || 'Descarte analítico',
+            observation: serverText().userDiscardObservation,
+            suggestedAction: evalRow.triageReasoning || serverText().discardShort,
           };
 
         await db.insert(actionSuggestions).values({

@@ -141,4 +141,30 @@ describe('Evaluation Pipeline Integration', () => {
     expect(evaluation.triageReasoning).toBe('Parece relacionado.\n\n[Motivo de descarte]: No aporta nada nuevo.');
     expect(await db.select().from(schemas.actionSuggestions).where(eq(schemas.actionSuggestions.evaluationId, evaluation.id))).toHaveLength(0);
   });
+  it('with English output, asks for English and catches an English discard', async () => {
+    vi.stubEnv('OUTPUT_LANGUAGE', 'en');
+    const projectId = randomUUID();
+    await db.insert(schemas.projects).values({ id: projectId, folderPath: 'Projects/Discard', title: 'Discard' });
+    const vector = new Array(1024).fill(0).map((_, i) => (i % 5 === 0 ? 1 : 0));
+    const [snapshot] = await db.insert(schemas.projectSnapshots).values({
+      projectId, treeHash: 'h-discard-en', thesisText: 'Thesis', embedding: vector, embeddingModel: 'bge-m3',
+    }).returning();
+    const [content] = await db.insert(schemas.contents).values({
+      uri: 'https://example.com/discard-en', summary: 'Summary', embedding: vector, embeddingModel: 'bge-m3', ingestStatus: 'ready',
+    }).returning();
+
+    fake.calls.length = 0;
+    fake.answerNext({
+      verdict: 'actionable', confidenceScore: 0.8, triageReasoning: 'Looks related.',
+      action: { actionType: 'other', observation: 'It adds nothing new.', suggestedAction: 'Discard the article.', targetFile: null },
+    });
+    const { evaluateContentMatch } = await import('../src/evaluator');
+    await evaluateContentMatch(content.id, projectId);
+    vi.stubEnv('OUTPUT_LANGUAGE', ''); // back to the default (Spanish)
+
+    expect(fake.calls[0].system).toContain('Debes responder SIEMPRE en INGLÉS.');
+    const [evaluation] = await db.select().from(schemas.evaluations).where(eq(schemas.evaluations.projectSnapshotId, snapshot.id));
+    expect(evaluation.verdict).toBe('irrelevant');
+    expect(evaluation.triageReasoning).toBe('Looks related.\n\n[Reason for discarding]: It adds nothing new.');
+  });
 });

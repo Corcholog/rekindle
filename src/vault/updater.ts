@@ -5,6 +5,8 @@ import { actionSuggestions, projects, contents } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { sanitizeForVault } from './sanitize';
 import { getLogger } from '../observability/logger';
+import { Language, outputLanguage } from '../ai/language';
+import { serverText } from '../i18n/serverText';
 
 const log = getLogger('vault-updater');
 
@@ -23,47 +25,43 @@ type WritableSuggestion = {
   sourceTitle: string | null;
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  counter_argument: 'CONTRAARGUMENTO',
-  unblocker: 'DESBLOQUEO',
-  evidence_citation: 'CITA DE EVIDENCIA',
-  narrative_bridge: 'PUENTE NARRATIVO',
-  other: 'OTRO',
-};
-
-/** dd/mm/yyyy in local time, whatever the machine's locale (vault text is Spanish). */
-export function formatCalloutDate(date: Date): string {
+/** Local date, whatever the machine's locale: dd/mm/yyyy in Spanish, yyyy-mm-dd in English. */
+export function formatCalloutDate(date: Date, lang: Language = 'es'): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+  return lang === 'en'
+    ? `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    : `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
-export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()): string {
-  const typeLabel = ACTION_LABELS[sug.actionType] ?? sug.actionType.toUpperCase();
+/** Callout labels follow the output language; the hidden marker never changes (I5). */
+export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date(), lang: Language = outputLanguage()): string {
+  const text = serverText(lang);
+  const typeLabel = text.actionTypes[sug.actionType] ?? sug.actionType.toUpperCase();
 
   // Escape bracket characters in link text and parentheses in URL to prevent breaking markdown link syntax
-  let link = 'Fuente desconocida';
+  let link = text.unknownSource;
   if (sug.sourceUri && /^https?:\/\//i.test(sug.sourceUri)) {
-    const safeTitle = sanitizeForVault(sug.sourceTitle || 'Fuente', 300).replace(/\n/g, ' ').replace(/[[\]]/g, '\\$&');
+    const safeTitle = sanitizeForVault(sug.sourceTitle || text.sourceFallbackTitle, 300).replace(/\n/g, ' ').replace(/[[\]]/g, '\\$&');
     const safeUri = sug.sourceUri.replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\s/g, '%20');
     link = `[${safeTitle}](${safeUri})`;
   }
 
   // Prefix every line with "> " so markdown callout structure remains unbroken.
   // Model text comes from untrusted pages, so it is sanitized first.
-  const prefixLines = (label: string, text: string) => {
-    const lines = sanitizeForVault(text).trim().split('\n');
+  const prefixLines = (label: string, body: string) => {
+    const lines = sanitizeForVault(body).trim().split('\n');
     if (lines.length === 0) return `> **${label}:**\n`;
     const firstLine = `> **${label}:** ${lines[0]}\n`;
     const remainingLines = lines.slice(1).map(l => `> ${l}\n`).join('');
     return firstLine + remainingLines;
   };
 
-  let callout = `\n\n> [!tip] Sugerencia Aceptada: ${typeLabel} (${formatCalloutDate(date)})\n`;
-  callout += prefixLines('Acción', sug.suggestedAction);
-  callout += prefixLines('Observación', sug.observation);
-  callout += `> **Fuente:** ${link}\n`;
+  let callout = `\n\n> [!tip] ${text.calloutTitle}: ${typeLabel} (${formatCalloutDate(date, lang)})\n`;
+  callout += prefixLines(text.calloutAction, sug.suggestedAction);
+  callout += prefixLines(text.calloutObservation, sug.observation);
+  callout += `> **${text.calloutSource}:** ${link}\n`;
   if (sug.userFeedback) {
-    callout += prefixLines('Feedback', sug.userFeedback);
+    callout += prefixLines(text.calloutFeedback, sug.userFeedback);
   }
   // Hidden Obsidian comment used to detect an already-written callout after a crash
   callout += `> ${calloutMarker(sug.id)}\n`;
