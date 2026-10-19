@@ -6,6 +6,7 @@ import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
 import { z } from 'zod';
 import { retrieveWithStats, RetrievalOptions } from './retrieval';
+import { resolveTargetFile } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 import { getLogger } from '../observability/logger';
@@ -244,6 +245,9 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           }).returning({ id: evaluations.id });
           if (!action || suppressedDiscard) return { evaluationId: evalRecord.id, suggestionId: null };
 
+          const notes = await tx.select({ notePath: projectNoteSnapshots.notePath })
+            .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshotId));
+
           const [sugRecord] = await tx.insert(actionSuggestions).values({
             evaluationId: evalRecord.id,
             projectId,
@@ -251,7 +255,7 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
             actionType: action.actionType,
             observation: action.observation,
             suggestedAction: action.suggestedAction,
-            targetFile: action.targetFile || matchedNotePath || 'ideas.md',
+            targetFile: resolveTargetFile(action.targetFile, notes.map(n => n.notePath), matchedNotePath),
             status: 'pending',
           }).returning({ id: actionSuggestions.id });
           return { evaluationId: evalRecord.id, suggestionId: sugRecord.id };

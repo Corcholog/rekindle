@@ -1,13 +1,18 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
-import { actionSuggestions, projects, contents, evaluations, projectSnapshots } from '../../db/schema';
+import { actionSuggestions, projects, contents, evaluations, projectSnapshots, projectNoteSnapshots } from '../../db/schema';
 import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
+import { resolveTargetFile } from '../../evaluator/targetFile';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
+
+// "%/<target_file>" with LIKE wildcards in the stored target file escaped: older rows hold
+// model-written text, where "%" or "_" would match unrelated notes (audit F-13)
+const TARGET_FILE_SUFFIX_PATTERN = sql`'%/' || replace(replace(replace(a.target_file, '\\', '\\\\'), '%', '\\%'), '_', '\\_')`;
 
 const SuggestionItemSchema = z.object({
   id: z.string().uuid(),
@@ -201,14 +206,14 @@ export default async function (server: FastifyInstance) {
                     AND (
                       pns_latest.note_path = pns_eval.note_path 
                       OR pns_latest.note_title = pns_eval.note_title
-                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                      OR pns_latest.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
                     AND (
                       pns_eval.note_path = a.target_file 
                       OR pns_eval.note_path = a.target_file || '.md'
                       OR pns_eval.note_title = a.target_file
-                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                      OR pns_eval.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                     AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
@@ -446,14 +451,14 @@ export default async function (server: FastifyInstance) {
                     AND (
                       pns_latest.note_path = pns_eval.note_path 
                       OR pns_latest.note_title = pns_eval.note_title
-                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                      OR pns_latest.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
                     AND (
                       pns_eval.note_path = a.target_file 
                       OR pns_eval.note_path = a.target_file || '.md'
                       OR pns_eval.note_title = a.target_file
-                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                      OR pns_eval.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                     AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
@@ -733,12 +738,14 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       newEvaluationId = insertedEval.id;
 
       const refinedAction = evalResult.refinedAction;
+      const latestNotes = await db.select({ notePath: projectNoteSnapshots.notePath })
+        .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, latestSnapshot.id));
       await db.update(actionSuggestions).set({
         ...(await evaluationLink(newEvaluationId, sug.id)),
         actionType: refinedAction?.actionType || sug.actionType,
         observation: refinedAction?.observation || sug.observation,
         suggestedAction: refinedAction?.suggestedAction || sug.suggestedAction,
-        targetFile: refinedAction?.targetFile || sug.targetFile,
+        targetFile: resolveTargetFile(refinedAction?.targetFile, latestNotes.map(n => n.notePath), sug.targetFile),
       }).where(eq(actionSuggestions.id, sug.id));
 
     } else {
@@ -913,14 +920,14 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
                     AND (
                       pns_latest.note_path = pns_eval.note_path 
                       OR pns_latest.note_title = pns_eval.note_title
-                      OR pns_latest.note_path LIKE '%/' || a.target_file
+                      OR pns_latest.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                   WHERE pns_eval.project_snapshot_id = eval_ps.id
                     AND (
                       pns_eval.note_path = a.target_file 
                       OR pns_eval.note_path = a.target_file || '.md'
                       OR pns_eval.note_title = a.target_file
-                      OR pns_eval.note_path LIKE '%/' || a.target_file
+                      OR pns_eval.note_path LIKE ${TARGET_FILE_SUFFIX_PATTERN}
                     )
                     AND (pns_latest.id IS NULL OR pns_latest.embedding_model IS DISTINCT FROM pns_eval.embedding_model OR COALESCE((pns_latest.embedding <=> pns_eval.embedding) >= ${STALE_DRIFT_THRESHOLD}, false))
                 )
