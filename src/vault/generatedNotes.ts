@@ -4,12 +4,13 @@ import { sanitizeForVault, yamlString } from './sanitize';
 import { Language, outputLanguage } from '../ai/language';
 import { serverText } from '../i18n/serverText';
 
-// Earlier versions wrote these types without the loom_generated marker.
-const GENERATED_FRONTMATTER = /^---\r?\n[\s\S]*?^(loom_generated:\s*true|type:\s*(research_brief|cross_project_synergy))\s*$/m;
+// rekindle_generated marks notes written by Rekindle. Notes from before the rename carry
+// loom_generated, and the earliest versions only their type; all of them stay excluded.
+const GENERATED_FRONTMATTER = /^---\r?\n[\s\S]*?^((?:rekindle|loom)_generated:\s*true|type:\s*(research_brief|cross_project_synergy))\s*$/m;
 const MAX_BODY_LENGTH = 20000;
 
 /** True if the note was written by Loom; such notes are excluded from hashes and snapshots. */
-export async function isLoomGeneratedFile(fullPath: string): Promise<boolean> {
+export async function isGeneratedNote(fullPath: string): Promise<boolean> {
   let handle: fs.FileHandle | undefined;
   try {
     handle = await fs.open(fullPath, 'r');
@@ -75,12 +76,12 @@ export function formatResearchBrief(brief: ResearchBriefContent, acceptedCount: 
   return `---
 title: ${yamlString(brief.title)}
 type: research_brief
-loom_generated: true
+rekindle_generated: true
 synthesized_at: "${new Date().toISOString()}"
 accepted_suggestions_count: ${count}
 tags:
-  - loom/synthesis
-  - loom/research-brief
+  - rekindle/synthesis
+  - rekindle/research-brief
 ---
 
 # ${title}
@@ -114,13 +115,13 @@ export function formatSynergyNote(note: SynergyNoteContent, titleA: string, titl
   return `---
 title: ${yamlString(note.bridgeTitle)}
 type: cross_project_synergy
-loom_generated: true
+rekindle_generated: true
 project_a: ${yamlString(titleA)}
 project_b: ${yamlString(titleB)}
 created_at: "${new Date().toISOString()}"
 tags:
-  - loom/synergy
-  - loom/cross-project
+  - rekindle/synergy
+  - rekindle/cross-project
 ---
 
 # ${title}

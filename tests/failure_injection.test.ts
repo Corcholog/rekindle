@@ -121,7 +121,7 @@ describe('Failure scenario 6: prompt injection in retrieved content', () => {
     expect(written).not.toContain('![[');
     expect(written).not.toContain('<script>');
     expect(written.match(/(?<!\\)\[!/g)).toHaveLength(1); // only Loom's own callout header
-    expect(written.match(/%% loom:/g)).toHaveLength(1); // only Loom's own marker
+    expect(written.match(/%% rekindle:/g)).toHaveLength(1); // only Rekindle's own marker
     await expect(fs.access(path.join(vault, '.obsidian'))).rejects.toThrow();
   });
 });

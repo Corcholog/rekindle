@@ -70,7 +70,17 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
 
 /** Sanitized model text cannot contain "%%", so it cannot forge another suggestion's marker. */
 export function calloutMarker(suggestionId: string): string {
+  return `%% rekindle:${suggestionId} %%`;
+}
+
+/** Callouts written before the rename (when the project was called Loom) carry this marker. */
+export function legacyCalloutMarker(suggestionId: string): string {
   return `%% loom:${suggestionId} %%`;
+}
+
+/** I5: a callout counts as written under either marker, so a renamed install never repeats one. */
+export function hasCallout(fileContent: string, suggestionId: string): boolean {
+  return fileContent.includes(calloutMarker(suggestionId)) || fileContent.includes(legacyCalloutMarker(suggestionId));
 }
 
 const writableSelection = {
@@ -135,7 +145,7 @@ export async function writeAcceptedSuggestionToVault(suggestionId: string, vault
     if (!sug) return false;
 
     const filePath = await resolveSuggestionsFile(vaultPath, sug.folderPath);
-    const alreadyWritten = (await readIfExists(filePath)).includes(calloutMarker(suggestionId));
+    const alreadyWritten = hasCallout(await readIfExists(filePath), suggestionId);
     if (!alreadyWritten) {
       await fs.appendFile(filePath, formatAcceptedCallout(sug), 'utf-8');
       log.info({ suggestionId }, 'Accepted suggestion written to the vault');

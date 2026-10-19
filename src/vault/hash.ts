@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { isLoomGeneratedFile } from './generatedNotes';
+import { isGeneratedNote } from './generatedNotes';
 
 /**
  * Calculates SHA256 hash of a file's contents via streaming.
@@ -40,7 +40,7 @@ export async function getDirectoryHash(dirPath: string): Promise<string> {
         await walk(full);
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
-        if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isLoomGeneratedFile(full))) {
+        if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isGeneratedNote(full))) {
           const rel = path.relative(dirPath, full).replace(/\\/g, '/');
           mdFiles.push({ fullPath: full, relPath: rel });
         }

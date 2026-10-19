@@ -37,7 +37,7 @@ describe('generated vault notes', () => {
   });
 
   it('marks notes as generated and keeps them out of the project hash', async () => {
-    const { writeGeneratedNote, formatResearchBrief, isLoomGeneratedFile } = await import('../src/vault/generatedNotes');
+    const { writeGeneratedNote, formatResearchBrief, isGeneratedNote } = await import('../src/vault/generatedNotes');
     const { getDirectoryHash } = await import('../src/vault/hash');
 
     const before = await getDirectoryHash(projectDir);
@@ -48,16 +48,24 @@ describe('generated vault notes', () => {
       suggestedNextSteps: ['Paso 1'],
     }, 2));
 
-    expect(await isLoomGeneratedFile(path.join(vault, rel))).toBe(true);
-    expect(await isLoomGeneratedFile(path.join(projectDir, 'ideas.md'))).toBe(false);
+    expect(await isGeneratedNote(path.join(vault, rel))).toBe(true);
+    expect(await isGeneratedNote(path.join(projectDir, 'ideas.md'))).toBe(false);
     expect(await getDirectoryHash(projectDir)).toBe(before);
   });
 
   it('treats briefs and bridges written by earlier versions as generated', async () => {
-    const { isLoomGeneratedFile } = await import('../src/vault/generatedNotes');
+    const { isGeneratedNote } = await import('../src/vault/generatedNotes');
     const legacy = path.join(projectDir, 'old_brief.md');
     await fs.writeFile(legacy, '---\ntitle: "x"\ntype: research_brief\n---\n# x\n');
-    expect(await isLoomGeneratedFile(legacy)).toBe(true);
+    expect(await isGeneratedNote(legacy)).toBe(true);
+    // Notes written before the rename to Rekindle
+    const loomNote = path.join(projectDir, 'old_note.md');
+    await fs.writeFile(loomNote, '---\ntitle: "y"\nloom_generated: true\n---\n# y\n');
+    expect(await isGeneratedNote(loomNote)).toBe(true);
+    const { getDirectoryHash } = await import('../src/vault/hash');
+    const before = await getDirectoryHash(projectDir);
+    await fs.writeFile(path.join(projectDir, 'another_old_note.md'), '---\nloom_generated: true\n---\n# z\n');
+    expect(await getDirectoryHash(projectDir)).toBe(before);
   });
 
   it('escapes YAML and sanitizes model text in the note body', async () => {
@@ -72,7 +80,7 @@ describe('generated vault notes', () => {
 
     const frontmatter = note.split('\n---\n')[0];
     expect(frontmatter).not.toMatch(/^injected:/m);
-    expect(frontmatter).toContain('loom_generated: true');
+    expect(frontmatter).toContain('rekindle_generated: true');
     expect(note).not.toContain('![[');
     expect(note).not.toContain('<script>');
     expect(note).not.toMatch(/(^|[^\\])```/);

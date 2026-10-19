@@ -80,7 +80,7 @@ describe('Writeback idempotency and recovery', () => {
     expect(await writeAcceptedSuggestionToVault(id, vaultPath)).toBe(false);
 
     const text = await fs.readFile(suggestionsFile(), 'utf-8');
-    expect(text).toContain(`%% loom:${id} %%`);
+    expect(text).toContain(`%% rekindle:${id} %%`);
     expect(await countCallouts()).toBe(1);
   });
 
@@ -101,6 +101,23 @@ describe('Writeback idempotency and recovery', () => {
     const { eq } = await import('drizzle-orm');
     const [row] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.id, id));
     expect(row.writtenToVault).toBe(true);
+  });
+
+  // The project was called Loom before 2026-10-19: callouts in existing vaults carry the old marker
+  it('treats a callout with the pre-rename marker as already written', async () => {
+    const { writeAcceptedSuggestionToVault, formatAcceptedCallout, calloutMarker, legacyCalloutMarker } = await import('../src/vault/updater');
+    const id = await createAcceptedSuggestion();
+    const oldCallout = formatAcceptedCallout({
+      id, actionType: 'evidence_citation', observation: 'Observación de prueba',
+      suggestedAction: 'Citar la fuente en el capítulo 2', userFeedback: null,
+      sourceUri: 'https://example.com/fuente', sourceTitle: 'Fuente',
+    }).replace(calloutMarker(id), legacyCalloutMarker(id));
+    await fs.writeFile(suggestionsFile(), oldCallout);
+
+    expect(await writeAcceptedSuggestionToVault(id, vaultPath)).toBe(false);
+    const text = await fs.readFile(suggestionsFile(), 'utf-8');
+    expect(text.split(legacyCalloutMarker(id)).length - 1).toBe(1);
+    expect(text).not.toContain(calloutMarker(id));
   });
 
   it('keeps the suggestion pending when the write fails, then recovers it', async () => {
@@ -168,7 +185,7 @@ describe('Writeback idempotency and recovery', () => {
     await syncProjectSuggestions(projectId, vaultPath);
     // Earlier tests left other accepted suggestions in this project; count this one's marker
     const text = await fs.readFile(suggestionsFile(), 'utf-8');
-    expect(text.split(`%% loom:${id} %%`).length - 1).toBe(1);
+    expect(text.split(`%% rekindle:${id} %%`).length - 1).toBe(1);
     const { eq } = await import('drizzle-orm');
     const [row] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.id, id));
     expect(row.writtenToVault).toBe(true);

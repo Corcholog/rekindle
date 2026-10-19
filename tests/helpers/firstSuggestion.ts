@@ -166,7 +166,7 @@ export function defineFirstSuggestionSuite(c: DemoCase) {
       expect(written.match(/> \[!/g)).toHaveLength(1);
       expect(written).toContain(`> [!tip] ${c.calloutTitle}:`);
       expect(written).toContain(c.action.suggestedAction);
-      expect(written).toContain(`%% loom:${suggestion.id} %%`);
+      expect(written).toContain(`%% rekindle:${suggestion.id} %%`);
       for (const other of c.projectFolders.filter(f => f !== c.lighthouseFolder)) {
         await expect(fs.access(path.join(vault, 'Projects', other, 'suggestions.md'))).rejects.toThrow();
       }

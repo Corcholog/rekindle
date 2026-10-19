@@ -649,7 +649,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const savedBody = JSON.parse(saved.payload);
     expect(savedBody.filePath).toBe('Projects/AI_Agents/research_brief.md');
     const fileContent = await fs.readFile(briefDiskPath, 'utf-8');
-    expect(fileContent).toContain('loom_generated: true');
+    expect(fileContent).toContain('rekindle_generated: true');
     expect(fileContent).toContain('# Síntesis de Investigación: AI Agents');
     expect(fileContent).not.toMatch(/(^|[^\\])```/);
 
@@ -812,7 +812,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const savedBody = JSON.parse(saved.payload);
     expect(savedBody.filePath).toMatch(/^Projects\/synergy_[^/]+\.md$/);
     const content = await fs.readFile(path.join(vaultPath, savedBody.filePath), 'utf-8');
-    expect(content).toContain('loom_generated: true');
+    expect(content).toContain('rekindle_generated: true');
     expect(content).toContain('type: cross_project_synergy');
     expect(content).toContain('Puente Conceptual: Agentes y Memoria Vectorial');
 

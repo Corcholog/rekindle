@@ -8,7 +8,7 @@ import { parseMarkdownFile } from './parser';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
 import { PROJECT_DIR_NAMES, env } from '../config';
-import { isLoomGeneratedFile } from './generatedNotes';
+import { isGeneratedNote } from './generatedNotes';
 import { getLogger, pathKey } from '../observability/logger';
 
 const log = getLogger('reconciler');
@@ -36,7 +36,7 @@ async function getProjectMarkdownFiles(projectPath: string): Promise<{ fullPath:
       } else if (entry.isFile()) {
         const lower = entry.name.toLowerCase();
         // Loom's own output (suggestions.md, generated briefs) never feeds back into project context
-        if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isLoomGeneratedFile(full))) {
+        if (lower.endsWith('.md') && lower !== 'suggestions.md' && !(await isGeneratedNote(full))) {
           const rel = path.relative(projectPath, full).replace(/\\/g, '/');
           result.push({ fullPath: full, relPath: rel, name: entry.name });
         }
