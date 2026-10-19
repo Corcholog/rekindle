@@ -161,3 +161,37 @@ Only start these if Phase 3 results show a need, and always report before/after 
 - Consultor reworked from full-catalog context stuffing to retrieval-first.
 - A read-only MCP server exposing library search, note search, and suggestion listing (no write tools, path confinement enforced).
 - Threshold recalibration based on eval sweeps, and `embedding_model` tracking on snapshots.
+
+---
+
+## Backlog: open items carried between sessions
+
+Items decided or noticed in conversation that belong to no finished phase. Each says where it fits.
+
+**Phase 7 (publication)**
+- **Rename the project.** "Loom" is an Atlassian product. A rename touches the repo name (GitHub keeps redirects), `package.json`, UI and extension names, docs, the `loomdb` database and Docker setup. It must keep recognizing the existing `%% loom:<id> %%` markers and `loom_generated` frontmatter in the owner's vault, or writeback idempotency (I5) breaks.
+- **Make the repo public** only after the Phase 7 checks (license, secret scan of the whole history). It is private until then; commits keep the owner's Gmail address (owner decision).
+- **LinkedIn post caveats:** one labeler, small n, Flash Lite tier, private data not reproducible by readers, run-to-run variance not measured, real article titles not named.
+
+**Small fixes (any session)**
+- Accepted callouts format the date with the machine locale (`toLocaleDateString()` in `src/vault/updater.ts`), which prints `10/18/2026` on this machine; vault text is Spanish, so it should be `es-AR`/`es` (`18/10/2026`).
+
+**Evaluation experiments (need the owner; may cost DeepSeek credit, about $0.36 of $2 spent)**
+- Thinking mode ON only for the action-suggestion step. Needs splitting triage and action into two calls; measure with the harness.
+- The owner's open question on `tentative` and forced connections (`docs/JOURNEY.md`, Phase 3 follow-up): what the model should surface that the user would miss without forcing links, and what the top-3 cutoff throws away.
+- Run-to-run variance of each model (repeat a config a few times) before trusting differences of a few points.
+- Suggestion quality (usefulness, actionability) is not measured.
+
+**Open audit findings** (details in the local `docs/audit/AUDIT_REPORT.md`; listed as residual risks in `docs/THREAT_MODEL.md`)
+- F-14 synergies use notes from older snapshots, including deleted notes.
+- F-15 unmounting the vault drive triggers a burst of backlog jobs on remount.
+- F-16 the Consultor sends the whole library in one prompt (fits "Optional": retrieval-first).
+- F-18/F-19/F-20 threshold calibration, HNSW not used by the production queries, truncation without chunking (fit "Optional").
+- F-21 the extension can send a queued clip twice.
+- F-25 license and release hygiene (Phase 7).
+- F-28 Unicode normalization and platform paths; F-29 backlog jobs racing the watcher.
+- A failed evaluation is visible only in `pnpm telemetry:report`, not in the UI (owner chose telemetry only in Phase 5).
+
+**Questions the owner raised for later**
+- Vanilla JS web UI vs a framework: keep vanilla for now; if it grows, split `web/app.js` into ES modules first (no build step), then consider Preact or Svelte.
+- pnpm stays the package manager (pinned with `packageManager`).
