@@ -73,3 +73,16 @@ describe('formatAcceptedCallout', () => {
     expect(callout).not.toContain('javascript:');
   });
 });
+
+describe('callout date', () => {
+  it('is dd/mm/yyyy whatever the machine locale', async () => {
+    const { formatCalloutDate, formatAcceptedCallout } = await import('../src/vault/updater');
+    expect(formatCalloutDate(new Date(2026, 9, 18))).toBe('18/10/2026');
+    expect(formatCalloutDate(new Date(2026, 0, 5))).toBe('05/01/2026');
+    const callout = formatAcceptedCallout({
+      id: '22222222-2222-2222-2222-222222222222', actionType: 'other', suggestedAction: 'a', observation: 'o',
+      userFeedback: null, sourceUri: null, sourceTitle: null,
+    }, new Date(2026, 9, 18));
+    expect(callout).toContain('OTRO (18/10/2026)');
+  });
+});

@@ -31,6 +31,12 @@ const ACTION_LABELS: Record<string, string> = {
   other: 'OTRO',
 };
 
+/** dd/mm/yyyy in local time, whatever the machine's locale (vault text is Spanish). */
+export function formatCalloutDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
 export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()): string {
   const typeLabel = ACTION_LABELS[sug.actionType] ?? sug.actionType.toUpperCase();
 
@@ -52,7 +58,7 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
     return firstLine + remainingLines;
   };
 
-  let callout = `\n\n> [!tip] Sugerencia Aceptada: ${typeLabel} (${date.toLocaleDateString()})\n`;
+  let callout = `\n\n> [!tip] Sugerencia Aceptada: ${typeLabel} (${formatCalloutDate(date)})\n`;
   callout += prefixLines('Acción', sug.suggestedAction);
   callout += prefixLines('Observación', sug.observation);
   callout += `> **Fuente:** ${link}\n`;

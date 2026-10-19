@@ -173,9 +173,6 @@ Items decided or noticed in conversation that belong to no finished phase. Each 
 - **Make the repo public** only after the Phase 7 checks (license, secret scan of the whole history). It is private until then; commits keep the owner's Gmail address (owner decision).
 - **LinkedIn post caveats:** one labeler, small n, Flash Lite tier, private data not reproducible by readers, run-to-run variance not measured, real article titles not named.
 
-**Small fixes (any session)**
-- Accepted callouts format the date with the machine locale (`toLocaleDateString()` in `src/vault/updater.ts`), which prints `10/18/2026` on this machine; vault text is Spanish, so it should be `es-AR`/`es` (`18/10/2026`).
-
 **Evaluation experiments (need the owner; may cost DeepSeek credit, about $0.36 of $2 spent)**
 - Thinking mode ON only for the action-suggestion step. Needs splitting triage and action into two calls; measure with the harness.
 - The owner's open question on `tentative` and forced connections (`docs/JOURNEY.md`, Phase 3 follow-up): what the model should surface that the user would miss without forcing links, and what the top-3 cutoff throws away.
