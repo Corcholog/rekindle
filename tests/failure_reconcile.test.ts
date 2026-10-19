@@ -85,4 +85,29 @@ describe('Failure scenario 4: a note changes during reconciliation', () => {
     expect(notes[0].contentSnippet).toContain('Segunda versión');
     expect(notes[0].embedding).toEqual(expect.any(Array));
   }, 30000);
+
+  // Threat model: a symlink inside a project must not pull files from outside the vault into
+  // prompts or the database
+  it('skips symlinked notes and folders inside a project', async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'loom-outside-'));
+    await fs.writeFile(path.join(outside, 'secreto.md'), '# Secreto\n\nTEXTO-FUERA-DEL-VAULT');
+    const projectDir = path.join(vault, 'Projects', 'Enlaces');
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.writeFile(path.join(projectDir, 'nota.md'), '# Nota\n\nTexto propio del proyecto.');
+    await fs.symlink(path.join(outside, 'secreto.md'), path.join(projectDir, 'enlace.md'));
+    await fs.symlink(outside, path.join(projectDir, 'carpeta-enlazada'));
+
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    sharedAiProvider.setOverrides({ embed: async (text: string) => fakeEmbedding(text) });
+    const { reconcileProject } = await import('../src/vault/reconciler');
+    await reconcileProject(projectDir, vault, true);
+
+    const { eq } = await import('drizzle-orm');
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.folderPath, 'Projects/Enlaces'));
+    const [snapshot] = await db.select().from(schema.projectSnapshots).where(eq(schema.projectSnapshots.projectId, project.id));
+    const notes = await db.select().from(schema.projectNoteSnapshots).where(eq(schema.projectNoteSnapshots.projectSnapshotId, snapshot.id));
+    expect(notes.map((n: any) => n.notePath)).toEqual(['nota.md']);
+    expect(JSON.stringify([snapshot, notes])).not.toContain('TEXTO-FUERA-DEL-VAULT');
+    await fs.rm(outside, { recursive: true, force: true });
+  });
 });
