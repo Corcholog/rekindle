@@ -19,24 +19,15 @@ const state = {
   synergies: [],
 };
 
-// Action Type Labels in Spanish (User Domain)
-const ACTION_LABELS = {
-  evidence_citation: 'Cita de Evidencia',
-  counter_argument: 'Contraargumento',
-  unblocker: 'Desbloqueo',
-  narrative_bridge: 'Puente Narrativo',
-  other: 'Otro',
-};
+// UI strings live in i18n.js (Spanish and English), loaded before this module
+const i18n = window.LoomI18n;
+const t = i18n.t;
 
-// Status Labels in Spanish
-const STATUS_LABELS = {
-  ready: 'Listo',
-  pending: 'Pendiente',
-  extracting: 'Extrayendo',
-  summarizing: 'Resumiendo',
-  embedding: 'Indexando',
-  failed: 'Falló',
-};
+const ACTION_TYPES = ['evidence_citation', 'counter_argument', 'unblocker', 'narrative_bridge', 'other'];
+const INGEST_STATUSES = ['ready', 'pending', 'extracting', 'summarizing', 'embedding', 'failed'];
+const actionLabel = (type) => (ACTION_TYPES.includes(type) ? t(`action.${type}`) : type);
+const statusLabel = (status) => (INGEST_STATUSES.includes(status) ? t(`ingestStatus.${status}`) : status);
+const verdictLabel = (verdict) => t(`verdict.${verdict === 'actionable' || verdict === 'tentative' ? verdict : 'irrelevant'}`);
 
 // DOM Elements
 const elements = {
@@ -139,7 +130,8 @@ const elements = {
 // Initialization
 // ==========================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await i18n.init();
   setupNavigation();
   setupIngestionForm();
   setupExtensionGuide();
@@ -151,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupBatchReevaluateAction();
   setupSynergies();
   setupSystemStatusPoller();
+  setupLanguageSettings();
 
   // Initial Data Load
   loadVaultSettings();
@@ -211,10 +204,10 @@ function setupSystemStatusPoller() {
       if (data.isProcessing) {
         if (elements.liveIndicator) {
           elements.liveIndicator.className = 'status-indicator processing';
-          elements.liveIndicator.title = data.message || 'Procesando en segundo plano';
+          elements.liveIndicator.title = t('status.processingTitle');
         }
         if (elements.liveText) {
-          elements.liveText.textContent = data.message || 'Procesando...';
+          elements.liveText.textContent = data.evaluatingJobs > 0 ? t('status.evaluating', { n: data.evaluatingJobs }) : t('status.ingesting');
         }
         if (headerStatus) {
           headerStatus.classList.add('processing');
@@ -223,10 +216,10 @@ function setupSystemStatusPoller() {
       } else {
         if (elements.liveIndicator) {
           elements.liveIndicator.className = 'status-indicator live';
-          elements.liveIndicator.title = 'Conexión en vivo activa';
+          elements.liveIndicator.title = t('status.liveTitle');
         }
         if (elements.liveText) {
-          elements.liveText.textContent = 'Conectado';
+          elements.liveText.textContent = t('status.connected');
         }
         if (headerStatus) {
           headerStatus.classList.remove('processing');
@@ -336,15 +329,15 @@ function setupIngestionForm() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'Error al encolar la URL');
+        throw new Error(i18n.apiError(data, 'error.ingest'));
       }
 
       elements.urlInput.value = '';
       // 202 = new URL queued; 200 = already in the library (or a failed one retried)
       if (res.status === 202) {
-        showToast('Enlace enviado para análisis y extracción.', 'success');
+        showToast(t('inbox.queued'), 'success');
       } else {
-        showToast(data.message, 'info');
+        showToast(data.status === 'pending' ? t('inbox.retrying') : t('inbox.alreadyInLibrary'), 'info');
       }
       loadContents();
       loadProjects();
@@ -409,13 +402,13 @@ function setupLibrarySearchAndAsk() {
     if (!query) return;
 
     btnSubmit.disabled = true;
-    if (btnText) btnText.textContent = 'Consultando...';
+    if (btnText) btnText.textContent = t('consult.submitting');
     spinner.style.display = 'inline-block';
 
     resultsBox.innerHTML = `
       <div class="consultant-loading-state">
         <span class="spinner"></span>
-        <span>Revisando catálogo de lecturas y notas en el Vault...</span>
+        <span>${t('consult.reviewing')}</span>
       </div>
     `;
 
@@ -426,7 +419,7 @@ function setupLibrarySearchAndAsk() {
         body: JSON.stringify({ query }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Error al consultar tu archivo');
+      if (!res.ok) throw new Error(i18n.apiError(data, 'error.consult'));
 
       const formatCitations = (escapedText) =>
         escapedText.replace(/\[([CN]\d+(?:\s*,\s*[CN]\d+)*)\]/gi, (match, groupStr) => {
@@ -435,7 +428,7 @@ function setupLibrarySearchAndAsk() {
             .map(refTag => {
               const upperRef = refTag.trim().toUpperCase();
               const isNote = upperRef.startsWith('N');
-              return `<a href="#consult-ref-${upperRef}" class="consult-ref-badge ${isNote ? 'note-ref' : 'content-ref'}" data-ref="${upperRef}" title="Ir a referencia [${upperRef}]">[${upperRef}]</a>`;
+              return `<a href="#consult-ref-${upperRef}" class="consult-ref-badge ${isNote ? 'note-ref' : 'content-ref'}" data-ref="${upperRef}" title="${escapeHtml(t('consult.goToRef', { ref: upperRef }))}">[${upperRef}]</a>`;
             })
             .join(' ');
         });
@@ -448,7 +441,7 @@ function setupLibrarySearchAndAsk() {
       const viabilityHtml = data.projectViability
         ? `
           <div class="consultant-viability-box">
-            <strong class="viability-heading">Enfoque de proyecto sugerido</strong>
+            <strong class="viability-heading">${t('consult.suggestedProject')}</strong>
             <p class="viability-text">${formatCitations(escapeHtml(data.projectViability))}</p>
           </div>
         `
@@ -462,7 +455,7 @@ function setupLibrarySearchAndAsk() {
           <div class="consultant-matches-list">
             ${matchedContents.map(item => {
               const isYoutube = /youtube\.com|youtu\.be/i.test(item.uri || '');
-              const typeLabel = isYoutube ? 'Video' : 'Artículo';
+              const typeLabel = isYoutube ? t('consult.video') : t('consult.article');
               return `
                 <article class="consultant-match-card content-match" id="consult-ref-${escapeHtml(item.refId)}">
                   <div class="match-card-top">
@@ -471,8 +464,8 @@ function setupLibrarySearchAndAsk() {
                       <span class="match-meta-text">${escapeHtml(item.channelOrDomain || typeLabel)}</span>
                     </div>
                     <div class="match-card-actions">
-                      <button type="button" class="btn-text-action btn-view-library-detail" data-id="${escapeHtml(item.id)}">Ver ficha</button>
-                      <a href="${safeUrl(item.uri)}" target="_blank" rel="noopener" class="source-link">Abrir original ↗</a>
+                      <button type="button" class="btn-text-action btn-view-library-detail" data-id="${escapeHtml(item.id)}">${t('feed.details')}</button>
+                      <a href="${safeUrl(item.uri)}" target="_blank" rel="noopener" class="source-link">${t('consult.openOriginal')}</a>
                     </div>
                   </div>
                   <h4 class="match-card-title">${escapeHtml(item.title || item.uri)}</h4>
@@ -483,7 +476,7 @@ function setupLibrarySearchAndAsk() {
           </div>
         `
         : `
-          <p class="consultant-empty-column">Ningún video o artículo guardado aborda directamente esta consulta.</p>
+          <p class="consultant-empty-column">${t('consult.noContents')}</p>
         `;
 
       const notesColumnHtml = matchedNotes.length > 0
@@ -494,7 +487,7 @@ function setupLibrarySearchAndAsk() {
               const snippetHtml = snippetText
                 ? `
                   <details class="note-snippet-details">
-                    <summary>Leer extracto de la nota</summary>
+                    <summary>${t('consult.readSnippet')}</summary>
                     <pre class="note-snippet-pre">${escapeHtml(snippetText.substring(0, 700))}${snippetText.length > 700 ? '…' : ''}</pre>
                   </details>
                 `
@@ -517,7 +510,7 @@ function setupLibrarySearchAndAsk() {
           </div>
         `
         : `
-          <p class="consultant-empty-column">Ninguna nota en tu Vault de Obsidian aborda directamente este tema todavía.</p>
+          <p class="consultant-empty-column">${t('consult.noNotes')}</p>
         `;
 
       resultsBox.innerHTML = `
@@ -526,9 +519,9 @@ function setupLibrarySearchAndAsk() {
             <h3 class="consultant-diagnosis-title">${escapeHtml(data.query)}</h3>
             <div class="consultant-diagnosis-meta">
               <span class="consultant-eval-stats">
-                ${data.totalLibraryEvaluated} lecturas y ${data.totalNotesEvaluated} notas revisadas
+                ${t('consult.reviewed', { library: data.totalLibraryEvaluated, notes: data.totalNotesEvaluated })}
               </span>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-consultant-results">Limpiar</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-consultant-results">${t('consult.clear')}</button>
             </div>
           </div>
 
@@ -542,7 +535,7 @@ function setupLibrarySearchAndAsk() {
         <div class="consultant-columns">
           <div class="consultant-column-card">
             <div class="consultant-column-header">
-              <h3 class="consultant-column-title">En tu biblioteca</h3>
+              <h3 class="consultant-column-title">${t('consult.inLibrary')}</h3>
               <span class="consultant-column-count">${matchedContents.length}</span>
             </div>
             ${contentsColumnHtml}
@@ -550,7 +543,7 @@ function setupLibrarySearchAndAsk() {
 
           <div class="consultant-column-card">
             <div class="consultant-column-header">
-              <h3 class="consultant-column-title">En tus notas de Obsidian</h3>
+              <h3 class="consultant-column-title">${t('consult.inNotes')}</h3>
               <span class="consultant-column-count">${matchedNotes.length}</span>
             </div>
             ${notesColumnHtml}
@@ -584,13 +577,13 @@ function setupLibrarySearchAndAsk() {
     } catch (err) {
       resultsBox.innerHTML = `
         <div class="form-error" style="display: block;">
-          ${escapeHtml(err.message || 'Error al consultar la biblioteca y el Vault')}
+          ${escapeHtml(err.message || t('error.consult'))}
         </div>
       `;
       showToast(err.message, 'error');
     } finally {
       btnSubmit.disabled = false;
-      if (btnText) btnText.textContent = 'Consultar';
+      if (btnText) btnText.textContent = t('consult.submit');
       spinner.style.display = 'none';
     }
   });
@@ -601,18 +594,18 @@ async function loadContents() {
     const status = elements.filterStatus.value;
     const query = status ? `?status=${encodeURIComponent(status)}&limit=50` : '?limit=50';
     const res = await fetch(`/api/contents${query}`);
-    if (!res.ok) throw new Error('No se pudo cargar la lista de contenidos');
+    if (!res.ok) throw new Error(t('error.contents'));
 
     const data = await res.json();
     state.contents = data.items;
-    elements.feedCount.textContent = `${data.total} ${data.total === 1 ? 'contenido' : 'contenidos'}`;
+    elements.feedCount.textContent = t('feed.count', { n: data.total });
 
     renderContentsList(data.items);
     checkInFlightPolling(data.items);
   } catch (err) {
     elements.contentsList.innerHTML = `
       <div class="empty-state">
-        <p style="color: var(--color-danger);">Error al cargar contenidos: ${escapeHtml(err.message)}</p>
+        <p style="color: var(--color-danger);">${escapeHtml(t('feed.loadError', { message: err.message }))}</p>
       </div>
     `;
   }
@@ -658,21 +651,21 @@ function renderContentsList(items) {
   if (items.length === 0) {
     elements.contentsList.innerHTML = `
       <div class="empty-state">
-        <p>No hay contenidos guardados todavía. Pega un enlace arriba para comenzar.</p>
+        <p>${t('feed.empty')}</p>
       </div>
     `;
     return;
   }
 
   elements.contentsList.innerHTML = items.map(item => {
-    const statusLabel = STATUS_LABELS[item.ingestStatus] || item.ingestStatus;
+    const ingestLabel = statusLabel(item.ingestStatus);
     const isFailed = item.ingestStatus === 'failed';
-    const dateFormatted = new Date(item.consumedAt).toLocaleString('es-ES', {
+    const dateFormatted = new Date(item.consumedAt).toLocaleString(i18n.locale(), {
       dateStyle: 'short',
       timeStyle: 'short',
     });
 
-    let displayTitle = item.title || 'Extrayendo título...';
+    let displayTitle = item.title || t('feed.extractingTitle');
     if (item.channelOrDomain && !displayTitle.toLowerCase().includes(item.channelOrDomain.toLowerCase())) {
       displayTitle = `${displayTitle} — ${item.channelOrDomain}`;
     }
@@ -680,18 +673,18 @@ function renderContentsList(items) {
     let triageBadgeHtml = '';
     if (item.ingestStatus === 'ready') {
       if (item.isEvaluating) {
-        triageBadgeHtml = `<span class="chip chip-neutral"><span class="spinner" style="width:10px;height:10px;display:inline-block;vertical-align:middle;margin-right:5px;border-width:1.5px;"></span>Evaluando...</span>`;
+        triageBadgeHtml = `<span class="chip chip-neutral"><span class="spinner" style="width:10px;height:10px;display:inline-block;vertical-align:middle;margin-right:5px;border-width:1.5px;"></span>${t('feed.evaluating')}</span>`;
       } else if (item.counts.actionable > 0) {
-        triageBadgeHtml = `<span class="chip chip-actionable">Accionable (${item.counts.actionable})</span>`;
+        triageBadgeHtml = `<span class="chip chip-actionable">${t('verdict.actionable')} (${item.counts.actionable})</span>`;
       } else if (item.counts.tentative > 0) {
-        triageBadgeHtml = `<span class="chip chip-tentative">Tentativo (${item.counts.tentative})</span>`;
+        triageBadgeHtml = `<span class="chip chip-tentative">${t('verdict.tentative')} (${item.counts.tentative})</span>`;
       } else if (item.counts.irrelevant > 0) {
-        triageBadgeHtml = `<span class="chip chip-discarded">Sin conexión directa</span>`;
+        triageBadgeHtml = `<span class="chip chip-discarded">${t('feed.noConnection')}</span>`;
       } else {
-        triageBadgeHtml = `<span class="chip chip-neutral">Archivado</span>`;
+        triageBadgeHtml = `<span class="chip chip-neutral">${t('feed.archived')}</span>`;
       }
     } else {
-      triageBadgeHtml = `<span class="chip ${item.ingestStatus}">${statusLabel}</span>`;
+      triageBadgeHtml = `<span class="chip ${item.ingestStatus}">${ingestLabel}</span>`;
     }
 
     const evalsList = item.evaluationsList || [];
@@ -700,7 +693,7 @@ function renderContentsList(items) {
       evaluationsPreviewHtml = `
         <div class="content-evaluations-preview">
           ${evalsList.map(ev => {
-            const vLabel = ev.verdict === 'actionable' ? 'Accionable' : (ev.verdict === 'tentative' ? 'Tentativo' : 'Descartado');
+            const vLabel = verdictLabel(ev.verdict);
             const vRowClass = ev.verdict === 'actionable' ? 'ready' : (ev.verdict === 'tentative' ? 'tentative' : 'failed');
             const chipClass = ev.verdict === 'tentative' ? 'chip-tentative' : (ev.verdict === 'actionable' ? 'chip-actionable' : 'chip-discarded');
             const scorePct = Math.round((ev.confidenceScore || 0) * 100);
@@ -744,10 +737,10 @@ function renderContentsList(items) {
         ${isFailed && item.ingestStatusReason ? `
           <div class="form-error" style="margin: 0.6rem 0; display: flex; align-items: center; justify-content: space-between;">
             <div>
-              <strong>Error:</strong> ${escapeHtml(item.ingestStatusReason)}
+              <strong>${t('ingestStatus.failed')}:</strong> ${escapeHtml(item.ingestStatusReason)}
             </div>
             <button type="button" class="btn btn-secondary btn-sm btn-retry" data-retry-url="${escapeHtml(item.uri)}">
-              Reintentar
+              ${t('feed.retry')}
             </button>
           </div>
         ` : ''}
@@ -756,11 +749,11 @@ function renderContentsList(items) {
           <span class="content-item-meta-item">${dateFormatted}</span>
           <span class="content-item-meta-item">
             ${item.counts.evaluations > 0 
-              ? `${item.counts.evaluations} evaluaci${item.counts.evaluations === 1 ? 'ón' : 'ones'} (${item.counts.actionable} accionables, ${item.counts.tentative || 0} tentativas)` 
-              : (item.isEvaluating ? 'Evaluando con tus notas...' : (item.ingestStatus !== 'ready' ? (STATUS_LABELS[item.ingestStatus] || item.ingestStatus) : 'Guardado en biblioteca'))}
+              ? t('feed.evaluations', { n: item.counts.evaluations, actionable: item.counts.actionable, tentative: item.counts.tentative || 0 })
+              : (item.isEvaluating ? t('feed.evaluatingNotes') : (item.ingestStatus !== 'ready' ? ingestLabel : t('feed.saved')))}
           </span>
           <button type="button" class="btn btn-secondary btn-sm btn-detail" data-content-id="${item.id}" style="margin-left: auto;">
-            Ver ficha
+            ${t('feed.details')}
           </button>
         </div>
       </div>
@@ -790,8 +783,8 @@ async function retryIngestion(url) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
-    if (!res.ok) throw new Error('Error al reintentar');
-    showToast('Reintentando procesamiento del enlace...', 'info');
+    if (!res.ok) throw new Error(t('error.retry'));
+    showToast(t('inbox.retryToast'), 'info');
     loadContents();
   } catch (err) {
     showToast(err.message, 'error');
@@ -805,7 +798,7 @@ async function retryIngestion(url) {
 async function loadProjects() {
   try {
     const res = await fetch('/api/projects');
-    if (!res.ok) throw new Error('Error al cargar proyectos');
+    if (!res.ok) throw new Error('Error loading projects');
     const data = await res.json();
     state.projects = data.projects;
 
@@ -860,7 +853,7 @@ function renderProjectsSidebar() {
 
   const allProjectsItem = `
     <button type="button" class="project-item ${state.selectedProjectId === null ? 'active' : ''}" id="project-filter-all" data-project-id="all">
-      <span class="project-item-title">Todos los Proyectos</span>
+      <span class="project-item-title">${t('triage.allProjects')}</span>
       <span class="pill-badge" id="badge-all-pending">${totalActiveAll}</span>
     </button>
   `;
@@ -890,14 +883,14 @@ function selectProject(projectId) {
   state.renderedSuggestionsSignature = ''; // Force re-render on project switch
 
   if (projectId === null) {
-    elements.selectedProjectTitle.textContent = 'Todos los Proyectos';
-    elements.selectedProjectThesis.textContent = 'Revisando sugerencias cruzadas entre todos tus proyectos de investigación.';
+    elements.selectedProjectTitle.textContent = t('triage.allProjects');
+    elements.selectedProjectThesis.textContent = t('triage.allProjectsThesis');
     if (elements.projectHeroActions) elements.projectHeroActions.style.display = 'none';
   } else {
     const proj = state.projects.find(p => p.id === projectId);
     if (proj) {
       elements.selectedProjectTitle.textContent = proj.title;
-      elements.selectedProjectThesis.textContent = proj.thesisText || 'Sin tesis definida.';
+      elements.selectedProjectThesis.textContent = proj.thesisText || t('triage.noThesis');
     }
     if (elements.projectHeroActions) elements.projectHeroActions.style.display = 'flex';
   }
@@ -943,7 +936,7 @@ async function loadSuggestions() {
     }
 
     const res = await fetch(`/api/suggestions?${params.toString()}`);
-    if (!res.ok) throw new Error('Error al cargar sugerencias');
+    if (!res.ok) throw new Error(t('error.suggestions'));
 
     const data = await res.json();
     state.suggestions = data.items;
@@ -961,7 +954,7 @@ async function loadSuggestions() {
   } catch (err) {
     elements.suggestionsList.innerHTML = `
       <div class="empty-state">
-        <p style="color: var(--color-danger);">Error al cargar sugerencias: ${escapeHtml(err.message)}</p>
+        <p style="color: var(--color-danger);">${escapeHtml(t('triage.loadError', { message: err.message }))}</p>
       </div>
     `;
   }
@@ -979,22 +972,18 @@ function renderSuggestionsList(items) {
   if (elements.btnBatchReevaluate && elements.batchReevaluateText) {
     if (stalePendingCount > 0 && state.selectedSuggestionStatus !== 'accepted' && state.selectedSuggestionStatus !== 'discarded') {
       elements.btnBatchReevaluate.style.display = 'inline-flex';
-      elements.batchReevaluateText.textContent = `Re-evaluar obsoletas (${stalePendingCount})`;
+      elements.batchReevaluateText.textContent = t('triage.batch', { n: stalePendingCount });
     } else {
       elements.btnBatchReevaluate.style.display = 'none';
     }
   }
 
   if (items.length === 0) {
-    const statusText = state.selectedSuggestionStatus === 'active'
-      ? 'No hay sugerencias activas para este proyecto.'
-      : state.selectedSuggestionStatus === 'pending' 
-      ? 'No hay sugerencias pendientes de revisión.' 
-      : state.selectedSuggestionStatus === 'tentative'
-      ? 'No hay evaluaciones tentativas para este proyecto.'
-      : state.selectedSuggestionStatus === 'accepted' 
-      ? 'Aún no has aceptado ninguna sugerencia para este proyecto.' 
-      : 'No hay sugerencias descartadas para este proyecto.';
+    const emptyKeys = {
+      active: 'triage.emptyActive', pending: 'triage.emptyPending', tentative: 'triage.emptyTentative',
+      accepted: 'triage.emptyAccepted', discarded: 'triage.emptyDiscarded',
+    };
+    const statusText = t(emptyKeys[state.selectedSuggestionStatus] || 'triage.emptyDiscarded');
 
     elements.suggestionsList.innerHTML = `
       <div class="empty-state">
@@ -1010,21 +999,21 @@ function renderSuggestionsList(items) {
     const isAccepted = sug.status === 'accepted';
     const isDiscarded = sug.status === 'discarded';
 
-    let actionLabel = ACTION_LABELS[sug.actionType] || sug.actionType;
+    let chipLabel = actionLabel(sug.actionType);
     let chipClass = 'chip-neutral';
 
     if (isTentative) {
-      actionLabel = 'Tentativo';
+      chipLabel = t('sug.tentative');
       chipClass = 'chip-tentative';
     } else if (isDiscarded) {
-      actionLabel = sug.targetFile === 'discarded' ? 'Descartado por filtro' : 'Descartado';
+      chipLabel = sug.targetFile === 'discarded' ? t('sug.discardedByFilter') : t('sug.discarded');
       chipClass = 'chip-discarded';
     } else if (isAccepted) {
-      actionLabel = 'Aceptada';
+      chipLabel = t('sug.accepted');
       chipClass = 'chip-actionable';
     }
 
-    const dateFormatted = new Date(sug.createdAt).toLocaleDateString('es-ES');
+    const dateFormatted = new Date(sug.createdAt).toLocaleDateString(i18n.locale());
     const isOpen = state.openDetails.has(sug.id);
     const cachedReasoning = state.loadedReasonings.get(sug.id);
     const draftFeedback = state.feedbackDrafts.get(sug.id) || '';
@@ -1032,10 +1021,10 @@ function renderSuggestionsList(items) {
     const percent = Math.round((sug.confidenceScore || 0) * 100);
     const reasoningContent = sug.triageReasoning ? `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-        <span><strong>Veredicto:</strong> <code>${escapeHtml(isTentative ? 'tentative' : (isDiscarded ? 'irrelevant' : 'actionable'))}</code></span>
+        <span><strong>${t('sug.verdict')}</strong> <code>${escapeHtml(isTentative ? 'tentative' : (isDiscarded ? 'irrelevant' : 'actionable'))}</code></span>
         ${!isDiscarded ? `
           <div class="confidence-meter">
-            <span>Afinidad: <strong>${percent}%</strong></span>
+            <span>${t('sug.affinity')} <strong>${percent}%</strong></span>
             <div class="confidence-bar-bg">
               <div class="confidence-bar-fill" style="width: ${percent}%;"></div>
             </div>
@@ -1047,17 +1036,17 @@ function renderSuggestionsList(items) {
       </p>
     ` : (cachedReasoning || `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-        <span><strong>Nota destino:</strong> <code>${escapeHtml(sug.targetFile)}</code></span>
+        <span><strong>${t('sug.targetNote')}</strong> <code>${escapeHtml(sug.targetFile)}</code></span>
         <span class="badge ${sug.writtenToVault ? 'badge-accent' : 'badge-subtle'}">
-          ${sug.writtenToVault ? 'En Obsidian' : 'Pendiente de Vault'}
+          ${sug.writtenToVault ? t('sug.inObsidian') : t('sug.pendingVault')}
         </span>
       </div>
-      <p style="font-style: italic;">Cargando justificación...</p>
+      <p style="font-style: italic;">${t('sug.loadingReasoning')}</p>
     `);
 
     const discardedReasonBox = isDiscarded && sug.triageReasoning ? `
       <div class="discard-reason-box">
-        <strong>Motivo del descarte:</strong> ${escapeHtml(sug.triageReasoning)}
+        <strong>${t('sug.discardReason')}</strong> ${escapeHtml(sug.triageReasoning)}
       </div>
     ` : '';
 
@@ -1065,10 +1054,10 @@ function renderSuggestionsList(items) {
       <div class="glass-card suggestion-card" id="sug-card-${sug.id}" data-id="${sug.id}">
         <div class="suggestion-header">
           <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-            <span class="action-chip ${chipClass}">${actionLabel}</span>
-            <span class="suggestion-project-tag">${escapeHtml(sug.projectTitle || 'Proyecto')}</span>
+            <span class="action-chip ${chipClass}">${escapeHtml(chipLabel)}</span>
+            <span class="suggestion-project-tag">${escapeHtml(sug.projectTitle || t('sug.project'))}</span>
             ${(sug.isStale && isPending) ? `
-              <span class="badge badge-stale" title="Las notas del proyecto cambiaron desde esta evaluación.">Notas modificadas</span>
+              <span class="badge badge-stale" title="${t('sug.staleTitle')}">${t('sug.stale')}</span>
             ` : ''}
           </div>
           <span style="font-size: 0.78rem; color: var(--text-tertiary); font-family: var(--font-mono);">${dateFormatted}</span>
@@ -1079,7 +1068,7 @@ function renderSuggestionsList(items) {
 
         <div class="obsidian-callout-preview ${isAccepted ? 'callout-accepted' : ''}">
           <div class="obsidian-callout-target">
-            <span>${isAccepted ? 'Integrado en' : 'Destino sugerido:'}</span>
+            <span>${isAccepted ? t('sug.integratedIn') : t('sug.suggestedTarget')}</span>
             <code>${escapeHtml(sug.targetFile && sug.targetFile !== 'discarded' ? sug.targetFile : 'suggestions.md')}</code>
           </div>
           <div class="obsidian-callout-text">
@@ -1090,7 +1079,7 @@ function renderSuggestionsList(items) {
         ${discardedReasonBox}
 
         <div class="suggestion-source">
-          <span>Fuente:</span>
+          <span>${t('sug.source')}</span>
           <a href="${safeUrl(sug.contentUri)}" target="_blank" rel="noopener noreferrer">
             ${escapeHtml(sug.contentTitle || sug.contentUri)} ↗
           </a>
@@ -1098,7 +1087,7 @@ function renderSuggestionsList(items) {
 
         <details class="ai-triage-details" ${isOpen ? 'open' : ''}>
           <summary class="ai-triage-summary">
-            <span>Ver justificación de la sugerencia</span>
+            <span>${t('sug.showReasoning')}</span>
           </summary>
           <div class="ai-triage-content" id="triage-details-${sug.id}">
             ${reasoningContent}
@@ -1108,37 +1097,37 @@ function renderSuggestionsList(items) {
         ${(isPending || isTentative) ? `
           <div class="suggestion-footer">
             <div class="feedback-input-wrapper">
-              <label for="feedback-${sug.id}" class="visually-hidden">Nota opcional para Obsidian</label>
+              <label for="feedback-${sug.id}" class="visually-hidden">${t('sug.feedbackLabel')}</label>
               <input 
                 type="text" 
                 id="feedback-${sug.id}" 
                 class="feedback-input" 
-                placeholder="${isTentative ? 'Nota opcional al integrar...' : 'Añadir comentario opcional al guardar en Obsidian...'}"
+                placeholder="${isTentative ? t('sug.feedbackTentative') : t('sug.feedbackPending')}"
                 value="${escapeHtml(draftFeedback)}"
               >
             </div>
             <div class="suggestion-actions">
-              <select id="reason-${sug.id}" class="discard-reason" aria-label="Motivo del descarte (opcional)">
-                <option value="">Motivo si descartas…</option>
-                ${DISCARD_REASON_LABELS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+              <select id="reason-${sug.id}" class="discard-reason" aria-label="${t('sug.reasonAria')}">
+                <option value="">${t('sug.reasonPlaceholder')}</option>
+                ${DISCARD_REASONS.map(value => `<option value="${value}">${t(`reason.${value}`)}</option>`).join('')}
               </select>
               ${(sug.isStale && isPending) ? `
-                <button type="button" class="btn btn-secondary btn-sm btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="Re-evaluar con la versión actual de tus notas">
-                  Re-evaluar
+                <button type="button" class="btn btn-secondary btn-sm btn-reevaluate" id="btn-reevaluate-${sug.id}" data-id="${sug.id}" title="${t('sug.reevaluateTitle')}">
+                  ${t('sug.reevaluate')}
                 </button>
               ` : ''}
               <button type="button" class="btn btn-danger btn-discard" id="btn-discard-${sug.id}" data-id="${sug.id}">
-                Descartar
+                ${t('sug.discard')}
               </button>
               <button type="button" class="btn btn-success btn-accept" id="btn-accept-${sug.id}" data-id="${sug.id}">
-                ${isTentative ? 'Integrar' : 'Aceptar'}
+                ${isTentative ? t('sug.integrate') : t('sug.accept')}
               </button>
             </div>
           </div>
         ` : `
           <div class="suggestion-footer" style="justify-content: flex-end;">
             <span style="font-size: 0.8rem; color: var(--text-tertiary);">
-              ${isAccepted ? 'Integrada en Obsidian' : `Descartada ${sug.targetFile === 'discarded' ? 'automáticamente' : 'manualmente'}`}
+              ${isAccepted ? t('sug.integratedObsidian') : (sug.targetFile === 'discarded' ? t('sug.discardedAuto') : t('sug.discardedManual'))}
             </span>
           </div>
         `}
@@ -1179,7 +1168,7 @@ function renderSuggestionsList(items) {
       const id = e.currentTarget.dataset.id;
       const targetBtn = e.currentTarget;
       targetBtn.disabled = true;
-      targetBtn.innerHTML = '↻ Re-evaluando...';
+      targetBtn.textContent = `↻ ${t('sug.reevaluating')}`;
 
       try {
         const res = await fetch(`/api/suggestions/${id}/reevaluate`, {
@@ -1187,14 +1176,14 @@ function renderSuggestionsList(items) {
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Error al re-evaluar la sugerencia');
+        if (!res.ok) throw new Error(i18n.apiError(data, 'error.reevaluate'));
 
         if (data.resolution === 'keep_or_refine') {
-          showToast('Sugerencia re-evaluada y actualizada.', 'success');
+          showToast(t('sug.keptToast'), 'success');
         } else if (data.resolution === 'already_addressed') {
-          showToast('Sugerencia marcada como ya abordada en el borrador.', 'info');
+          showToast(t('sug.addressedToast'), 'info');
         } else if (data.resolution === 'obsolete') {
-          showToast('Sugerencia marcada como obsoleta tras cambios en el proyecto.', 'info');
+          showToast(t('sug.obsoleteToast'), 'info');
         }
 
         // Force re-render and reload authoritative state
@@ -1204,7 +1193,7 @@ function renderSuggestionsList(items) {
       } catch (err) {
         showToast(err.message, 'error');
         targetBtn.disabled = false;
-        targetBtn.innerHTML = '↻ Re-evaluar';
+        targetBtn.textContent = `↻ ${t('sug.reevaluate')}`;
       }
     });
   });
@@ -1236,26 +1225,26 @@ async function loadSuggestionReasoning(suggestionId) {
 
   try {
     const res = await fetch(`/api/suggestions/${suggestionId}`);
-    if (!res.ok) throw new Error('No se pudo cargar el detalle');
+    if (!res.ok) throw new Error(t('error.detail'));
     const data = await res.json();
 
     const percent = Math.round((data.confidenceScore || 0) * 100);
 
     const html = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-        <span><strong>Veredicto:</strong> <code>${escapeHtml(data.triageVerdict || 'actionable')}</code></span>
+        <span><strong>${t('sug.verdict')}</strong> <code>${escapeHtml(data.triageVerdict || 'actionable')}</code></span>
         ${data.triageVerdict !== 'irrelevant' ? `
           <div class="confidence-meter">
-            <span>Afinidad: <strong>${percent}%</strong></span>
+            <span>${t('sug.affinity')} <strong>${percent}%</strong></span>
             <div class="confidence-bar-bg">
               <div class="confidence-bar-fill" style="width: ${percent}%;"></div>
             </div>
           </div>
         ` : ''}
       </div>
-      <p style="margin-bottom: 0.5rem;"><strong>Razonamiento del modelo:</strong></p>
+      <p style="margin-bottom: 0.5rem;"><strong>${t('sug.modelReasoning')}</strong></p>
       <p style="background: hsla(220, 20%, 10%, 0.5); padding: 0.6rem; border-radius: 6px;">
-        ${escapeHtml(data.triageReasoning || 'Sin justificación disponible.')}
+        ${escapeHtml(data.triageReasoning || t('sug.noReasoning'))}
       </p>
     `;
 
@@ -1267,13 +1256,8 @@ async function loadSuggestionReasoning(suggestionId) {
 }
 
 // Fixed reasons offered when discarding; the values match DISCARD_REASONS in src/db/schema.ts
-const DISCARD_REASON_LABELS = [
-  ['unrelated', 'No tiene relación'],
-  ['obvious', 'Ya lo sabía / es obvio'],
-  ['wrong_note', 'Nota equivocada'],
-  ['poorly_worded', 'Mal redactada'],
-  ['other', 'Otro motivo'],
-];
+// and each has a "reason.<value>" label in i18n.js
+const DISCARD_REASONS = ['unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other'];
 
 async function resolveSuggestion(suggestionId, status, userFeedback = '', discardReason = undefined) {
   const card = document.getElementById(`sug-card-${suggestionId}`);
@@ -1313,12 +1297,12 @@ async function resolveSuggestion(suggestionId, status, userFeedback = '', discar
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Error al actualizar');
+    if (!res.ok) throw new Error(i18n.apiError(data, 'error.update'));
 
     if (status === 'accepted') {
-      showToast('Sugerencia aceptada y escrita en suggestions.md en Obsidian.', 'success');
+      showToast(t('sug.acceptedToast'), 'success');
     } else {
-      showToast('Sugerencia descartada.', 'info');
+      showToast(t('sug.discardedToast'), 'info');
     }
 
     // 2. Synchronize authoritative state from backend
@@ -1374,7 +1358,7 @@ function setupSynthesisAction() {
 
 async function handleSynthesizeProject() {
   if (!state.selectedProjectId) {
-    showToast('Selecciona un proyecto específico para sintetizar su backlog.', 'warning');
+    showToast(t('synth.pickProject'), 'warning');
     return;
   }
 
@@ -1382,13 +1366,13 @@ async function handleSynthesizeProject() {
   const acceptedCount = proj?.counts?.accepted ?? 0;
 
   if (acceptedCount === 0) {
-    showToast('No hay sugerencias aceptadas en este proyecto para sintetizar. Acepta al menos una sugerencia antes de compilar el Research Brief.', 'warning');
+    showToast(t('synth.nothing'), 'warning');
     return;
   }
 
   // Set loading state
   elements.btnSynthesizeProject.disabled = true;
-  elements.btnSynthesizeText.textContent = 'Sintetizando...';
+  elements.btnSynthesizeText.textContent = t('triage.synthesizing');
   elements.synthesizeSpinner.style.display = 'inline-block';
 
   try {
@@ -1398,18 +1382,18 @@ async function handleSynthesizeProject() {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || 'Error al generar la síntesis del proyecto.');
+      throw new Error(i18n.apiError(data, 'error.synthesis'));
     }
 
     // Generation does not write to the vault; the modal offers an explicit save button
-    openSynthesisResultModal(data, proj?.title || 'Proyecto', state.selectedProjectId);
-    showToast('Research Brief generado. Revísalo y guárdalo en Obsidian si te sirve.', 'success');
+    openSynthesisResultModal(data, proj?.title || t('sug.project'), state.selectedProjectId);
+    showToast(t('synth.done'), 'success');
   } catch (err) {
     console.error('Synthesis error:', err);
-    showToast(err.message || 'Error al compilar la síntesis.', 'error');
+    showToast(err.message || t('error.synthesis'), 'error');
   } finally {
     elements.btnSynthesizeProject.disabled = false;
-    elements.btnSynthesizeText.textContent = 'Compilar síntesis';
+    elements.btnSynthesizeText.textContent = t('triage.synthesize');
     elements.synthesizeSpinner.style.display = 'none';
   }
 }
@@ -1417,12 +1401,12 @@ async function handleSynthesizeProject() {
 function openSynthesisResultModal(data, projectTitle, projectId) {
   if (!elements.synthesisResultModal) return;
 
-  elements.synthesisModalTitle.textContent = data.title || `Síntesis — ${projectTitle}`;
+  elements.synthesisModalTitle.textContent = data.title || t('synth.title', { project: projectTitle });
 
   const nextStepsHtml = (data.suggestedNextSteps || []).length > 0
     ? `
       <div class="synthesis-section">
-        <span class="synthesis-section-title">Próximos pasos sugeridos</span>
+        <span class="synthesis-section-title">${t('synth.nextSteps')}</span>
         <ul class="synthesis-steps-list">
           ${(data.suggestedNextSteps || []).map(step => `
             <li class="synthesis-step-item">
@@ -1438,22 +1422,22 @@ function openSynthesisResultModal(data, projectTitle, projectId) {
     <div class="synthesis-content-view">
       <div class="synthesis-meta-bar">
         <div class="synthesis-meta-path" id="synthesis-save-status">
-          <span>Aún no guardado en Obsidian</span>
+          <span>${t('synth.notSaved')}</span>
         </div>
-        <span class="chip chip-actionable">${data.acceptedCount} sugerencias integradas</span>
+        <span class="chip chip-actionable">${t('synth.integrated', { n: data.acceptedCount })}</span>
       </div>
 
       <div class="synthesis-section">
-        <span class="synthesis-section-title">Síntesis</span>
+        <span class="synthesis-section-title">${t('synth.summary')}</span>
         <div class="synthesis-summary-text">${escapeHtml(data.executiveSummary).replace(/\n/g, '<br>')}</div>
       </div>
 
       ${nextStepsHtml}
 
       <div class="synthesis-actions-bar">
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">Copiar texto</button>
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-save-synthesis">Guardar en Obsidian</button>
-        <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">Cerrar</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synthesis-summary">${t('synth.copy')}</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-save-synthesis">${t('synth.save')}</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-synthesis-modal">${t('common.close')}</button>
       </div>
     </div>
   `;
@@ -1478,22 +1462,22 @@ function openSynthesisResultModal(data, projectTitle, projectId) {
         }),
       });
       const saved = await res.json();
-      if (!res.ok) throw new Error(saved.message || 'No se pudo guardar el Research Brief.');
-      button.textContent = 'Guardado';
-      document.getElementById('synthesis-save-status').innerHTML = `<span>Guardado en: <code>${escapeHtml(saved.filePath)}</code></span>`;
-      showToast(`Research Brief guardado en Obsidian: ${saved.filePath}`, 'success');
+      if (!res.ok) throw new Error(i18n.apiError(saved, 'error.saveBrief'));
+      button.textContent = t('synth.saved');
+      document.getElementById('synthesis-save-status').innerHTML = `<span>${t('synth.savedAt')} <code>${escapeHtml(saved.filePath)}</code></span>`;
+      showToast(t('synth.savedToast', { path: saved.filePath }), 'success');
     } catch (err) {
       button.disabled = false;
-      showToast(err.message || 'No se pudo guardar el Research Brief.', 'error');
+      showToast(err.message || t('error.saveBrief'), 'error');
     }
   });
 
   document.getElementById('btn-copy-synthesis-summary')?.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(`${data.title}\n\n${data.executiveSummary}\n\n${data.markdownContent || ''}`);
-      showToast('Resumen copiado al portapapeles', 'info');
+      showToast(t('synth.copied'), 'info');
     } catch {
-      showToast('No se pudo copiar automáticamente', 'warning');
+      showToast(t('common.copyFailed'), 'warning');
     }
   });
 
@@ -1513,14 +1497,14 @@ function setupBatchReevaluateAction() {
 async function handleBatchReevaluate() {
   const staleItems = state.suggestions.filter(s => s.isStale && s.status === 'pending');
   if (staleItems.length === 0) {
-    showToast('No hay sugerencias desactualizadas en este momento.', 'info');
+    showToast(t('sug.batchNone'), 'info');
     return;
   }
 
   if (elements.btnBatchReevaluate) {
     elements.btnBatchReevaluate.disabled = true;
     if (elements.batchReevaluateSpinner) elements.batchReevaluateSpinner.style.display = 'inline-block';
-    if (elements.batchReevaluateText) elements.batchReevaluateText.textContent = 'Re-evaluando...';
+    if (elements.batchReevaluateText) elements.batchReevaluateText.textContent = t('triage.batchRunning');
   }
 
   try {
@@ -1530,7 +1514,7 @@ async function handleBatchReevaluate() {
         method: 'POST',
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Error en la re-evaluación por lotes');
+      if (!res.ok) throw new Error(i18n.apiError(data, 'error.batch'));
       reevaluatedCount = data.reevaluatedCount || 0;
     } else {
       const projectIds = [...new Set(staleItems.map(s => s.projectId))];
@@ -1539,18 +1523,18 @@ async function handleBatchReevaluate() {
           method: 'POST',
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Error en la re-evaluación por lotes');
+        if (!res.ok) throw new Error(i18n.apiError(data, 'error.batch'));
         reevaluatedCount += (data.reevaluatedCount || 0);
       }
     }
 
-    showToast(`Se re-evaluaron ${reevaluatedCount} sugerencias desactualizadas.`, 'success');
+    showToast(t('sug.batchDone', { n: reevaluatedCount }), 'success');
     state.renderedSuggestionsSignature = '';
     await loadProjects();
     await loadSuggestions();
   } catch (err) {
     console.error('Batch re-evaluate error:', err);
-    showToast(err.message || 'Error al re-evaluar sugerencias.', 'error');
+    showToast(err.message || t('error.batch'), 'error');
   } finally {
     if (elements.btnBatchReevaluate) {
       elements.btnBatchReevaluate.disabled = false;
@@ -1590,7 +1574,7 @@ async function loadSynergies(isManualRefresh = false) {
     state.synergies = data.synergies || [];
     renderSynergies();
     if (isManualRefresh) {
-      showToast(`${state.synergies.length} conexiones calculadas`, 'info');
+      showToast(t('syn.computed', { n: state.synergies.length }), 'info');
     }
   } catch (err) {
     console.error('Failed to load synergies:', err);
@@ -1621,7 +1605,7 @@ function renderSynergies() {
     const notesHtml = (s.closestNotes && s.closestNotes.length > 0)
       ? `
         <div class="synergy-notes-box">
-          <span class="synergy-notes-label">Notas relacionadas</span>
+          <span class="synergy-notes-label">${t('syn.relatedNotes')}</span>
           ${s.closestNotes.slice(0, 2).map(n => `
             <div class="synergy-notes-pair">
               <span class="synergy-note-link" title="${escapeHtml(n.noteAPath)}">${escapeHtml(n.noteATitle)}</span>
@@ -1635,9 +1619,9 @@ function renderSynergies() {
 
     const hasBridge = Boolean(s.hasExistingBridge);
     const bridgeBadge = hasBridge
-      ? `<span class="synergy-cached-badge" title="Este puente ya fue guardado en tu Vault">En Vault</span>`
+      ? `<span class="synergy-cached-badge" title="${t('syn.inVaultTitle')}">${t('syn.inVault')}</span>`
       : '';
-    const btnText = hasBridge ? 'Ver nota puente' : 'Explorar conexión';
+    const btnText = hasBridge ? t('syn.viewBridge') : t('syn.explore');
 
     return `
       <div class="synergy-card">
@@ -1691,7 +1675,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
     <div style="text-align: center; padding: 3rem 1.5rem;">
       <span class="spinner large"></span>
       <p style="color: var(--text-secondary); margin-top: 1rem;">
-        ${forceRegenerate ? 'Regenerando nota puente...' : 'Cargando conexión entre proyectos...'}
+        ${forceRegenerate ? t('syn.regenerating') : t('syn.loading')}
       </p>
     </div>
   `;
@@ -1706,7 +1690,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || 'Error al generar el puente de sinergia.');
+      throw new Error(i18n.apiError(data, 'error.synergy'));
     }
 
     elements.synergyModalTitle.textContent = data.bridgeTitle;
@@ -1716,8 +1700,8 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
       : '';
 
     const cacheIndicator = data.isCached
-      ? `<span class="synergy-cached-badge">Guardado en Vault</span>`
-      : `<span class="synergy-cached-badge">Recién generado · no guardado</span>`;
+      ? `<span class="synergy-cached-badge">${t('syn.savedInVault')}</span>`
+      : `<span class="synergy-cached-badge">${t('syn.fresh')}</span>`;
 
     elements.synergyModalBody.innerHTML = `
       <div class="synthesis-content-view">
@@ -1734,12 +1718,12 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Puntos de contacto</span>
+          <span class="synthesis-section-title">${t('syn.contactPoints')}</span>
           <div class="synthesis-summary-text">${escapeHtml(data.overview).replace(/\n/g, '<br>')}</div>
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Preguntas compartidas</span>
+          <span class="synthesis-section-title">${t('syn.sharedQuestions')}</span>
           <ul class="synthesis-steps-list">
             ${(data.sharedProblems || []).map(p => `
               <li class="synthesis-step-item">
@@ -1750,7 +1734,7 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
         </div>
 
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Aportes cruzados</span>
+          <span class="synthesis-section-title">${t('syn.crossBenefits')}</span>
           <ul class="synthesis-steps-list">
             ${(data.mutualBenefits || []).map(b => `
               <li class="synthesis-step-item">
@@ -1762,18 +1746,18 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
 
         ${data.markdownContent ? `
         <div class="synthesis-section">
-          <span class="synthesis-section-title">Borrador Markdown</span>
+          <span class="synthesis-section-title">${t('syn.markdownDraft')}</span>
           <pre class="synthesis-markdown-preview"><code>${escapeHtml(data.markdownContent)}</code></pre>
         </div>
         ` : ''}
 
         <div class="synthesis-actions-bar">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-regenerate-synergy">
-            <span>Regenerar</span>
+            <span>${t('syn.regenerate')}</span>
           </button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">Copiar nota</button>
-          ${data.isCached ? '' : '<button type="button" class="btn btn-secondary btn-sm" id="btn-save-synergy-note">Guardar en Obsidian</button>'}
-          <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">Cerrar</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-synergy-note">${t('syn.copy')}</button>
+          ${data.isCached ? '' : `<button type="button" class="btn btn-secondary btn-sm" id="btn-save-synergy-note">${t('syn.save')}</button>`}
+          <button type="button" class="btn btn-primary btn-sm" id="btn-close-synergy-view">${t('common.close')}</button>
         </div>
       </div>
     `;
@@ -1789,9 +1773,9 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
     document.getElementById('btn-copy-synergy-note')?.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(`${data.bridgeTitle}\n\n${data.overview}\n\n${data.markdownContent}`);
-        showToast('Nota copiada al portapapeles', 'info');
+        showToast(t('syn.copied'), 'info');
       } catch {
-        showToast('No se pudo copiar automáticamente', 'warning');
+        showToast(t('common.copyFailed'), 'warning');
       }
     });
 
@@ -1813,25 +1797,25 @@ async function exploreSynergyBridge(projectAId, projectBId, titleA, titleB, forc
           }),
         });
         const saved = await saveRes.json();
-        if (!saveRes.ok) throw new Error(saved.message || 'No se pudo guardar la nota puente.');
-        button.textContent = 'Guardada';
-        showToast(`Nota puente guardada en Obsidian: ${saved.filePath}`, 'success');
+        if (!saveRes.ok) throw new Error(i18n.apiError(saved, 'error.saveBridge'));
+        button.textContent = t('syn.saved');
+        showToast(t('syn.savedToast', { path: saved.filePath }), 'success');
         loadSynergies();
       } catch (saveErr) {
         button.disabled = false;
-        showToast(saveErr.message || 'No se pudo guardar la nota puente.', 'error');
+        showToast(saveErr.message || t('error.saveBridge'), 'error');
       }
     });
 
     if (data.isCached) {
-      showToast(`Puente cargado desde el Vault: ${data.filePath}`, 'info');
+      showToast(t('syn.cachedToast', { path: data.filePath }), 'info');
     }
   } catch (err) {
     console.error('Synergy exploration error:', err);
     elements.synergyModalBody.innerHTML = `
       <div style="padding: 2rem 1rem; text-align: center; color: var(--color-danger);">
-        <p><strong>Error al explorar conexión:</strong> ${escapeHtml(err.message || 'Error inesperado')}</p>
-        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 1rem;" onclick="document.getElementById('synergy-bridge-modal').close()">Cerrar</button>
+        <p><strong>${t('syn.error')}</strong> ${escapeHtml(err.message || t('error.generic'))}</p>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 1rem;" onclick="document.getElementById('synergy-bridge-modal').close()">${t('common.close')}</button>
       </div>
     `;
   }
@@ -1843,23 +1827,23 @@ async function openContentDetailModal(contentIdOrObj) {
     : contentIdOrObj;
   if (!contentId) return;
 
-  elements.modalContentTitle.textContent = 'Cargando...';
+  elements.modalContentTitle.textContent = t('common.loading');
   elements.modalContentBody.innerHTML = '<div style="text-align: center; padding: 2.5rem 1rem;"><span class="spinner large"></span></div>';
   elements.contentDetailModal.showModal();
 
   try {
     const res = await fetch(`/api/contents/${contentId}`);
-    if (!res.ok) throw new Error('No se pudo obtener el detalle');
+    if (!res.ok) throw new Error(t('error.detail'));
     const data = await res.json();
 
-    let displayTitle = data.title || 'Ficha de contenido';
+    let displayTitle = data.title || t('modal.contentTitle');
     if (data.channelOrDomain && !displayTitle.toLowerCase().includes(data.channelOrDomain.toLowerCase())) {
       displayTitle = `${displayTitle} — ${data.channelOrDomain}`;
     }
     elements.modalContentTitle.textContent = displayTitle;
 
     const evalsList = (data.evaluations || []).length > 0 ? (data.evaluations || []).map(ev => {
-      const vLabel = ev.verdict === 'actionable' ? 'Accionable' : (ev.verdict === 'tentative' ? 'Tentativo' : 'Descartado');
+      const vLabel = verdictLabel(ev.verdict);
       const chipClass = ev.verdict === 'actionable' ? 'chip-actionable' : (ev.verdict === 'tentative' ? 'chip-tentative' : 'chip-discarded');
       const scorePct = Math.round((ev.confidenceScore || 0) * 100);
       return `
@@ -1870,16 +1854,16 @@ async function openContentDetailModal(contentIdOrObj) {
               ${ev.verdict === 'irrelevant' ? vLabel : `${vLabel} · ${scorePct}%`}
             </span>
           </div>
-          <p class="modal-eval-reasoning">${escapeHtml(ev.triageReasoning || 'Sin justificación disponible.')}</p>
+          <p class="modal-eval-reasoning">${escapeHtml(ev.triageReasoning || t('sug.noReasoning'))}</p>
         </div>
       `;
     }).join('') : `
-      <p class="modal-empty-notice">Sin evaluaciones directas en los proyectos actuales.</p>
+      <p class="modal-empty-notice">${t('modal.noEvaluations')}</p>
     `;
 
     elements.modalContentBody.innerHTML = `
       <div class="modal-section">
-        <span class="modal-section-label">Fuente original</span>
+        <span class="modal-section-label">${t('modal.source')}</span>
         <div class="modal-source-row">
           ${data.channelOrDomain ? `
             <span class="content-item-author-tag">${escapeHtml(data.channelOrDomain)}</span>
@@ -1891,21 +1875,21 @@ async function openContentDetailModal(contentIdOrObj) {
       </div>
 
       <div class="modal-section">
-        <span class="modal-section-label">Resumen</span>
+        <span class="modal-section-label">${t('modal.summary')}</span>
         <div class="modal-summary-box">
-          <p>${escapeHtml(data.summary || 'Aún no se ha generado el resumen del contenido.')}</p>
+          <p>${escapeHtml(data.summary || t('modal.noSummary'))}</p>
         </div>
       </div>
 
       <div class="modal-section">
-        <span class="modal-section-label">Evaluación por proyecto</span>
+        <span class="modal-section-label">${t('modal.evaluations')}</span>
         ${evalsList}
       </div>
     `;
   } catch (err) {
     elements.modalContentBody.innerHTML = `
       <div class="modal-error-box">
-        <p style="color: var(--color-danger); font-weight: 600;">Error al cargar ficha:</p>
+        <p style="color: var(--color-danger); font-weight: 600;">${t('modal.loadError')}</p>
         <p style="color: var(--text-secondary); margin-top: 0.25rem;">${escapeHtml(err.message)}</p>
       </div>
     `;
@@ -1921,7 +1905,7 @@ function setupSettingsView() {
     e.preventDefault();
     const newPath = elements.vaultPathInput.value.trim();
     if (!newPath) {
-      showVaultFeedback('Por favor introduce una ruta válida.', 'error');
+      showVaultFeedback(t('settings.enterPath'), 'error');
       return;
     }
 
@@ -1938,11 +1922,11 @@ function setupSettingsView() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || 'Error al guardar la ruta del Vault');
+        throw new Error(i18n.apiError(data, 'error.saveVault'));
       }
 
-      showVaultFeedback(data.summary?.message || 'Vault configurado y sincronizado exitosamente.', 'success');
-      showToast('Configuración del Vault actualizada correctamente.', 'success');
+      showVaultFeedback(t('settings.vaultSaved', { active: data.summary?.activeProjects ?? 0, missing: data.summary?.missingProjects ?? 0 }), 'success');
+      showToast(t('settings.vaultSavedToast'), 'success');
       await loadVaultSettings();
       await loadProjects();
     } catch (err) {
@@ -1959,8 +1943,8 @@ function setupSettingsView() {
     try {
       const res = await fetch('/api/settings/vault/rescan', { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Error al re-escanear');
-      showToast('Re-escaneo de proyectos completado.', 'success');
+      if (!res.ok) throw new Error(i18n.apiError(data, 'error.rescan'));
+      showToast(t('settings.rescanDone'), 'success');
       await loadVaultSettings();
       await loadProjects();
     } catch (err) {
@@ -1986,7 +1970,7 @@ function showVaultFeedback(message, type) {
 async function loadVaultSettings() {
   try {
     const res = await fetch('/api/settings/vault');
-    if (!res.ok) throw new Error('Error al consultar configuración del Vault');
+    if (!res.ok) throw new Error('Error loading the vault settings');
     const data = await res.json();
     state.vaultStatus = data;
 
@@ -2004,16 +1988,16 @@ function renderVaultSettingsUI(data) {
     if (elements.vaultWarningBanner) elements.vaultWarningBanner.style.display = 'none';
     if (elements.liveIndicator) {
       elements.liveIndicator.className = 'status-indicator live';
-      elements.liveIndicator.title = 'Conexión con Obsidian activa';
+      elements.liveIndicator.title = t('status.obsidianTitle');
     }
-    if (elements.liveText) elements.liveText.textContent = 'Conectado';
+    if (elements.liveText) elements.liveText.textContent = t('status.connected');
   } else {
     if (elements.vaultWarningBanner) elements.vaultWarningBanner.style.display = 'flex';
     if (elements.liveIndicator) {
       elements.liveIndicator.className = 'status-indicator offline';
-      elements.liveIndicator.title = 'Obsidian desconectado o sin configurar';
+      elements.liveIndicator.title = t('status.offlineTitle');
     }
-    if (elements.liveText) elements.liveText.textContent = 'Sin Vault';
+    if (elements.liveText) elements.liveText.textContent = t('status.noVault');
   }
 
   // Settings Hero Form & Status Pill
@@ -2023,36 +2007,36 @@ function renderVaultSettingsUI(data) {
 
   if (isHealthy) {
     elements.settingsStatusPill.className = 'status-pill connected';
-    elements.settingsStatusLabel.textContent = 'Vault Conectado';
+    elements.settingsStatusLabel.textContent = t('settings.statusConnected');
   } else if (data.isConfigured && !data.isValid) {
     elements.settingsStatusPill.className = 'status-pill disconnected';
-    elements.settingsStatusLabel.textContent = 'Ruta no encontrada';
+    elements.settingsStatusLabel.textContent = t('settings.statusNotFound');
   } else {
     elements.settingsStatusPill.className = 'status-pill checking';
-    elements.settingsStatusLabel.textContent = 'Sin Configurar';
+    elements.settingsStatusLabel.textContent = t('settings.statusNotConfigured');
   }
 
   // Info Bar
-  elements.infoActivePath.textContent = data.vaultPath || 'No configurado';
-  elements.infoWatcherStatus.textContent = data.watcherActive ? 'Activo (Tiempo real)' : 'Inactivo';
+  elements.infoActivePath.textContent = data.vaultPath || t('settings.notConfigured');
+  elements.infoWatcherStatus.textContent = data.watcherActive ? t('settings.watcherActive') : t('settings.inactive');
   elements.infoWatcherStatus.style.color = data.watcherActive ? 'var(--color-success)' : 'var(--text-tertiary)';
 
   if (data.hasProjectsDir) {
-    elements.infoProjectsFolder.textContent = `Detectada (${data.projectsDirName}/)`;
+    elements.infoProjectsFolder.textContent = t('settings.detected', { dir: data.projectsDirName });
     elements.infoProjectsFolder.style.color = 'var(--color-success)';
   } else {
-    elements.infoProjectsFolder.textContent = 'No detectada (crea Projects/)';
+    elements.infoProjectsFolder.textContent = t('settings.notDetectedHint');
     elements.infoProjectsFolder.style.color = 'var(--color-warning)';
   }
 
   // Projects Diagnostics Table
   const projectList = data.projects || [];
-  elements.settingsProjectsCount.textContent = `${projectList.length} Proyecto(s)`;
+  elements.settingsProjectsCount.textContent = t('settings.projectsCount', { n: projectList.length });
 
   if (projectList.length === 0) {
     elements.settingsProjectsWrapper.innerHTML = `
       <div class="empty-state">
-        <p>No se encontraron proyectos registrados aún. ${data.hasProjectsDir ? 'Crea carpetas dentro de ' + (data.projectsDirName || 'Projects') + '/ para detectarlos.' : 'Configura la ruta de tu Vault para comenzar.'}</p>
+        <p>${escapeHtml(data.hasProjectsDir ? t('settings.noProjectsInDir', { dir: data.projectsDirName || 'Projects' }) : t('settings.noProjectsNoVault'))}</p>
       </div>
     `;
     return;
@@ -2067,18 +2051,18 @@ function renderVaultSettingsUI(data) {
         <code>${escapeHtml(p.folderPath)}</code>
       </td>
       <td>
-        <span class="badge badge-subtle">${p.suggestionsCount} sugerencias</span>
+        <span class="badge badge-subtle">${t('settings.suggestionsCount', { n: p.suggestionsCount })}</span>
       </td>
       <td>
         ${p.existsOnDisk ? `
           <span class="status-chip status-chip-active">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            Activo en disco
+            ${t('settings.onDisk')}
           </span>
         ` : `
-          <span class="status-chip status-chip-inactive" title="La carpeta no existe en el Vault actual. Los datos históricos se conservan.">
+          <span class="status-chip status-chip-inactive" title="${t('settings.missingTitle')}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            No encontrado (Inactivo)
+            ${t('settings.missing')}
           </span>
         `}
       </td>
@@ -2089,10 +2073,10 @@ function renderVaultSettingsUI(data) {
     <table class="settings-projects-table">
       <thead>
         <tr>
-          <th>Proyecto</th>
-          <th>Carpeta en Vault</th>
-          <th>Sugerencias</th>
-          <th>Estado en Disco</th>
+          <th>${t('settings.colProject')}</th>
+          <th>${t('settings.colFolder')}</th>
+          <th>${t('settings.colSuggestions')}</th>
+          <th>${t('settings.colDisk')}</th>
         </tr>
       </thead>
       <tbody>
@@ -2100,6 +2084,52 @@ function renderVaultSettingsUI(data) {
       </tbody>
     </table>
   `;
+}
+
+// ==========================================================================
+// Languages: the interface (this browser) and the server's output and notes languages
+// ==========================================================================
+
+function setupLanguageSettings() {
+  const uiSelect = document.getElementById('ui-language-select');
+  const outputSelect = document.getElementById('output-language-select');
+  const notesSelect = document.getElementById('notes-language-select');
+  if (!uiSelect || !outputSelect || !notesSelect) return;
+
+  uiSelect.value = i18n.getLanguage();
+  // Everything rendered so far is in the old language: reload to rebuild it
+  uiSelect.addEventListener('change', () => {
+    i18n.setLanguage(uiSelect.value);
+    window.location.reload();
+  });
+
+  fetch('/api/settings/language')
+    .then(res => (res.ok ? res.json() : null))
+    .then(data => {
+      if (!data) return;
+      outputSelect.value = data.outputLanguage;
+      notesSelect.value = data.notesLanguage;
+    })
+    .catch(() => {});
+
+  const save = async (body) => {
+    try {
+      const res = await fetch('/api/settings/language', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(i18n.apiError(data, 'error.language'));
+      outputSelect.value = data.outputLanguage;
+      notesSelect.value = data.notesLanguage;
+      showToast(t('lang.saved'), 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+  outputSelect.addEventListener('change', () => save({ outputLanguage: outputSelect.value }));
+  notesSelect.addEventListener('change', () => save({ notesLanguage: notesSelect.value }));
 }
 
 // Utilities

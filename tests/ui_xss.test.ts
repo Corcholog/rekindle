@@ -97,9 +97,23 @@ describe('Web UI renders untrusted text as text', () => {
     server = (await import('../src/api/server')).server;
     await server.ready();
 
+  }, 180000);
+
+  afterAll(async () => {
+    await server?.close();
+    const { pool } = await import('../src/db/index');
+    await pool.end();
+    await container?.stop();
+    await fs.rm(vaultPath, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+  });
+
+  // Loads the real page in jsdom with the interface language preselected
+  async function openUi(lang: 'es' | 'en') {
     const origin = 'http://127.0.0.1:3000';
-    const html = (await fs.readFile('web/index.html', 'utf-8')).replace(/<script[^>]*src="app\.js"[^>]*><\/script>/, '');
+    const html = (await fs.readFile('web/index.html', 'utf-8')).replace(/<script[^>]*src="(app|i18n)\.js"[^>]*><\/script>/g, '');
     dom = new JSDOM(html, { runScripts: 'outside-only', url: `${origin}/` });
+    dom.window.localStorage.setItem('loom.uiLanguage', lang);
     // jsdom has no <dialog> methods
     const dialog = (dom.window as any).HTMLDialogElement.prototype;
     dialog.showModal = function () { this.open = true; };
@@ -111,59 +125,70 @@ describe('Web UI renders untrusted text as text', () => {
       });
       return new Response(res.body, { status: res.statusCode, headers: { 'content-type': res.headers['content-type'] ?? 'application/json' } });
     };
+    dom.window.eval(await fs.readFile('web/i18n.js', 'utf-8'));
     // app.js is an ES module with one export; jsdom runs classic scripts only
     dom.window.eval((await fs.readFile('web/app.js', 'utf-8')).replace(/^export /gm, ''));
     doc().dispatchEvent(new dom.window.Event('DOMContentLoaded'));
-  }, 180000);
+  }
 
-  afterAll(async () => {
-    dom?.window.close();
-    await server?.close();
-    const { pool } = await import('../src/db/index');
-    await pool.end();
-    await container?.stop();
-    await fs.rm(vaultPath, { recursive: true, force: true });
-    vi.unstubAllEnvs();
-  });
+  for (const lang of ['es', 'en'] as const) {
+    describe(`with the interface in ${lang}`, () => {
+      beforeAll(() => openUi(lang), 30000);
+      afterAll(() => dom?.window.close());
 
-  it('inbox, triage, projects and synergies show the hostile text without running it', async () => {
-    await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the inbox');
-    await waitFor(() => doc().querySelectorAll('.suggestion-card').length >= 1, 'the triage list');
-    await waitFor(() => doc().querySelectorAll('.synergy-card').length === 1, 'the synergies');
-    await waitFor(() => doc().querySelectorAll('.project-item').length === 3, 'the project list');
+    it('inbox, triage, projects and synergies show the hostile text without running it', async () => {
+      await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the inbox');
+      await waitFor(() => doc().querySelectorAll('.suggestion-card').length >= 1, 'the triage list');
+      await waitFor(() => doc().querySelectorAll('.synergy-card').length === 1, 'the synergies');
+      await waitFor(() => doc().querySelectorAll('.project-item').length === 3, 'the project list');
 
-    expect(injected()).toEqual(clean);
-    const text = doc().body.textContent!;
-    expect(text).toContain('<img src=x onerror="window.__xss=1">');
-    expect(text).toContain('Alfa <img src=x');
-    // The javascript: URI is never a link target
-    const contentLinks = [...doc().querySelectorAll('.suggestion-card a[target="_blank"]')].map(a => a.getAttribute('href'));
-    expect(contentLinks.every(href => href === '#' || /^https?:/.test(href!))).toBe(true);
-  });
-
-  it('the content detail modal escapes the summary and reasoning', { timeout: 15000 }, async () => {
-    (doc().querySelector(`.btn-detail[data-content-id="${readyContentId}"]`) as HTMLButtonElement).click();
-    await waitFor(() => (doc().getElementById('modal-content-body')?.textContent ?? '').includes('negrita'), 'the content modal');
-    expect(injected()).toEqual(clean);
-    expect([...doc().querySelectorAll('.modal-uri-link')].map(a => a.getAttribute('href'))).toEqual(['#']);
-  });
-
-  it('the Consultor and the synergy bridge render hostile model output as text', { timeout: 20000 }, async () => {
-    fake.answerNext({
-      diagnosis: `Según [C1] ${XSS}`, projectViability: XSS,
-      matchedContents: [{ refId: 'C1', whyItConnects: XSS }], matchedNotes: [{ refId: 'N1', whyItConnects: XSS }],
+      expect(injected()).toEqual(clean);
+      const text = doc().body.textContent!;
+      expect(text).toContain('<img src=x onerror="window.__xss=1">');
+      expect(text).toContain('Alfa <img src=x');
+      // The javascript: URI is never a link target
+      const contentLinks = [...doc().querySelectorAll('.suggestion-card a[target="_blank"]')].map(a => a.getAttribute('href'));
+      expect(contentLinks.every(href => href === '#' || /^https?:/.test(href!))).toBe(true);
     });
-    (doc().getElementById('consultant-query-input') as HTMLInputElement).value = 'faros';
-    doc().getElementById('consultant-query-form')!.dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
-    await waitFor(() => doc().querySelectorAll('.consultant-match-card').length === 2, 'the Consultor answer');
-    expect(injected()).toEqual(clean);
-    expect([...doc().querySelectorAll('.consultant-match-card a.source-link')].map(a => a.getAttribute('href'))).toEqual(['#']);
-    expect(doc().querySelector('.consult-ref-badge')?.getAttribute('data-ref')).toBe('C1');
 
-    fake.answerNext({ bridgeTitle: XSS, overview: XSS, sharedProblems: [XSS], mutualBenefits: [XSS], markdownContent: XSS });
-    const explore = doc().querySelector(`[data-proj-a="${projectA.id}"][data-proj-b="${projectB.id}"], [data-proj-a="${projectB.id}"][data-proj-b="${projectA.id}"]`) as HTMLButtonElement;
-    explore.click();
-    await waitFor(() => (doc().getElementById('synergy-modal-body')?.textContent ?? '').includes('negrita'), 'the synergy bridge');
-    expect(injected()).toEqual(clean);
-  });
+    it('the content detail modal escapes the summary and reasoning', { timeout: 15000 }, async () => {
+      (doc().querySelector(`.btn-detail[data-content-id="${readyContentId}"]`) as HTMLButtonElement).click();
+      await waitFor(() => (doc().getElementById('modal-content-body')?.textContent ?? '').includes('negrita'), 'the content modal');
+      expect(injected()).toEqual(clean);
+      expect([...doc().querySelectorAll('.modal-uri-link')].map(a => a.getAttribute('href'))).toEqual(['#']);
+    });
+
+    it('the Consultor and the synergy bridge render hostile model output as text', { timeout: 20000 }, async () => {
+      fake.answerNext({
+        diagnosis: `Según [C1] ${XSS}`, projectViability: XSS,
+        matchedContents: [{ refId: 'C1', whyItConnects: XSS }], matchedNotes: [{ refId: 'N1', whyItConnects: XSS }],
+      });
+      (doc().getElementById('consultant-query-input') as HTMLInputElement).value = 'faros';
+      doc().getElementById('consultant-query-form')!.dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
+      await waitFor(() => doc().querySelectorAll('.consultant-match-card').length === 2, 'the Consultor answer');
+      expect(injected()).toEqual(clean);
+      expect([...doc().querySelectorAll('.consultant-match-card a.source-link')].map(a => a.getAttribute('href'))).toEqual(['#']);
+      expect(doc().querySelector('.consult-ref-badge')?.getAttribute('data-ref')).toBe('C1');
+
+      fake.answerNext({ bridgeTitle: XSS, overview: XSS, sharedProblems: [XSS], mutualBenefits: [XSS], markdownContent: XSS });
+      const explore = doc().querySelector(`[data-proj-a="${projectA.id}"][data-proj-b="${projectB.id}"], [data-proj-a="${projectB.id}"][data-proj-b="${projectA.id}"]`) as HTMLButtonElement;
+      explore.click();
+      await waitFor(() => (doc().getElementById('synergy-modal-body')?.textContent ?? '').includes('negrita'), 'the synergy bridge');
+      expect(injected()).toEqual(clean);
+    });
+
+      it('renders the static text in the chosen language', () => {
+        expect(doc().documentElement.lang).toBe(lang);
+        expect(doc().getElementById('tab-triage')!.textContent).toContain(lang === 'en' ? 'Suggestions' : 'Sugerencias');
+        if (lang === 'en') {
+          // The rendered cards, lists and settings are English too (seeded data is language-neutral)
+          const text = doc().body.textContent!.replace(/\s+/g, ' ');
+          for (const word of ['Descartar', 'Aceptar', 'Fuente:', 'Ver ficha', 'Cargando', 'Proyecto(s)', 'sugerencias']) {
+            expect(text, word).not.toContain(word);
+          }
+          expect(text).toContain('Discard');
+        }
+      });
+    });
+  }
 });

@@ -74,11 +74,13 @@ describe('Discard reasons', () => {
     expect((await stored(id)).status).toBe('pending');
   });
 
-  it('the UI offers exactly the stored reasons', async () => {
+  it('the UI offers exactly the stored reasons, labeled in both languages', async () => {
     const { DISCARD_REASONS } = schema;
     const source = await fs.readFile('web/app.js', 'utf-8');
-    const block = source.match(/const DISCARD_REASON_LABELS = \[([\s\S]*?)\n\];/)![1];
-    const offered = [...block.matchAll(/\['(\w+)'/g)].map(m => m[1]);
+    const block = source.match(/const DISCARD_REASONS = \[([^\]]*)\];/)![1];
+    const offered = [...block.matchAll(/'(\w+)'/g)].map(m => m[1]);
     expect(offered).toEqual([...DISCARD_REASONS]);
+    const dict = await fs.readFile('web/i18n.js', 'utf-8');
+    for (const reason of DISCARD_REASONS) expect(dict.match(new RegExp(`'reason\\.${reason}':`, 'g')), reason).toHaveLength(2);
   });
 });

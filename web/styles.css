@@ -2587,3 +2587,17 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+.language-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(8rem, 12rem);
+  gap: 0.7rem 1rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+@media (max-width: 640px) {
+  .language-grid {
+    grid-template-columns: 1fr;
+  }
+}
