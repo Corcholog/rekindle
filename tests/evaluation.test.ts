@@ -116,4 +116,29 @@ describe('Evaluation Pipeline Integration', () => {
     expect(actions[0].observation).toBe('Muestra cómo pub/sub elimina cuellos de botella entre agentes.');
     expect(actions[0].suggestedAction).toBe('Citar el artículo al justificar el bus de eventos.');
   }, 60000);
+
+  it('guarda como irrelevante una respuesta "actionable" cuya acción es descartar el artículo', async () => {
+    const projectId = randomUUID();
+    await db.insert(schemas.projects).values({ id: projectId, folderPath: 'Projects/Descarte', title: 'Descarte' });
+    const vector = new Array(1024).fill(0).map((_, i) => (i % 7 === 0 ? 1 : 0));
+    const [snapshot] = await db.insert(schemas.projectSnapshots).values({
+      projectId, treeHash: 'h-descarte', thesisText: 'Tesis', embedding: vector, embeddingModel: 'bge-m3',
+    }).returning();
+    const [content] = await db.insert(schemas.contents).values({
+      uri: 'https://example.com/descarte', summary: 'Resumen', embedding: vector, embeddingModel: 'bge-m3', ingestStatus: 'ready',
+    }).returning();
+
+    fake.answerNext({
+      verdict: 'actionable', confidenceScore: 0.8, triageReasoning: 'Parece relacionado.',
+      action: { actionType: 'other', observation: 'No aporta nada nuevo.', suggestedAction: 'Descartar el artículo.', targetFile: null },
+    });
+    const { evaluateContentMatch } = await import('../src/evaluator');
+    const stats = await evaluateContentMatch(content.id, projectId);
+
+    expect(stats).toMatchObject({ evaluated: 1, suggestions: 0 });
+    const [evaluation] = await db.select().from(schemas.evaluations).where(eq(schemas.evaluations.projectSnapshotId, snapshot.id));
+    expect(evaluation.verdict).toBe('irrelevant');
+    expect(evaluation.triageReasoning).toBe('Parece relacionado.\n\n[Motivo de descarte]: No aporta nada nuevo.');
+    expect(await db.select().from(schemas.actionSuggestions).where(eq(schemas.actionSuggestions.evaluationId, evaluation.id))).toHaveLength(0);
+  });
 });

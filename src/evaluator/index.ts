@@ -35,6 +35,16 @@ const unifiedEvaluationSchema = z.object({
  * Step 1: Spatial Semantic Pre-filter (pgvector cosine distance < 0.6 in Postgres)
  * Step 2: Unified LLM Synthesis & Action Formulation (Single LLM invocation)
  */
+/** An "actionable" answer whose action is really to drop the article. */
+function isDiscardAction(action: { actionType: string; observation: string; suggestedAction: string }): boolean {
+  const actionText = (action.suggestedAction || '').toLowerCase().trim();
+  const observation = (action.observation || '').toLowerCase().trim();
+  return actionText.startsWith('descartar')
+    || actionText.includes('descartar el artículo')
+    || actionText.includes('no incluir')
+    || (action.actionType === 'other' && observation.includes('no aporta'));
+}
+
 export interface EvaluationTrace {
   /** Trace started at ingestion; a backlog or direct evaluation starts its own. */
   traceId?: string;
@@ -207,78 +217,67 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
         systemPrompt, userMessage, unifiedEvaluationSchema, undefined, { component: 'triage', traceId, contentId, snapshotId },
       );
 
-      // 1. Record Evaluation in DB
-      let evalId: string;
+      // Safety filter against paradoxical "discard" recommendations: stored as irrelevant
+      const action = result.verdict === 'actionable' ? result.action : null;
+      const suppressedDiscard = action !== null && isDiscardAction(action);
+      const verdict = suppressedDiscard ? 'irrelevant' : result.verdict;
+      const triageReasoning = suppressedDiscard
+        ? `${result.triageReasoning}\n\n[Motivo de descarte]: ${action!.observation || action!.suggestedAction}`.trim()
+        : result.triageReasoning;
+      if (suppressedDiscard) log.info({ traceId, projectId }, 'Suppressed a discard action; verdict set to irrelevant');
+
+      // The evaluation and its suggestion are written in one transaction. An interrupted job leaves
+      // neither, so its retry evaluates the pair again; otherwise the retry would skip an
+      // evaluation whose suggestion was never written.
+      let written: { evaluationId: string; suggestionId: string | null };
       try {
-        const [evalRecord] = await db.insert(evaluations).values({
-          contentId,
-          projectSnapshotId: snapshotId,
-          verdict: result.verdict,
-          confidenceScore: result.confidenceScore,
-          triageReasoning: result.triageReasoning,
-          consumptionSeq: content.consumptionSeq,
-          traceId,
-          retrievalEventId,
-        }).returning({ id: evaluations.id });
-        evalId = evalRecord.id;
+        written = await db.transaction(async (tx) => {
+          const [evalRecord] = await tx.insert(evaluations).values({
+            contentId,
+            projectSnapshotId: snapshotId,
+            verdict,
+            confidenceScore: result.confidenceScore,
+            triageReasoning,
+            consumptionSeq: content.consumptionSeq,
+            traceId,
+            retrievalEventId,
+          }).returning({ id: evaluations.id });
+          if (!action || suppressedDiscard) return { evaluationId: evalRecord.id, suggestionId: null };
+
+          const [sugRecord] = await tx.insert(actionSuggestions).values({
+            evaluationId: evalRecord.id,
+            projectId,
+            contentId,
+            actionType: action.actionType,
+            observation: action.observation,
+            suggestedAction: action.suggestedAction,
+            targetFile: action.targetFile || matchedNotePath || 'ideas.md',
+            status: 'pending',
+          }).returning({ id: actionSuggestions.id });
+          return { evaluationId: evalRecord.id, suggestionId: sugRecord.id };
+        });
       } catch (insertError: any) {
-        if (insertError.code === '23505') {
+        // A concurrent run of the same job evaluated this pair first (unique index)
+        if ((insertError.code ?? insertError.cause?.code) === '23505') {
           log.info({ traceId, contentId, snapshotId }, 'Evaluation inserted concurrently; skipping');
           stats.alreadyEvaluated++;
           await evaluateEvent(true, { model: modelUsed, duplicate: true });
           continue;
         }
-        log.error({ err: insertError, traceId, contentId, snapshotId }, 'Inserting the evaluation failed');
         throw insertError;
       }
 
-      log.info({ traceId, projectId, model: modelUsed, verdict: result.verdict, confidence: result.confidenceScore }, 'Triage finished');
+      const { evaluationId: evalId, suggestionId } = written;
       stats.evaluated++;
-      let verdict: string = result.verdict;
-      let suggestionId: string | null = null;
-
-      // 2. If actionable and action details provided, record Action Suggestion
-      if (result.verdict === 'actionable' && result.action) {
-        const actionTextLower = (result.action.suggestedAction || '').toLowerCase().trim();
-        const obsLower = (result.action.observation || '').toLowerCase().trim();
-
-        // Safety filter against paradoxical "discard" recommendations
-        if (
-          actionTextLower.startsWith('descartar') ||
-          actionTextLower.includes('descartar el artículo') ||
-          actionTextLower.includes('no incluir') ||
-          (result.action.actionType === 'other' && obsLower.includes('no aporta'))
-        ) {
-          log.info({ traceId, evaluationId: evalId }, 'Suppressed a discard action; verdict set to irrelevant');
-          const enhancedReason = `${result.triageReasoning}\n\n[Motivo de descarte]: ${result.action.observation || result.action.suggestedAction}`.trim();
-          await db.update(evaluations).set({ 
-            verdict: 'irrelevant',
-            triageReasoning: enhancedReason,
-          }).where(eq(evaluations.id, evalId));
-          verdict = 'irrelevant';
-          await evaluateEvent(true, { model: modelUsed, evaluationId: evalId, verdict, suppressedDiscard: true });
-          continue;
-        }
-
-        const resolvedTargetFile = result.action.targetFile || matchedNotePath || 'ideas.md';
-
-        const [sugRecord] = await db.insert(actionSuggestions).values({
-          evaluationId: evalId,
-          projectId: projectId,
-          contentId: contentId,
-          actionType: result.action.actionType,
-          observation: result.action.observation,
-          suggestedAction: result.action.suggestedAction,
-          targetFile: resolvedTargetFile,
-          status: 'pending',
-        }).returning({ id: actionSuggestions.id });
-        suggestionId = sugRecord.id;
+      log.info({ traceId, projectId, model: modelUsed, verdict, confidence: result.confidenceScore, suggestionId }, 'Triage finished');
+      if (suggestionId) {
         stats.suggestions++;
-        await linkTelemetryToSuggestion(telemetryIds, sugRecord.id);
-
-        log.info({ traceId, projectId, suggestionId: sugRecord.id }, 'Suggestion created (pending review)');
+        await linkTelemetryToSuggestion(telemetryIds, suggestionId);
       }
-      await evaluateEvent(true, { model: modelUsed, evaluationId: evalId, verdict, confidence: result.confidenceScore, suggestionId });
+      await evaluateEvent(true, {
+        model: modelUsed, evaluationId: evalId, verdict, confidence: result.confidenceScore, suggestionId,
+        ...(suppressedDiscard ? { suppressedDiscard: true } : {}),
+      });
     } catch (err) {
       stats.failures++;
       await evaluateEvent(false, {}, errorKindOf(err));
