@@ -23,7 +23,8 @@
     "eval:sweep": "tsx evals/runner/cli.ts sweep",
     "telemetry:report": "tsx src/observability/cli.ts report",
     "telemetry:trace": "tsx src/observability/cli.ts trace",
-    "telemetry:prune": "tsx src/observability/cli.ts prune"
+    "telemetry:prune": "tsx src/observability/cli.ts prune",
+    "usertest:stats": "tsx src/usertest/cli.ts"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.2.0",
