@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from 'sonner';
 import { BookOpen, Flame, MessagesSquare, Settings as SettingsIcon, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import { api, type VaultSettings } from '@/lib/api';
+import { api, type SuggestionStatus, type VaultSettings } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
@@ -14,21 +14,44 @@ import { Settings } from '@/views/Settings';
 export type View = 'reading' | 'suggestions' | 'consultant' | 'settings';
 const VIEWS: View[] = ['reading', 'suggestions', 'consultant', 'settings'];
 
-// The view lives in the URL hash (#suggestions), so the back button and bookmarks work
+// The view lives in the URL hash (#suggestions), so the back button and bookmarks work. A
+// suggestions link can also name a project and an article to show:
+// #suggestions?project=<id>&content=<id>&tab=<status>
 const viewFromHash = (): View => {
-  const name = window.location.hash.replace(/^#\/?/, '');
+  const name = window.location.hash.replace(/^#\/?/, '').split('?')[0];
   return (VIEWS as string[]).includes(name) ? (name as View) : 'reading';
+};
+
+export interface SuggestionFocus { projectId: string; contentId: string | null; tab: SuggestionStatus; key: string }
+
+const focusFromHash = (): SuggestionFocus | null => {
+  const [name, query] = window.location.hash.replace(/^#\/?/, '').split('?');
+  if (name !== 'suggestions' || !query) return null;
+  const params = new URLSearchParams(query);
+  const projectId = params.get('project');
+  const tab = params.get('tab');
+  if (!projectId) return null;
+  return {
+    projectId,
+    contentId: params.get('content'),
+    tab: tab === 'accepted' || tab === 'discarded' ? tab : 'active',
+    key: window.location.hash,
+  };
 };
 
 export function App() {
   const { t, lang } = useI18n();
   const [view, setViewState] = useState<View>(viewFromHash);
+  const [focus, setFocus] = useState<SuggestionFocus | null>(focusFromHash);
   const setView = useCallback((next: View) => {
     if (window.location.hash !== `#${next}`) window.location.hash = next;
     setViewState(next);
   }, []);
   useEffect(() => {
-    const onHash = () => setViewState(viewFromHash());
+    const onHash = () => {
+      setViewState(viewFromHash());
+      setFocus(focusFromHash());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -135,7 +158,7 @@ export function App() {
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         {view === 'reading' && <Reading refreshKey={refreshKey} onChange={refresh} />}
-        {view === 'suggestions' && <Suggestions refreshKey={refreshKey} onChange={refresh} />}
+        {view === 'suggestions' && <Suggestions refreshKey={refreshKey} onChange={refresh} focus={focus} />}
         {view === 'consultant' && <Consultant />}
         {view === 'settings' && <Settings refreshKey={refreshKey} onChange={refresh} vault={vault} />}
       </main>

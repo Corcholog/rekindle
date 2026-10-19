@@ -36,7 +36,10 @@ export interface ContentItem {
   ingestStatusReason: string | null;
   consumedAt: string;
   counts: { evaluations: number; actionable: number; tentative: number; irrelevant: number; suggestions: number };
-  evaluationsList?: { projectTitle: string; verdict: Verdict | null; confidenceScore: number | null; triageReasoning: string | null }[];
+  evaluationsList?: {
+    projectId: string; projectTitle: string; verdict: Verdict | null; confidenceScore: number | null; triageReasoning: string | null;
+    suggestionStatus: 'pending' | 'accepted' | 'discarded' | null;
+  }[];
   isEvaluating?: boolean;
 }
 

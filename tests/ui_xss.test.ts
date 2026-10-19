@@ -123,6 +123,10 @@ describe('Web UI renders untrusted text as text', () => {
     win.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
     win.HTMLElement.prototype.scrollIntoView = function () {};
     win.fetch = async (url: string, init: any = {}) => {
+      // Tests can slow the all-projects suggestion list to reproduce out-of-order responses
+      if (win.__slowAllSuggestions && /\/api\/suggestions\?/.test(url) && !/projectId=/.test(url)) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
       const res = await server.inject({
         method: init.method ?? 'GET', url: new URL(url, origin).pathname + new URL(url, origin).search,
         headers: { host: '127.0.0.1:3000', origin, ...(init.headers ?? {}) }, payload: init.body,
@@ -162,6 +166,17 @@ describe('Web UI renders untrusted text as text', () => {
         expect(toggle.querySelector('.evaluation-reasoning')!.textContent).toContain('<b>negrita</b>');
         expect(injected()).toEqual(clean);
 
+        // "View suggestion" opens that project in Suggestions, on the right tab, and points at the card
+        const viewLinks = [...doc().querySelectorAll('.view-suggestion')] as HTMLAnchorElement[];
+        expect(viewLinks.length).toBe(2);
+        const accepted = viewLinks.find(l => l.getAttribute('href')!.includes('tab=accepted'))!;
+        expect(accepted.getAttribute('href')).toBe(`#suggestions?project=${projectB.id}&content=${readyContentId}&tab=accepted`);
+        accepted.click();
+        await waitFor(() => doc().getElementById('selected-project-title')?.textContent?.startsWith('Beta') ?? false, 'the linked project');
+        await waitFor(() => !!doc().querySelector(`.suggestion-card.focused[data-content-id="${readyContentId}"]`), 'the linked card');
+        expect(doc().getElementById('tab-status-accepted')!.getAttribute('data-state')).toBe('active');
+        expect(injected()).toEqual(clean);
+
         go('suggestions');
         await waitFor(() => doc().querySelectorAll('.suggestion-card').length >= 1, 'the suggestions');
         await waitFor(() => doc().querySelectorAll('.synergy-card').length === 1, 'the synergies');
@@ -171,6 +186,20 @@ describe('Web UI renders untrusted text as text', () => {
         // The javascript: URI never becomes a link
         const links = [...doc().querySelectorAll('.suggestion-card a')].map(a => a.getAttribute('href'));
         expect(links.every(href => /^https?:/.test(href!))).toBe(true);
+      });
+
+      it('a link to a project is not overwritten by a slower list of all projects', { timeout: 15000 }, async () => {
+        go('reading');
+        await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the reading list');
+        (dom.window as any).__slowAllSuggestions = true;
+        // The first list loaded (all projects, active tab) holds only Alfa's card; the link asks for Beta's accepted one
+        dom.window.location.hash = `#suggestions?project=${projectB.id}&content=${readyContentId}&tab=accepted`;
+        await waitFor(() => !!doc().querySelector('.suggestion-card.focused'), 'the linked card');
+        await new Promise(resolve => setTimeout(resolve, 600)); // the slow response has arrived by now
+        (dom.window as any).__slowAllSuggestions = false;
+        const cards = [...doc().querySelectorAll('.suggestion-card')];
+        expect(cards.length).toBe(1);
+        expect(cards[0].textContent).toContain('Beta');
       });
 
       it('the content detail dialog shows the summary and reasoning as text', { timeout: 15000 }, async () => {

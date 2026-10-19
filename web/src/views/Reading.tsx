@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronRight, Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type ContentDetail, type ContentItem, type IngestStatus } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
@@ -186,7 +186,7 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
 
       {(item.evaluationsList ?? []).length > 0 && (
         <ul className="mt-3 grid gap-2">
-          {item.evaluationsList!.map((ev, i) => <EvaluationRow key={i} evaluation={ev} />)}
+          {item.evaluationsList!.map((ev, i) => <EvaluationRow key={i} evaluation={ev} contentId={item.id} />)}
         </ul>
       )}
 
@@ -213,17 +213,20 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
  * One project's verdict on the article. Clicking it shows the model's full reasoning in place, for
  * irrelevant verdicts too, so nobody has to open the article to learn why.
  */
-function EvaluationRow({ evaluation: ev }: { evaluation: NonNullable<ContentItem['evaluationsList']>[number] }) {
+function EvaluationRow({ evaluation: ev, contentId }: { evaluation: NonNullable<ContentItem['evaluationsList']>[number]; contentId: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const preview = ev.verdict !== 'irrelevant';
+  // Actionable and tentative verdicts have a suggestion to review: link to it in Suggestions
+  const tab = ev.suggestionStatus === 'accepted' || ev.suggestionStatus === 'discarded' ? ev.suggestionStatus : 'active';
+  const link = preview ? `#suggestions?${new URLSearchParams({ project: ev.projectId, content: contentId, tab })}` : null;
   return (
-    <li className="text-sm">
+    <li className="flex items-start gap-1 rounded-md bg-surface-2/60 text-sm">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
-        className="evaluation-toggle flex w-full cursor-pointer items-start gap-2 rounded-md bg-surface-2/60 px-3 py-2 text-left hover:bg-surface-2"
+        className="evaluation-toggle flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-left hover:bg-surface-2"
       >
         <ChevronRight size={14} aria-hidden="true" className={cn('mt-1 shrink-0 text-ink-3 transition-transform', open && 'rotate-90')} />
         <span className="min-w-0 flex-1">
@@ -238,6 +241,15 @@ function EvaluationRow({ evaluation: ev }: { evaluation: NonNullable<ContentItem
           )}
         </span>
       </button>
+      {link && (
+        <a
+          href={link}
+          className="view-suggestion inline-flex shrink-0 items-center gap-1 rounded-md px-3 py-2 text-xs font-medium text-ember underline-offset-2 hover:underline"
+          aria-label={t('feed.viewSuggestionAria', { project: ev.projectTitle })}
+        >
+          {t('feed.viewSuggestion')}<ArrowUpRight size={13} aria-hidden="true" />
+        </a>
+      )}
     </li>
   );
 }

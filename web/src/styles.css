@@ -156,6 +156,12 @@
   box-shadow: 0 0 0 1.5px var(--surface), 0 0 0.35rem 0.05rem var(--ember-glow);
 }
 
+/* The card a link from Reading points at */
+.suggestion-card.focused {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .rekindled {
     animation: rekindle 1.6s ease-out 1;

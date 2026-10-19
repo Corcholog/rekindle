@@ -83,6 +83,7 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
         s.status === 'discarded' && 'opacity-80',
       )}
       data-id={s.id}
+      data-content-id={s.contentId}
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-2/50 px-5 py-2.5 text-xs">
         <span className="font-semibold text-ink">{s.projectTitle || t('sug.project')}</span>
