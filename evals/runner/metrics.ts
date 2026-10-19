@@ -54,7 +54,8 @@ export function classMetrics(matrix: ConfusionMatrix) {
 /**
  * Connection found: actionable and tentative both mean "this article connects to this project", so
  * mixing them up still surfaces the connection. Scores that yes/no question, where losing a real
- * connection (calling it irrelevant) or inventing one are the only errors.
+ * connection (calling it irrelevant) or proposing an extra one (connecting a pair labeled
+ * irrelevant) are the only errors.
  */
 export function connectionMetrics(matrix: ConfusionMatrix): ClassMetric {
   const yes: Verdict[] = ['actionable', 'tentative'];

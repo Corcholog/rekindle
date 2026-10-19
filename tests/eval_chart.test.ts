@@ -11,20 +11,20 @@ describe('eval connections chart', () => {
     },
   }) as any;
 
-  it('counts connections found and invented from the latest result of each config', () => {
+  it('counts connections found and extra ones from the latest result of each config', () => {
     const points = chartPoints([
       result('deepseek-flash-top3', '2026-01-01', 0.5, 0, 0), // older run, ignored
       result('deepseek-flash-top3', '2026-01-02', 46 / 56, 0, 19),
       result('qwen-local-top3', '2026-01-02', 32 / 56, 0, 9),
       result('not-in-chart', '2026-01-02', 1, 0, 0),
     ], 'private');
-    expect(points.map(p => [p.config, p.found, p.invented, p.total])).toEqual([
+    expect(points.map(p => [p.config, p.found, p.extra, p.total])).toEqual([
       ['deepseek-flash-top3', 46, 19, 56],
       ['qwen-local-top3', 32, 9, 56],
     ]);
 
     const svg = renderChart(points);
-    expect(svg).toContain('46 found, 19 invented');
+    expect(svg).toContain('46 found, 19 extra');
     expect(svg).toContain('of 56 labeled connections');
     expect(svg).not.toMatch(/NaN|undefined/);
   });

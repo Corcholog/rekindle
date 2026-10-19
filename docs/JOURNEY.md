@@ -208,10 +208,10 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - The review page gained a run picker and a filter for pairs a model calls actionable that the label does not (`f9c5158`).
   - The owner changed 7 labels, all toward thinking on's answer: 2 tentative → actionable, 2 irrelevant → actionable, 3 irrelevant → tentative. Labels are now 35 actionable, 21 tentative, 320 irrelevant.
   - New metric *connection found*: precision and recall of `actionable` or `tentative` against `irrelevant`. New command `pnpm eval rescore` scores each config's latest predictions again with the current labels, without model calls (`bda1c59`). Every private run was rescored.
-- **Results (DeepSeek top-3, revised labels):** thinking off macro-F1 0.77, 46 of 56 connections found, 19 invented, 0 false actionables; thinking on 0.71, 49 found (all that pass the top-3 cutoff), 26 invented, 8 false actionables; the repeat of thinking off 0.75, 47 found, 16 invented. Gemini finds 49 and invents 25; Qwen finds 32 and invents 9.
+- **Results (DeepSeek top-3, revised labels):** thinking off macro-F1 0.77, 46 of 56 connections found, 19 extra, 0 false actionables; thinking on 0.71, 49 found (all that pass the top-3 cutoff), 26 extra, 8 false actionables; the repeat of thinking off 0.75, 47 found, 16 extra. Gemini finds 49 with 25 extra; Qwen finds 32 with 9 extra. (*Extra*: a pair labeled irrelevant that the model connects; first called "invented", renamed because some are connections the labeler missed, not hallucinations.)
 - **Alternatives considered:** keeping the original labels (they missed connections the owner now agrees with); re-running models after the relabel (unnecessary: the predictions do not depend on labels).
 - **Evidence:** `evals/results/*-private.json` with `mode: rescore`, `evals/REPORT.md`, `tests/eval_rescore.test.ts`, `tests/eval_metrics.test.ts`, `tests/eval_scoring.test.ts`.
-- **Outcome / lesson:** relabeling after reading a model's answers favors that model, so the README says so. Whether to turn thinking on (more connections found, more invented, twice the latency and cost) is the owner's call; macro-F1 still favors thinking off.
+- **Outcome / lesson:** relabeling after reading a model's answers favors that model, so the README says so. Whether to turn thinking on (more connections found, more extra ones, twice the latency and cost) is the owner's call; macro-F1 still favors thinking off.
 
 ### 2026-10-19 — UI: a hearth palette, readable verdicts in Reading, and publication cleanup
 - **Context:** before publishing, the owner asked for a livelier UI, then judged the first attempt too colourful and pointed out that projects edited 3–5 days earlier showed as grey ash.
@@ -318,7 +318,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-19 | Repeat of the thinking-off top-3 run (live) | Macro-F1 / `actionable` found of 31 / false actionables | 0.78 / 26 / 1 | 0.78 / 24 / 2 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3-rerun.json` |
 | 2026-10-19 | Cost estimate with cache hits and off-peak prices | Estimated cost of 118 triage calls, thinking off | about $0.12 (uncached, peak) | $0.024 (91% of input cached, off-peak) | `cost` in the result files above |
 | 2026-10-19 | DeepSeek spend, billed | Billed amount, all use before these two runs | not measured | $0.25 (first run alone $0.07) | owner's DeepSeek dashboard; not reproducible from the repo |
-| 2026-10-19 | Labels revised after reading thinking on's answers (7 pairs), all runs rescored | Connections found of 56 / invented, DeepSeek thinking off vs on | not measured | 46 / 19 vs 49 / 26 (macro-F1 0.77 vs 0.71) | `pnpm eval rescore evals/private`; `evals/REPORT.md` |
+| 2026-10-19 | Labels revised after reading thinking on's answers (7 pairs), all runs rescored | Connections found of 56 / extra, DeepSeek thinking off vs on | not measured | 46 / 19 vs 49 / 26 (macro-F1 0.77 vs 0.71) | `pnpm eval rescore evals/private`; `evals/REPORT.md` |
 
 ## Dead ends and things that did not work
 

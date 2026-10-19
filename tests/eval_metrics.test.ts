@@ -79,7 +79,7 @@ describe('helpers', () => {
       { expected: 'actionable', predicted: 'tentative' }, // still a connection
       { expected: 'tentative', predicted: 'actionable' }, // still a connection
       { expected: 'actionable', predicted: 'irrelevant' }, // lost
-      { expected: 'irrelevant', predicted: 'tentative' }, // invented
+      { expected: 'irrelevant', predicted: 'tentative' }, // extra (labeled irrelevant)
       { expected: 'irrelevant', predicted: 'irrelevant' },
     ]);
     expect(connectionMetrics(m)).toEqual({ precision: 2 / 3, recall: 2 / 3, f1: 2 / 3, support: 3 });
