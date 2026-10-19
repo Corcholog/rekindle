@@ -1,6 +1,9 @@
 import { boss } from '../queue';
 import { syncProjectSuggestions } from '../vault/updater';
 import { env } from '../config';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('vault-worker');
 
 const QUEUE_NAME = 'sync_suggestions';
 
@@ -18,18 +21,18 @@ export const setupVaultWorker = async () => {
       
       const vaultPath = process.env.VAULT_PATH || env.VAULT_PATH;
       if (!vaultPath) {
-        console.error('[VaultWorker] VAULT_PATH is not defined. Cannot sync suggestions.');
+        log.error('VAULT_PATH is not set; cannot sync suggestions');
         continue; // Don't throw, just ignore if no vault path is configured
       }
 
       try {
         await syncProjectSuggestions(projectId, vaultPath);
       } catch (error) {
-        console.error(`[VaultWorker] Failed syncing suggestions for project ${projectId}:`, error);
+        log.error({ err: error, projectId }, 'Syncing suggestions failed');
         throw error;
       }
     }
   });
   
-  console.log(`Worker successfully registered for ${QUEUE_NAME} with ID: ${workerId}`);
+  log.info({ queue: QUEUE_NAME, workerId }, 'Worker registered');
 };

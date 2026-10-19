@@ -1,4 +1,7 @@
 import * as fs from 'fs/promises';
+import { getLogger, pathKey } from '../observability/logger';
+
+const log = getLogger('parser');
 
 export interface ProjectMarkdown {
   hasProjectTag: boolean;
@@ -43,7 +46,7 @@ export async function parseMarkdownFile(filePath: string): Promise<ProjectMarkdo
       rawContent
     };
   } catch (err) {
-    console.warn(`[VaultParser] Warning: Could not parse markdown file at ${filePath}:`, err);
+    log.warn({ err, note: pathKey(filePath) }, 'Could not parse a markdown file');
     return null;
   }
 }

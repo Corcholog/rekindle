@@ -4,6 +4,9 @@ import { db } from '../db';
 import { actionSuggestions, projects, contents } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { sanitizeForVault } from './sanitize';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('vault-updater');
 
 /**
  * Writeback policy: ONLY suggestions explicitly accepted by the user are written to the vault.
@@ -131,7 +134,7 @@ export async function writeAcceptedSuggestionToVault(suggestionId: string, vault
     const alreadyWritten = (await readIfExists(filePath)).includes(calloutMarker(suggestionId));
     if (!alreadyWritten) {
       await fs.appendFile(filePath, formatAcceptedCallout(sug), 'utf-8');
-      console.log(`[VaultUpdater] Accepted suggestion ${suggestionId} written to ${filePath}`);
+      log.info({ suggestionId }, 'Accepted suggestion written to the vault');
     }
 
     await tx.update(actionSuggestions)
@@ -149,7 +152,7 @@ async function writePending(rows: { id: string }[], vaultPath: string): Promise<
       if (await writeAcceptedSuggestionToVault(row.id, vaultPath)) written++;
     } catch (err) {
       failed++;
-      console.warn(`[VaultUpdater] Writeback for suggestion ${row.id} still pending:`, (err as Error).message);
+      log.warn({ err, suggestionId: row.id }, 'Writeback still pending');
     }
   }
   return { written, failed };
@@ -163,7 +166,7 @@ export async function syncAllPendingWritebacks(vaultPath: string): Promise<numbe
   if (pending.length === 0) return 0;
 
   const { written } = await writePending(pending, vaultPath);
-  console.log(`[VaultUpdater] Recovery: ${written} of ${pending.length} pending writebacks completed`);
+  log.info({ written, pending: pending.length }, 'Writeback recovery finished');
   return written;
 }
 
@@ -184,7 +187,7 @@ export async function syncProjectSuggestions(projectId: string, vaultPath: strin
     ));
 
   if (unwritten.length === 0) {
-    console.log(`[VaultUpdater] No accepted suggestions pending writeback for project ${projectId}`);
+    log.info({ projectId }, 'No accepted suggestions pending writeback');
     return 0;
   }
 
@@ -194,6 +197,6 @@ export async function syncProjectSuggestions(projectId: string, vaultPath: strin
     throw new Error(`${failed} writeback(s) failed for project ${projectId}`);
   }
 
-  console.log(`[VaultUpdater] Recovered ${writtenCount} accepted suggestions for project ${projectId}`);
+  log.info({ projectId, written: writtenCount }, 'Recovered accepted suggestions');
   return writtenCount;
 }

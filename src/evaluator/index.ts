@@ -8,6 +8,9 @@ import { z } from 'zod';
 import { retrieveWithStats, RetrievalOptions } from './retrieval';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('evaluator');
 
 const ollama = sharedAiProvider;
 
@@ -82,7 +85,7 @@ async function runEvaluation(
   traceId: string,
   stats: EvaluationStats,
 ): Promise<void> {
-  console.log(`[Evaluator] Starting unified evaluation for content ${contentId}${targetProjectId ? ` (target project: ${targetProjectId})` : ''}`);
+  log.info({ traceId, contentId, targetProjectId }, 'Evaluation started');
   
   // 1. Fetch content
   const contentRows = await db.select().from(contents).where(eq(contents.id, contentId));
@@ -93,7 +96,7 @@ async function runEvaluation(
   
   const content = contentRows[0];
   if (!content.embedding || !content.summary) {
-    console.log(`[Evaluator] Content ${contentId} missing embedding or summary. Aborting.`);
+    log.info({ traceId, contentId }, 'Content has no embedding or summary yet; skipping');
     stats.outcome = 'not_ready';
     return;
   }
@@ -101,7 +104,7 @@ async function runEvaluation(
   // Invariant I7: only compare embeddings produced by the current model
   const embedModel = env.EMBED_MODEL;
   if (content.embeddingModel !== embedModel) {
-    console.log(`[Evaluator] Content ${contentId} was embedded with ${content.embeddingModel ?? 'an unknown model'}, not ${embedModel}. Skipping.`);
+    log.info({ traceId, contentId, contentModel: content.embeddingModel, embedModel }, 'Content embedded with another model; skipping');
     stats.outcome = 'other_embedding_model';
     return;
   }
@@ -124,7 +127,7 @@ async function runEvaluation(
   });
 
   if (candidates.length === 0) {
-    console.log(`[Evaluator] [Step 1 Filtered] No matching active projects within distance threshold for content ${contentId}.`);
+    log.info({ traceId, contentId, threshold: found.threshold }, 'No project within the distance threshold');
     stats.outcome = 'no_candidates';
     return;
   }
@@ -151,12 +154,12 @@ async function runEvaluation(
       .limit(1);
 
     if (existing) {
-      console.log(`[Evaluator] Evaluation already exists for content ${contentId} and snapshot ${snapshotId}. Skipping.`);
+      log.info({ traceId, contentId, snapshotId }, 'Already evaluated; skipping');
       stats.alreadyEvaluated++;
       continue;
     }
 
-    console.log(`[Evaluator] [Step 2 Synthesizing] Evaluating against Project Snapshot ${snapshotId} (focal note: ${matchedNotePath || 'project-level'})...`);
+    log.info({ traceId, contentId, snapshotId, rank, level: candidate.level, distance: candidate.distance }, 'Triage started');
 
     const systemPrompt = `Eres un asistente de investigación y redacción crítico y constructivo. Tu misión es analizar si el ARTÍCULO aporta valor real, ideas nuevas o evidencia útil a los BORRADORES Y NOTAS DEL PROYECTO.
 Debes responder SIEMPRE en ESPAÑOL.
@@ -215,16 +218,16 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
         evalId = evalRecord.id;
       } catch (insertError: any) {
         if (insertError.code === '23505') {
-          console.log(`[Evaluator] Evaluation already exists for this content and snapshot.`);
+          log.info({ traceId, contentId, snapshotId }, 'Evaluation inserted concurrently; skipping');
           stats.alreadyEvaluated++;
           await evaluateEvent(true, { model: modelUsed, duplicate: true });
           continue;
         }
-        console.error(`[Evaluator] Error inserting evaluation:`, insertError);
+        log.error({ err: insertError, traceId, contentId, snapshotId }, 'Inserting the evaluation failed');
         throw insertError;
       }
 
-      console.log(`[Evaluator] Result for Project ${projectId} via ${modelUsed}: ${result.verdict} (${Math.round((result.confidenceScore || 0) * 100)}%)`);
+      log.info({ traceId, projectId, model: modelUsed, verdict: result.verdict, confidence: result.confidenceScore }, 'Triage finished');
       stats.evaluated++;
       let verdict: string = result.verdict;
       let suggestionId: string | null = null;
@@ -241,7 +244,7 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
           actionTextLower.includes('no incluir') ||
           (result.action.actionType === 'other' && obsLower.includes('no aporta'))
         ) {
-          console.log(`[Evaluator] Suppressed paradoxical discard action. Updating verdict to irrelevant.`);
+          log.info({ traceId, evaluationId: evalId }, 'Suppressed a discard action; verdict set to irrelevant');
           const enhancedReason = `${result.triageReasoning}\n\n[Motivo de descarte]: ${result.action.observation || result.action.suggestedAction}`.trim();
           await db.update(evaluations).set({ 
             verdict: 'irrelevant',
@@ -268,13 +271,13 @@ Por favor, evalúa de manera crítica la afinidad y propuesta constructiva sigui
         stats.suggestions++;
         await linkTelemetryToSuggestion(telemetryIds, sugRecord.id);
 
-        console.log(`[Evaluator] Action suggestion created for Project ${projectId} targeting "${resolvedTargetFile}" (pending user review)`);
+        log.info({ traceId, projectId, suggestionId: sugRecord.id }, 'Suggestion created (pending review)');
       }
       await evaluateEvent(true, { model: modelUsed, evaluationId: evalId, verdict, confidence: result.confidenceScore, suggestionId });
     } catch (err) {
       stats.failures++;
       await evaluateEvent(false, {}, errorKindOf(err));
-      console.error(`[Evaluator] Error evaluating snapshot ${snapshotId} against content ${contentId}:`, err);
+      log.error({ err, traceId, contentId, snapshotId }, 'Triage failed for this project');
     }
   }
 }
@@ -402,13 +405,13 @@ export async function enqueueProjectBacklogEvaluations(projectId: string, limit 
     return [];
   }
 
-  console.log(`[BacklogEvaluator] Found ${contentIds.length} unevaluated matching contents for project ${projectId}. Enqueueing to pg-boss...`);
+  log.info({ projectId, contents: contentIds.length }, 'Enqueueing backlog evaluations');
 
   for (const contentId of contentIds) {
     try {
       await boss.send('evaluate_content', { contentId, targetProjectId: projectId });
     } catch (err) {
-      console.warn(`[BacklogEvaluator] Warning: Could not enqueue to pg-boss:`, err);
+      log.warn({ err, projectId, contentId }, 'Could not enqueue a backlog evaluation');
     }
   }
 

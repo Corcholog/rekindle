@@ -3,13 +3,15 @@ import * as path from 'path';
 import { reconcileProject, bootReconcile } from './reconciler';
 import { PROJECT_DIR_NAMES } from '../config';
 import { validateVaultPath } from './config';
+import { getLogger, pathKey } from '../observability/logger';
+
+const log = getLogger('watcher');
 
 // Manage timeouts for debouncing
 const debounceTimers = new Map<string, NodeJS.Timeout>();
 const DEBOUNCE_MS = 3000;
 
 let activeWatcher: ReturnType<typeof chokidar.watch> | null = null;
-let activeVaultPath: string | null = null;
 
 /** Paths the watcher never reacts to: hidden entries and Loom's own suggestions.md (invariant I4). */
 export function shouldIgnoreVaultPath(vaultRoot: string, targetPath: string): boolean {
@@ -34,12 +36,11 @@ export async function stopVaultWatcher(): Promise<void> {
   if (activeWatcher) {
     try {
       await activeWatcher.close();
-      console.log(`[Watcher] Stopped live watcher for vault: ${activeVaultPath}`);
+      log.info('Stopped the live vault watcher');
     } catch (err) {
-      console.error(`[Watcher] Error stopping live watcher:`, err);
+      log.error({ err }, 'Stopping the live vault watcher failed');
     } finally {
       activeWatcher = null;
-      activeVaultPath = null;
     }
   }
 }
@@ -55,16 +56,16 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
   // Ensure path is accessible (and automatically mounts drive if needed on Linux)
   const validation = await validateVaultPath(resolved);
   if (!validation.isValid) {
-    console.warn(`[Watcher] Vault path "${resolved}" is not accessible. Skipping live watcher.`);
+    log.warn({ vault: pathKey(resolved) }, 'Configured vault path is not accessible; live watcher not started');
     return;
   }
 
   if (runInitialReconcile) {
-    console.log(`[Watcher] Starting initial boot reconciliation for vault: ${resolved}`);
+    log.info({ vault: pathKey(resolved) }, 'Boot reconciliation started');
     await bootReconcile(resolved);
-    console.log(`[Watcher] Boot reconciliation finished. Starting live file watcher...`);
+    log.info('Boot reconciliation finished; starting the live watcher');
   } else {
-    console.log(`[Watcher] Skipping boot reconciliation as requested. Starting live file watcher...`);
+    log.info('Boot reconciliation skipped; starting the live watcher');
   }
 
   const watchPaths = PROJECT_DIR_NAMES.map(dir => path.join(resolved, dir));
@@ -99,8 +100,8 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
 
     const timer = setTimeout(() => {
       debounceTimers.delete(projectPath);
-      console.log(`[Watcher] Detected changes in project ${projectName}. Reconciling...`);
-      reconcileProject(projectPath, resolved).catch(console.error);
+      log.info({ project: pathKey(projectPath) }, 'Project changed; reconciling');
+      reconcileProject(projectPath, resolved).catch(err => log.error({ err, project: pathKey(projectPath) }, 'Reconciliation failed'));
     }, DEBOUNCE_MS);
 
     debounceTimers.set(projectPath, timer);
@@ -118,9 +119,9 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
         const { projects } = await import('../db/schema');
         const { eq } = await import('drizzle-orm');
         await db.update(projects).set({ isActive: false }).where(eq(projects.folderPath, folderPath));
-        console.log(`[Watcher] Project directory removed: ${folderPath}. Marked as inactive.`);
+        log.info({ project: pathKey(folderPath) }, 'Project folder removed; marked inactive');
       } catch (err) {
-        console.error(`[Watcher] Error marking removed project as inactive:`, err);
+        log.error({ err }, 'Marking a removed project inactive failed');
       }
     }
   };
@@ -131,13 +132,12 @@ export async function startVaultWatcher(vaultPath: string, runInitialReconcile =
     .on('unlink', handleEvent)
     .on('unlinkDir', handleUnlinkDir)
     .on('error', (err) => {
-      console.error('[Watcher] File watcher encountered an error:', err);
+      log.error({ err }, 'File watcher error');
     });
 
   activeWatcher = watcher;
-  activeVaultPath = resolved;
 
-  console.log(`[Watcher] Listening for changes in ${PROJECT_DIR_NAMES.join('/ and ')}/ at ${resolved}`);
+  log.info({ folders: PROJECT_DIR_NAMES, vault: pathKey(resolved) }, 'Watching the vault for project changes');
 }
 
 export async function restartVaultWatcher(vaultPath: string, runInitialReconcile = true): Promise<void> {

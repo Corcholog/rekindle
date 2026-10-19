@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyBaseLogger } from 'fastify';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import ingestRoute from './routes/ingest';
 import suggestionsRoute from './routes/suggestions';
@@ -18,9 +18,12 @@ import { startVaultWatcher, stopVaultWatcher } from '../vault/watcher';
 import { syncAllPendingWritebacks } from '../vault/updater';
 import { env } from '../config';
 import { registerRequestGuard } from './requestGuard';
+import { getLogger } from '../observability/logger';
 
+// Fastify shares the redacting logger. Per-request logs are off: URLs can carry search text.
 export const server = Fastify({
-  logger: env.NODE_ENV === 'test' ? false : { level: process.env.LOG_LEVEL || 'warn' }
+  loggerInstance: getLogger('api') as FastifyBaseLogger,
+  disableRequestLogging: true,
 }).withTypeProvider<ZodTypeProvider>();
 
 // Add Zod validation compilers
@@ -98,14 +101,14 @@ export const startServer = async () => {
     const host = env.HOST;
     const port = env.PORT;
     await server.listen({ port, host });
-    console.log(`Server listening on http://${host}:${port}`);
+    server.log.info({ host, port }, 'Server listening');
 
     // Graceful shutdown handlers
     let isShuttingDown = false;
     const handleShutdown = async (signal: string) => {
       if (isShuttingDown) return;
       isShuttingDown = true;
-      console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+      server.log.info({ signal }, 'Shutting down');
       await stopServer();
       process.exit(0);
     };

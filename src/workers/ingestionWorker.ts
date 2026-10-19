@@ -12,6 +12,9 @@ import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
 import { newTraceId, recordStage, timeStage, errorKindOf } from '../observability/pipeline';
 
 import { YoutubeTranscript } from 'youtube-transcript';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('ingest-worker');
 
 const QUEUE_NAME = 'ingest_url';
 const ollama = sharedAiProvider;
@@ -99,7 +102,7 @@ export async function extractYouTubeContent(url: string): Promise<{ title: strin
       if (data.author_name) author = data.author_name;
     }
   } catch (err) {
-    console.warn(`[IngestWorker] Warning fetching YouTube oEmbed title:`, err);
+    log.warn({ err }, 'Fetching the YouTube oEmbed title failed');
   }
 
   // 2. Fetch transcript via YoutubeTranscript
@@ -131,7 +134,7 @@ export const setupIngestionWorker = async () => {
       const attempt = typeof job.retryCount === 'number' ? job.retryCount + 1 : null;
       const stage = { traceId, contentId, attempt };
       const jobStarted = Date.now();
-      console.log(`Processing ingestion job for: ${url} (Content ID: ${contentId})`);
+      log.info({ traceId, contentId, attempt }, 'Ingestion started');
 
       try {
         // 1. Fast rejection of obviously local targets (fetchPublicPage re-checks after DNS)
@@ -154,7 +157,6 @@ export const setupIngestionWorker = async () => {
         let channelOrDomain: string | null = null;
 
         if (isYouTubeUrl(url)) {
-          console.log(`[IngestWorker] Extracting transcript for YouTube video: ${url}`);
           const yt = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'youtube' } },
             () => extractYouTubeContent(url), r => ({ chars: r.rawText.length }));
           rawText = yt.rawText;
@@ -220,14 +222,12 @@ export const setupIngestionWorker = async () => {
           })
           .where(eq(contents.id, contentId));
 
-        console.log(`Successfully ingested and vectorised: ${url}`);
         
         // 6. Trigger Evaluation Pipeline
         await boss.send('evaluate_content', { contentId, traceId }, { singletonKey: `eval:${contentId}`, retryLimit: 2 });
-        console.log(`Enqueued evaluation job for content ${contentId}`);
+        log.info({ traceId, contentId, chars: rawText.length }, 'Ingested; evaluation enqueued');
         await recordStage({ ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, attrs: { source: isYouTubeUrl(url) ? 'youtube' : 'web' } });
       } catch (error: any) {
-        console.error(`Error in ingestion worker for ${url}:`, error);
         
         await db.update(contents)
           .set({ 
@@ -240,6 +240,7 @@ export const setupIngestionWorker = async () => {
         // do not rethrow to pg-boss so it doesn't wastefully retry.
         const errMsg = error.message || '';
         const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Acceso denegado \(SSRF\)|Protocolo '|more than \d+ redirects/i.test(errMsg);
+        log.error({ err: error, traceId, contentId, attempt, retryable: !isNonRetryable }, 'Ingestion failed');
         await recordStage({
           ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, ok: false, errorKind: errorKindOf(error),
           attrs: { source: isYouTubeUrl(url) ? 'youtube' : 'web', retryable: !isNonRetryable },
@@ -250,5 +251,5 @@ export const setupIngestionWorker = async () => {
       }
     }
   });
-  console.log(`Worker successfully registered for ${QUEUE_NAME} with ID: ${workerId}`);
+  log.info({ queue: QUEUE_NAME, workerId }, 'Worker registered');
 };

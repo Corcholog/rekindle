@@ -9,6 +9,9 @@ import { sharedAiProvider } from '../ai/aiProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
 import { PROJECT_DIR_NAMES, env } from '../config';
 import { isLoomGeneratedFile } from './generatedNotes';
+import { getLogger, pathKey } from '../observability/logger';
+
+const log = getLogger('reconciler');
 
 const ollama = sharedAiProvider;
 const activeProjectReconciliations = new Set<string>();
@@ -48,7 +51,7 @@ async function getProjectMarkdownFiles(projectPath: string): Promise<{ fullPath:
 export async function reconcileProject(projectPath: string, vaultPath: string, force = false): Promise<void> {
   const normalizedPath = path.resolve(projectPath);
   if (activeProjectReconciliations.has(normalizedPath)) {
-    console.log(`[Reconciler] Project ${normalizedPath} is already being reconciled. Queuing follow-up pass.`);
+    log.info({ project: pathKey(normalizedPath) }, 'Reconciliation already running; queued a follow-up pass');
     pendingProjectReconciliations.add(normalizedPath);
     return;
   }
@@ -124,7 +127,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         }
       }
     } catch (error) {
-      console.error(`Error reading project directory ${projectPath}:`, error);
+      log.error({ err: error, project: pathKey(normalizedPath) }, 'Reading the project folder failed');
       return;
     }
 
@@ -162,7 +165,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
           });
         }
       } catch (err) {
-        console.warn(`[Reconciler] Failed generating note-level embedding for ${note.notePath}:`, err);
+        log.warn({ err, project: pathKey(normalizedPath), note: pathKey(note.notePath) }, 'Note embedding failed');
       }
     }
 
@@ -172,12 +175,12 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
     try {
       embedding = await ollama.getEmbedding(fullTextForEmbedding);
     } catch (error) {
-      console.error(`Failed to generate embedding for project ${title}:`, error);
+      log.error({ err: error, project: pathKey(normalizedPath) }, 'Project embedding failed');
     }
 
     // If embedding failed, do NOT persist currentHash so next reconcile will retry
     if (embedding.length === 0) {
-      console.warn(`[Reconciler] Embedding generation failed for project "${title}". Skipping snapshot/hash persistence to retry on next cycle.`);
+      log.warn({ project: pathKey(normalizedPath) }, 'No project embedding; snapshot not saved, will retry on the next change');
       return;
     }
 
@@ -233,16 +236,16 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
     try {
       await enqueueProjectBacklogEvaluations(projectId);
     } catch (err) {
-      console.error(`[Reconciler] Backlog evaluation error for project ${projectId}:`, err);
+      log.error({ err, projectId }, 'Enqueueing backlog evaluations failed');
     }
 
-    console.log(`[Reconciler] Project synchronized: ${title} (${relativePath}) with ${noteTitles.length} notes`);
+    log.info({ projectId, notes: noteTitles.length }, 'Project synchronized');
   } finally {
     activeProjectReconciliations.delete(normalizedPath);
     if (pendingProjectReconciliations.delete(normalizedPath)) {
       setImmediate(() => {
         reconcileProject(projectPath, vaultPath, force).catch(err => {
-          console.error(`[Reconciler] Error in queued follow-up reconciliation for ${normalizedPath}:`, err);
+          log.error({ err, project: pathKey(normalizedPath) }, 'Follow-up reconciliation failed');
         });
       });
     }
@@ -264,7 +267,7 @@ export async function bootReconcile(vaultPath: string, force = false): Promise<v
       }
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
-        console.error(`Error scanning ${targetPath}:`, err);
+        log.error({ err, folder: dirName }, 'Scanning the projects folder failed');
       }
     }
   }
@@ -304,7 +307,7 @@ export async function reconcileAllProjects(vaultPath: string, force = false): Pr
       try {
         await enqueueProjectBacklogEvaluations(proj.id);
       } catch (err) {
-        console.error(`[Reconciler] Backlog evaluation error on reactivating project ${proj.id}:`, err);
+        log.error({ err, projectId: proj.id }, 'Enqueueing backlog evaluations for a reactivated project failed');
       }
     }
 

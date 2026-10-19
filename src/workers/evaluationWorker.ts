@@ -1,5 +1,8 @@
 import { boss } from '../queue';
 import { evaluateContentMatch } from '../evaluator';
+import { getLogger } from '../observability/logger';
+
+const log = getLogger('evaluation-worker');
 
 const QUEUE_NAME = 'evaluate_content';
 
@@ -21,11 +24,11 @@ export const setupEvaluationWorker = async () => {
       try {
         await evaluateContentMatch(contentId, targetProjectId, {}, { traceId, attempt });
       } catch (error) {
-        console.error(`[EvaluationWorker] Failed evaluation for content ${contentId}:`, error);
+        log.error({ err: error, contentId, traceId, attempt }, 'Evaluation job failed');
         throw error;
       }
     }
   });
   
-  console.log(`Worker successfully registered for ${QUEUE_NAME} with ID: ${workerId}`);
+  log.info({ queue: QUEUE_NAME, workerId }, 'Worker registered');
 };

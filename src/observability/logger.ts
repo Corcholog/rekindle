@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import pino from 'pino';
 
 // Structured logger for the whole server (Phase 4). Log calls carry IDs, counts, lengths and
@@ -41,6 +42,11 @@ export function sanitizeLogObject(value: unknown, depth = 0): unknown {
     out[key] = SENSITIVE_KEYS.has(key.toLowerCase()) ? REDACTED : sanitizeLogObject(v, depth + 1);
   }
   return out;
+}
+
+/** Stable short key for a file or folder path, to correlate log lines without printing names. */
+export function pathKey(p: string): string {
+  return createHash('sha256').update(p).digest('hex').slice(0, 10);
 }
 
 export interface LogSink { write(line: string): void }
