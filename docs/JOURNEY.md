@@ -108,6 +108,23 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - node-postgres sends a JS `Date` in raw SQL as local time, while `timestamp` columns hold UTC (drizzle and `now()`). On this UTC−3 machine the report's time window would have been shifted by three hours. Caught while writing the report; time filters are sent as UTC ISO strings. No other raw SQL in `src/` passes a `Date`.
   - Partly closes audit F-09: evaluator LLM failures are now recorded, though still not retried. Closes F-27 (`console` logging without correlation).
 
+### 2026-10-18 — Phase 5: CI, failure-scenario tests and a threat model
+- **Context:** Four test files needed a live Ollama, so CI would have been red without one. The eight failure scenarios from the audit had no tests. Prompt injection (F-12), unvalidated target notes (F-13) and swallowed evaluation failures (F-09) were open, and there was no GitHub remote.
+- **What happened:**
+  - `tests/helpers/fakeAi.ts` stands in for the models through `AiProvider.setOverrides()`: a hashed bag-of-words embedder (deterministic; texts that share words are close) and a scripted LLM. Under Vitest `OLLAMA_URL` points at a closed port like `DATABASE_URL`, so the suite runs the same on a laptop with Ollama and on CI without it; live Ollama checks moved behind `LOOM_LIVE_TESTS=1`.
+  - The owner created a **private** GitHub repo (public after Phase 7) and renamed `master` to `main`. CI runs typecheck, lint, the full suite (Testcontainers on the runner's Docker) and `pnpm audit --prod` on every push, with Actions pinned to commit SHAs; it passed on GitHub. `@fastify/static` 8 → 10 cleared the production advisories.
+  - Each audit failure scenario has a test (mapping in `docs/THREAT_MODEL.md`). Writing them found and fixed: F-09 (a failed project evaluation now fails the job, so pg-boss retries it with backoff), F-12 (untrusted text delimited and tag-neutralized in all 14 prompt blocks, plus a data-not-instructions rule on every system prompt), F-13 (target notes must exist in the project; `LIKE` wildcards escaped), and the two bugs in the table below.
+  - A review of the 28 `innerHTML` sinks in the web UI found them escaped; `tests/ui_xss.test.ts` now proves it by running the real page against the real API with hostile data.
+  - `docs/THREAT_MODEL.md`: assets, untrusted inputs, 16 threats each with its mitigation, code and test, and residual risks.
+- **Owner decisions:** add the GitHub remote now (private until Phase 7), keep the Gmail author address (no history rewrite), rename the branch to `main`, leave the anime fixture note as is, and show permanent evaluation failures in telemetry only (no UI change).
+- **Alternatives considered:** a pgvector service container in CI instead of Testcontainers (the tests already start their own databases, and the runner has Docker); changing the queue policy so `singletonKey` de-duplicates (a queue's policy cannot be changed in place, and the owner's database already has the queues; idempotent handlers already make duplicates harmless); a UI marker for failed evaluations (owner chose telemetry only).
+- **Evidence:** commits `50b52ea`…`072b7fc`; CI runs on GitHub; `tests/failure_*.test.ts`, `tests/ui_xss.test.ts`, `docs/THREAT_MODEL.md`.
+- **Outcome / lesson:**
+  - **Writing failure tests found real bugs.** An interrupted job could leave an actionable evaluation without its suggestion, and every retry then skipped the pair, so the suggestion was lost for good; the two rows are now written in one transaction. The `singletonKey` options on every job send never de-duplicated anything on pg-boss standard-policy queues (checked against a real instance) and were removed.
+  - Each fix was checked by mutation: the interrupted-write test fails on the old evaluator, the `LIKE` test fails without escaping, and the UI test fails if one field loses its escaping.
+  - **The prompt change has an eval cost.** Recorded answers are keyed by the exact prompt, so the private Phase 3 recordings no longer replay at the current commit, and the published eval numbers describe the earlier prompts. Before changing the prompts, a free replay measured the target-note validation alone: Gemini's target-note accuracy went from 7/19 to 9/19 (invented paths now fall back to the retrieved note); DeepSeek, Qwen and every verdict metric were unchanged. Re-measuring with the new prompts needs a paid DeepSeek run and has not been done.
+  - Production advisories went from 4 (1 high, 3 moderate, all in `@fastify/static`) to 0 (`pnpm audit --prod`).
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -125,7 +142,13 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | F-22 | Docker Postgres published on all interfaces with the default password | Phase 0 audit | Medium | `c1d543a` | not testable in the suite (config); verified with `docker compose config` |
 | F-26 | 500 responses returned internal error text (provider errors, hosts) | Phase 0 audit | Low | `38f49dd` | `tests/error_responses.test.ts` |
 | F-27 | Logs printed article URLs, project titles, note paths and raw error objects, with no way to correlate lines of one job | Phase 0 audit | Low | `b4e2fd8`, `5c5013c`, `72e6cc8` | `tests/logger_redaction.test.ts`, `tests/pipeline_trace.test.ts` |
-| F-09 (partial) | Evaluator LLM failures were swallowed with no telemetry (still not retried) | Phase 0 audit | Medium | `599685c`, `72e6cc8` | `tests/pipeline_trace.test.ts` (failure path), `tests/llm_telemetry.test.ts` |
+| F-09 | Evaluator LLM failures were swallowed: no telemetry (fixed in Phase 4) and no retry (fixed in Phase 5) | Phase 0 audit | Medium | `599685c`, `72e6cc8`, `ff2f275` | `tests/failure_evaluation.test.ts`, `tests/pipeline_trace.test.ts` |
+| F-12 | Untrusted text pasted into prompts inside unescaped tags; no rule that delimited content is data | Phase 0 audit | Medium | `da9b686` | `tests/failure_injection.test.ts` |
+| F-13 | Model-written `targetFile` stored unvalidated and used as a `LIKE` pattern in staleness checks | Phase 0 audit | Medium | `d3d2955` | `tests/failure_target_path.test.ts` |
+| F-23 | Four test files needed a live Ollama; no fake provider | Phase 0 audit | Medium | `c88d93c` | the whole suite passes with `OLLAMA_URL` on a closed port (CI) |
+| F-24 | Production dependency `@fastify/static` 8 had one high and three moderate advisories | Phase 0 audit | Low | `50b52ea` | `pnpm audit --prod --audit-level high` in CI |
+| — | An interrupted evaluation could leave an actionable evaluation without its suggestion; every retry skipped the pair | Writing failure scenario 3 | Medium | `7beb8f3` | `tests/failure_jobs.test.ts` (fails on the old code) |
+| — | `singletonKey` on job sends never de-duplicated (pg-boss standard-policy queues); duplicates were harmless only because handlers are idempotent | Checked while writing scenario 3 | Low | `ff2f275` | `tests/failure_jobs.test.ts` (duplicate and concurrent runs) |
 | — | A test could bind the DB pool to the development database by importing `src/db` before stubbing its container URL; it did once (3 fake rows, deleted by the owner) | Full test run after adding the guard | Medium (process) | `0efbec4` | every DB test now fails against the closed default port if it forgets the stub |
 
 ## Dead code and legacy removed
@@ -165,6 +188,10 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-18 | DeepSeek spend | Estimated list-price cost, 215 triage calls | not measured | about $0.18 (summaries about $0.06 more) | token counts in the result files; not a billed amount |
 | 2026-10-18 | Phase 3 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 123 / 1 | 186 / 2 | `pnpm test:coverage`; lines 84.06% → 85.28% |
 | 2026-10-18 | Phase 4 tests | Tests passed / skipped, hermetic (live Ollama, no cloud keys) | 186 / 2 | 210 / 2 | `pnpm test:coverage`; lines 85.28% → 86.44% (branches 71.84%, functions 84.53%) |
+| 2026-10-18 | Phase 5 tests | Tests passed / skipped / line coverage | 210 / 2 / 86.44% (with live Ollama) | 241 / 4 / 88.37% (no Ollama, no keys; branches 74.89%, functions 86.55%) | `pnpm test:coverage`; the skipped tests are the opt-in live checks |
+| 2026-10-18 | Phase 5 | Test files that need a live model (without `LOOM_LIVE_TESTS`) | 5 (`evaluation`, `ingestion`, `phase7_ui`, `settings_vault`, `ollama`) | 0 | `OLLAMA_URL=http://127.0.0.1:9 pnpm test` |
+| 2026-10-18 | Phase 5 | Production dependency advisories | 4 (1 high, 3 moderate) | 0 | `pnpm audit --prod` |
+| 2026-10-18 | Target-note validation (replay, top-3 configs) | Target-note accuracy, Gemini / DeepSeek / Qwen | 7/19 / 8/19 / 6/19 | 9/19 / 8/19 / 6/19 | `pnpm eval run evals/private --config evals/configs/<config>-top3.json --replay` at `d3d2955`; result files `*d3d2955*` |
 | 2026-10-18 | Phase 4 | LLM calls with telemetry (of 6 call sites) / attempts recorded on failure | 1 (triage, success only) / no | 6 / yes | `grep -n "component: '" src`; `tests/llm_telemetry.test.ts` |
 | 2026-10-17 | Phase 2 fixes | `tests/full_e2e.test.ts` with the Gemini key set | 1 / 0 / 0 | 1 / 0 / 0, served by Ollama after two Gemini HTTP 503 responses | `pnpm vitest run tests/full_e2e.test.ts` |
 

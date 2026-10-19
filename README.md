@@ -1,5 +1,7 @@
 # Loom
 
+[![CI](https://github.com/Corcholog/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/Corcholog/loom/actions/workflows/ci.yml)
+
 Loom is a **local-first** assistant that connects what you read with what you write. You keep your writing projects as Markdown notes in an Obsidian vault; you clip web articles or YouTube videos into Loom; Loom summarises them, compares them semantically against your active projects and individual notes, and proposes concrete actions ("cite this in Act 2", "counter-argument for combat mechanics"). Only the suggestions **you accept** are written back to your vault.
 
 > The product UI, AI prompts and generated text are in **Spanish**. Code and developer documentation are in English.
@@ -136,9 +138,9 @@ With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), t
 |---|---|
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint (`@typescript-eslint`) |
-| `pnpm test` | Vitest. Offline unit tests run instantly; integration tests need Docker, and most also need Ollama with both models. |
+| `pnpm test` | Vitest. Needs Docker: integration tests start throwaway pgvector databases with Testcontainers. No Ollama or API key is needed: a deterministic fake stands in for the models. CI runs this on every push. |
 | `pnpm test:coverage` | Same, with v8 coverage for `src/` |
-| `LOOM_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a cloud LLM |
+| `LOOM_LIVE_TESTS=1 pnpm test` | Also runs the opt-in live checks against local Ollama and the real DeepSeek and Gemini APIs (keys from `.env`); by default tests never reach a model |
 | `pnpm exec vitest run tests/parser.test.ts tests/youtube_ingest.test.ts` | Offline unit tests only |
 | `pnpm run db:generate` | Generate a Drizzle migration after editing `src/db/schema.ts` |
 | `pnpm run db:migrate` | Apply migrations |
@@ -179,6 +181,7 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **In-depth technical reference**: Architecture, data model, pipelines, API, configuration, and design |
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
+| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, untrusted inputs, each mitigation and the test that proves it, residual risks |
 | [docs/JOURNEY.md](docs/JOURNEY.md) | Build log: decisions, dead ends, bugs found and fixed |
 
 ---
@@ -195,7 +198,7 @@ Full contracts, schemas, and semantics are in [docs/ARCHITECTURE.md](docs/ARCHIT
 | Latency p50 / p95 | 4.2 / 6.7 s | **2.1 / 4.1 s** | 3.4 / 7.6 s |
 | Cost of 215 triage calls | free tier (4 overloads retried) | about $0.18 at list price | $0 |
 
-DeepSeek leading is why the default chain is `deepseek,gemini,ollama`. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
+DeepSeek leading is why the default chain is `deepseek,gemini,ollama`. Since Phase 5 a suggestion can only name an existing note of its project; replaying the recorded answers (top-3 configs) with that check raises Gemini's target-note accuracy to 47% (9 of 19), while DeepSeek and Qwen are unchanged. These numbers come from a small, single-labeler dataset: treat gaps of a few points as noise. Retrieval at the 0.6 distance threshold finds 91% of the relevant projects but lets 94% of unrelated articles through (precision@3 55%). Suggestion quality (usefulness, actionability) is **not measured**.
 
 ## Observability
 
@@ -208,13 +211,17 @@ Loom is a single-user, local-only tool:
 - **Network:** the API has no login. It only binds to loopback (`HOST` must be `127.0.0.1`, `localhost` or `::1`), and it rejects requests addressed to any other host name, which blocks DNS rebinding. It also rejects state-changing requests from other web origins. The browser extension may only call `/api/ingest`.
 - **Your vault:** Loom writes only when you act. **Aceptar** appends a callout to `<project>/suggestions.md`; **Guardar en Obsidian** saves a synergy note or research brief as a new file and never overwrites one. Model text is sanitized first: code blocks, embeds, HTML and fake callouts are neutralized.
 - **Ingestion:** only public `http(s)` pages are fetched. Every resolved IP address and every redirect is checked, and pages are capped at 5 MB.
+- **Prompt injection:** pages and notes are untrusted. Their text is delimited so it cannot break out of its block, every prompt says delimited text is data, and the limits that matter are enforced in code: a suggestion can only point at an existing note of its project, and nothing reaches the vault unless you accept it, sanitized.
+
+The full list of threats, mitigations, tests and residual risks is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Known limitations
 
 - **The 0.6 distance threshold barely filters.** On the evaluation set 94% of unrelated articles still retrieved a project, so every article costs about 4.6 LLM calls. [`evals/SWEEP.md`](evals/SWEEP.md) compares cutoffs: only the 3 closest projects now reach the LLM (`TOP_K_PROJECTS_LIMIT = 3`), which cut calls by 45% and keeps 86% of the relevant pairs, but 1 in 8 relevant pairs is never evaluated.
-- **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.18–0.38 and the right target note is chosen in 32–42% of cases (small samples: 20 and 19 pairs).
+- **Tentative and target-note judgements are weak for every model tried.** `tentative` F1 is 0.18–0.38 and the right target note is chosen in 32–47% of cases (small samples: 20 and 19 pairs).
+- **The evaluation numbers predate the Phase 5 prompt changes.** Every prompt gained injection defenses in Phase 5; the private set has not been re-run since, so the table above describes the earlier prompts.
 - **Suggestion quality (usefulness, actionability) is not measured.** Only verdicts and target notes are scored, against one person's labels.
-- **Evaluation errors are not retried.** If the LLM fails while evaluating an article for a project, the failure is recorded (`telemetry:report` shows it) and that pair is skipped until the project changes.
+- **A failed evaluation is invisible in the UI.** If the LLM fails while evaluating an article for a project, the job is retried three times (after 30 s, 60 s and 120 s); after that the pair waits until the project changes. Only `pnpm telemetry:report` shows the failure.
 - **The Consultor sends your whole library in one prompt.** Large libraries can exceed the local model's context window.
 - **Synergies may include deleted notes**, because they compare notes from older project snapshots too.
 - **The extension can send a queued clip twice** when two sync triggers fire at once. Re-ingesting is harmless; it no longer creates duplicate suggestions.

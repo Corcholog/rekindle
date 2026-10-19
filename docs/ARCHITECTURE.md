@@ -537,10 +537,10 @@ For each candidate project under the 0.6 cutoff:
      }).nullable(),
    });
    ```
-3. **Target File Resolution**: If the LLM specifies `targetFile`, it is stored as-is (not validated against the project's notes); otherwise it falls back to `matchedNotePath`, or finally `ideas.md`.
+3. **Target File Resolution** (`targetFile.ts`): the LLM's `targetFile` is kept only if it names one of the snapshot's notes (exact path, path plus `.md`, or a file name only one note has); anything else, including paths outside the project, falls back to `matchedNotePath`, then `ideas.md`. Re-evaluation refinements go through the same check.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Loom automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
-5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`).
-6. **Failure handling** — **Known issue:** an LLM error for one project is skipped and the job still completes, so it is not retried. The failure is recorded (a failed `evaluate` event, the failed LLM attempts, and `failures` on the `evaluate_job` event), so `telemetry:report` shows it.
+5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`; a concurrent duplicate hits the unique index and is skipped. An evaluation and its suggestion are written in one transaction, so an interrupted job leaves neither. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`). The pg-boss queues use the standard policy, where `singletonKey` does not de-duplicate, so duplicate jobs rely on this idempotency.
+6. **Failure handling**: an LLM error for one project is recorded (a failed `evaluate` event, the failed LLM attempts, `failures` on the `evaluate_job` event), the other projects are still evaluated, and then the worker fails the job so pg-boss retries it (3 retries, backoff from 30 s). Projects already evaluated are skipped on retry. After the last retry the job stays failed and the pair waits for a backlog run; the UI does not show it, `telemetry:report` does.
 7. **Embedding model**: only embeddings produced by the current `EMBED_MODEL` are compared; contents and snapshots from another model are skipped until re-embedded (invariant I7).
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
@@ -686,7 +686,7 @@ The Loom frontend is a responsive single-page application built with modern vani
   - Extension Guide Modal (how to load the Manifest V3 clipper).
   - Synergy Bridge Modal (cross-project bridge note, written to the vault).
   - Synthesis Result Modal (research brief summary and next steps).
-- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only).
+- All server and LLM text is HTML-escaped before rendering (`escapeHtml`); links go through `safeUrl` (http/https only). `tests/ui_xss.test.ts` runs the real page against the real API with hostile data.
 
 ---
 
@@ -717,7 +717,7 @@ pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline
   - `tests/vault_sanitize.test.ts`, `tests/generated_notes.test.ts`, `tests/env_writer.test.ts`: vault-write sanitization, generated notes, `.env` writer.
   - `tests/invariants.test.ts`: invariants I2, I3 and I4 with mocked LLM SDKs.
   - `tests/logger_redaction.test.ts`: the structured logger censors text-like fields and error messages.
-- **Integration Tests (Require Docker / Testcontainers; most also need a local Ollama with `bge-m3` and `qwen2.5:7b-instruct`)**:
+- **Integration Tests (Require Docker / Testcontainers; no Ollama or API key: `tests/helpers/fakeAi.ts` provides deterministic embeddings and scripted answers through `AiProvider.setOverrides()`)**:
   - `tests/db.test.ts`: Database schema validation, pgvector HNSW cosine KNN operations.
   - `tests/evaluation.test.ts` & `tests/ingestion.test.ts`: Worker pipeline tests.
   - `tests/phase6_lifecycle.test.ts` & `tests/phase7_ui.test.ts`: API route tests via Fastify `inject`.
@@ -726,11 +726,14 @@ pnpm telemetry:prune --older-than 90d   # Delete old telemetry rows and pipeline
   - `tests/writeback_recovery.test.ts`, `tests/tentative_accept_race.test.ts`: crash-safe, single-callout writeback (I5).
   - `tests/reingest_idempotency.test.ts`, `tests/embedding_model.test.ts`: invariants I6 and I7.
   - `tests/error_responses.test.ts`: 500 responses do not leak internal errors.
-  - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks.
+  - `tests/ollama.test.ts`: Live Ollama embedding and structured-output checks. Opt-in (`LOOM_LIVE_TESTS=1`).
+  - `tests/failure_evaluation.test.ts`, `tests/failure_jobs.test.ts`, `tests/failure_reconcile.test.ts`, `tests/failure_injection.test.ts`, `tests/failure_target_path.test.ts`: the audit's failure scenarios (invalid output and timeouts, every provider failing, duplicate and interrupted jobs, a note edited mid-reconcile, prompt injection, target paths outside the project); scenario 5 is in `writeback_recovery`, scenario 7 in `safe_fetch`. Mapping in `docs/THREAT_MODEL.md`.
+  - `tests/ui_xss.test.ts`: the real web UI in jsdom against the real API with hostile titles, notes and model output.
   - `tests/full_e2e.test.ts`: Full end-to-end flow from URL ingestion to Obsidian writeback. Opt-in live check (`LOOM_LIVE_TESTS=1`); skipped otherwise.
   - `tests/pipeline_trace.test.ts`: Phase 4 acceptance. The real ingest route, queue and workers with stubbed models and fetch: one trace links a suggestion to its content and retrieval event, and a sentinel planted in notes, articles, model output, error messages and URLs never reaches the logs or the telemetry tables.
   - `tests/observability_schema.test.ts`, `tests/llm_telemetry.test.ts`, `tests/telemetry_report.test.ts`: migration 0006, per-attempt telemetry rows, and the report math on hand-built rows.
-- Under Vitest the default `DATABASE_URL` points at a closed port and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`.
+- Under Vitest the default `DATABASE_URL` and `OLLAMA_URL` point at closed ports and the cloud keys are blank (`vitest.config.ts`): a test must stub its Testcontainers URL before importing anything that reaches `src/db`, and no test reaches a model unless `LOOM_LIVE_TESTS=1`.
+- **CI** (`.github/workflows/ci.yml`): on every push and pull request, frozen-lockfile install, typecheck, lint, the full suite and `pnpm audit --prod --audit-level high`, on Node 22 with Actions pinned to commit SHAs.
 
 ---
 
@@ -757,4 +760,5 @@ Model behavior is measured from IDs, counts, lengths, hashes and durations; note
 | **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 15,000 chars) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus notes for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
 | **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
 | **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
+| **Prompt injection** | Untrusted text (pages, transcripts, summaries, notes, earlier suggestions, queries) is wrapped by `promptBlock` (`src/ai/promptSafety.ts`), which neutralizes tag-like sequences; `AiProvider` appends a rule to every system prompt that delimited content is data. Code-side limits (sanitized writes on accept only, validated target notes) are the real boundary. See `docs/THREAT_MODEL.md`. | Measure how often injected pages change verdicts (not measured). |
 | **Multi-Vault Support** | Loom operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |
