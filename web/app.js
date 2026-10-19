@@ -472,7 +472,7 @@ function setupLibrarySearchAndAsk() {
                     </div>
                     <div class="match-card-actions">
                       <button type="button" class="btn-text-action btn-view-library-detail" data-id="${escapeHtml(item.id)}">Ver ficha</button>
-                      <a href="${escapeHtml(item.uri)}" target="_blank" rel="noopener" class="source-link">Abrir original ↗</a>
+                      <a href="${safeUrl(item.uri)}" target="_blank" rel="noopener" class="source-link">Abrir original ↗</a>
                     </div>
                   </div>
                   <h4 class="match-card-title">${escapeHtml(item.title || item.uri)}</h4>
