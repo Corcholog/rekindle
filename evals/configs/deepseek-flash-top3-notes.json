@@ -1,0 +1,25 @@
+{
+  "name": "deepseek-flash-top3-notes",
+  "description": "Same as deepseek-flash-top3, measured after the notes context change (2026-10-21): every note's path in the prompt, whole notes within 60,000 characters, the closest note as a hint, and a target note that may be any listed note or a proposed new one. The prompts differ, so it does not replay the top-3 cache.",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3
+}

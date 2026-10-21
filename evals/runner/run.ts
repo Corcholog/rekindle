@@ -10,7 +10,7 @@ import { JsonCache, RecordedCall, roundVector, sha256 } from './cache';
 import { buildChainFromSpecs } from './chainSpec';
 import { effectiveVerdict, loadDataset, validateLabels } from './dataset';
 import { estimateCostUsd, percentile } from './metrics';
-import { predictionsFromDetails, scoreRun } from './scoring';
+import { predictionsFromDetails, scoreRun, targetNoteStats } from './scoring';
 
 export type RunMode = 'live' | 'record' | 'replay';
 
@@ -254,6 +254,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const projectBySnapshot = new Map(snapshotRows.map(s => [s.id, s.projectId]));
     const suggestionRows = await db.select({
       contentId: schema.actionSuggestions.contentId, projectId: schema.actionSuggestions.projectId, targetFile: schema.actionSuggestions.targetFile,
+      targetIsNew: schema.actionSuggestions.targetIsNew,
       actionType: schema.actionSuggestions.actionType, observation: schema.actionSuggestions.observation,
       suggestedAction: schema.actionSuggestions.suggestedAction,
     }).from(schema.actionSuggestions).where(inArray(schema.actionSuggestions.contentId, [...contentIdByArticle.values()]));
@@ -270,7 +271,10 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         confidence: row.confidence,
         reasoning: row.reasoning,
         action: suggestion
-          ? { type: suggestion.actionType, observation: suggestion.observation, suggestedAction: suggestion.suggestedAction, targetFile: suggestion.targetFile }
+          ? {
+            type: suggestion.actionType, observation: suggestion.observation, suggestedAction: suggestion.suggestedAction,
+            targetFile: suggestion.targetFile, targetIsNew: suggestion.targetIsNew,
+          }
           : null,
       };
     }
@@ -312,7 +316,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         ...(config.languages ? { languages } : {}),
       },
       retrieval: { ...score.retrieval, threshold: config.threshold },
-      triage: score.triage,
+      triage: { ...score.triage, targetNotes: targetNoteStats(details) },
       reliability: {
         llmCalls: triageEntries.length,
         attempts: triageEntries.reduce((s, e) => s + e.attempts.length, 0),

@@ -1,0 +1,24 @@
+{
+  "name": "qwen-local-top3-notes",
+  "description": "Same as qwen-local-top3, measured after the notes context change (2026-10-21); see deepseek-flash-top3-notes. Local only, no cost.",
+  "providers": [
+    {
+      "name": "ollama"
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "outputPerM": 1.2
+    }
+  },
+  "maxProjects": 3
+}

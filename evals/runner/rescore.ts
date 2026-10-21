@@ -4,7 +4,7 @@ import * as path from 'path';
 import { EvalResult, ResultSchema } from '../schema';
 import { effectiveVerdict, loadDataset, loadRuns } from './dataset';
 import { latestPerConfig, loadResults } from './report';
-import { predictionsFromDetails, scoreRun } from './scoring';
+import { predictionsFromDetails, scoreRun, targetNoteStats } from './scoring';
 
 export interface RescoreOptions {
   datasetDir: string;
@@ -61,7 +61,7 @@ export async function rescoreRuns(options: RescoreOptions): Promise<string[]> {
         startedAt,
       },
       retrieval: { ...score.retrieval, threshold: previous.retrieval.threshold },
-      triage: score.triage,
+      triage: { ...score.triage, targetNotes: targetNoteStats(details) },
     });
 
     const file = path.join(resultsDir, `${startedAt.replace(/[:.]/g, '-')}-${gitSha}-${name}-${datasetName}.json`);

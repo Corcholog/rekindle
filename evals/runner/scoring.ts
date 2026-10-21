@@ -97,3 +97,23 @@ export function predictionsFromDetails(details: RunDetails): Record<string, Arti
     },
   ]));
 }
+
+/**
+ * Where a run's suggestions point, without labels: actions whose note is not the one retrieval found
+ * closest for that project, and actions proposing a new note.
+ */
+export function targetNoteStats(details: RunDetails): { actions: number; notClosestNote: number; newNotes: number } {
+  let actions = 0;
+  let notClosestNote = 0;
+  let newNotes = 0;
+  for (const article of Object.values(details.articles)) {
+    for (const [project, pair] of Object.entries(article.pairs)) {
+      if (!pair.action) continue;
+      actions++;
+      if (pair.action.targetIsNew) newNotes++;
+      const closest = article.retrieval.find(r => r.project === project)?.note ?? null;
+      if (pair.action.targetFile !== closest) notClosestNote++;
+    }
+  }
+  return { actions, notClosestNote, newNotes };
+}

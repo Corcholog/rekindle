@@ -67,3 +67,35 @@ describe('scoreRun', () => {
     expect(score.triage.confusion.actionable).toEqual({ actionable: 0, tentative: 0, irrelevant: 1 });
   });
 });
+
+describe('targetNoteStats', () => {
+  it('counts actions away from the closest note and proposed new notes, from the detail file alone', async () => {
+    const { targetNoteStats } = await import('../evals/runner/scoring');
+    const action = (targetFile: string, targetIsNew?: boolean) => ({ type: 'evidence_citation', observation: 'o', suggestedAction: 's', targetFile, targetIsNew });
+    const pair = (a: ReturnType<typeof action> | null) => ({ verdict: a ? 'actionable' as const : 'tentative' as const, confidence: 0.8, reasoning: 'r', action: a });
+    const details = {
+      config: 'c', configHash: 'h', generatedAt: '', k: 3, threshold: 0.6,
+      articles: {
+        a1: {
+          summary: 's',
+          retrieval: [
+            { project: 'Projects/A', distance: 0.3, level: 'note' as const, note: 'a.md' },
+            { project: 'Projects/B', distance: 0.4, level: 'note' as const, note: 'b.md' },
+            { project: 'Projects/C', distance: 0.5, level: 'project' as const, note: null },
+          ],
+          pairs: {
+            'Projects/A': pair(action('a.md')), // the closest note
+            'Projects/B': pair(action('research/otra.md')), // another existing note
+            'Projects/C': pair(null), // no action
+          },
+        },
+        a2: {
+          summary: 's',
+          retrieval: [{ project: 'Projects/A', distance: 0.3, level: 'note' as const, note: 'a.md' }],
+          pairs: { 'Projects/A': pair(action('nueva.md', true)) }, // a new note; recorded before the flag existed, it would read false
+        },
+      },
+    };
+    expect(targetNoteStats(details as any)).toEqual({ actions: 3, notClosestNote: 2, newNotes: 1 });
+  });
+});

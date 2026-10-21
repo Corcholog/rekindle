@@ -63,7 +63,7 @@ describe('eval harness replay', () => {
   it('keeps a detail file whose re-scoring reproduces the run exactly', async () => {
     const { result, detailsFile } = await replay();
     const { RunDetailsSchema } = await import('../evals/schema');
-    const { scoreRun, predictionsFromDetails } = await import('../evals/runner/scoring');
+    const { scoreRun, predictionsFromDetails, targetNoteStats } = await import('../evals/runner/scoring');
     const { loadDataset } = await import('../evals/runner/dataset');
 
     const details = RunDetailsSchema.parse(JSON.parse(await fs.readFile(detailsFile, 'utf-8')));
@@ -74,7 +74,8 @@ describe('eval harness replay', () => {
       predictions: predictionsFromDetails(details), k: details.k,
     });
 
-    expect(rescored.triage).toEqual(result.triage);
+    expect({ ...rescored.triage, targetNotes: targetNoteStats(details) }).toEqual(result.triage);
+    expect(result.triage.targetNotes).toMatchObject({ actions: 2 });
     expect(rescored.retrieval).toMatchObject({ precisionAtK: result.retrieval.precisionAtK, recallAtK: result.retrieval.recallAtK });
     // The page needs the models' reasons, the summaries and the retrieval distances
     const article = details.articles['muerte-anime'];

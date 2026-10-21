@@ -67,6 +67,14 @@ export function renderReport(results: EvalResult[]): string {
       const f1 = (c: string) => pct(r.triage.perClass[c]?.f1 ?? null);
       out.push(`| ${r.meta.config} | ${mode(r)} | ${pct(r.retrieval.precisionAtK)} | ${pct(r.retrieval.recallAtK)} | ${pct(r.retrieval.falseRetrievalRate)} | ${pct(r.triage.macroF1)} | ${f1('actionable')} | ${f1('tentative')} | ${f1('irrelevant')} | ${connection(r)} |`);
     }
+    out.push('', '### Where suggestions point', '');
+    out.push('Counted without labels: whether the chosen note is the right one is **not measured**.', '');
+    out.push('| Config | Actions | Not the closest note | New note proposed |');
+    out.push('|---|---|---|---|');
+    for (const r of rows) {
+      const t = r.triage.targetNotes;
+      out.push(t ? `| ${r.meta.config} | ${t.actions} | ${t.notClosestNote} | ${t.newNotes} |` : `| ${r.meta.config} | not measured | not measured | not measured |`);
+    }
     out.push('', '### Reliability, latency and cost', '');
     out.push('| Config | LLM calls | Malformed outputs | Fallbacks | Failures | Rate limits / 5xx (waited) | p50 ms | p95 ms | Tokens in / out | Tokens per triage call | Est. USD |');
     out.push('|---|---|---|---|---|---|---|---|---|---|---|');

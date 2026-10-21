@@ -109,6 +109,8 @@ export const PairDetailSchema = z.object({
     observation: z.string(),
     suggestedAction: z.string(),
     targetFile: z.string(),
+    /** The model proposed a new note. Absent before 2026-10-21. */
+    targetIsNew: z.boolean().optional(),
   }).nullable(),
 });
 
@@ -180,6 +182,11 @@ export const ResultSchema = z.object({
      */
     targetNoteAccuracy: NullableNumber.optional(),
     targetNoteCases: z.number().optional(),
+    /**
+     * Where suggestions point, counted without labels: whether the model picked a note other than
+     * the closest one, or proposed a new note. Whether the note is the right one is not measured.
+     */
+    targetNotes: z.object({ actions: z.number(), notClosestNote: z.number(), newNotes: z.number() }).optional(),
   }),
   reliability: z.object({
     llmCalls: z.number(),
