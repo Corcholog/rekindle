@@ -58,6 +58,14 @@ export interface Project {
   notesModifiedAt: string | null;
   idleDays: number | null;
   isDormant: boolean;
+  /** Notes Rekindle left out of the latest snapshot, or changed on the way in. */
+  noteIssues?: NoteIssue[];
+}
+
+export interface NoteIssue {
+  path: string;
+  reason: 'too_large' | 'binary' | 'cut' | 'binary_removed';
+  bytes: number;
 }
 
 export interface Suggestion {

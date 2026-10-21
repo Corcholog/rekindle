@@ -64,6 +64,7 @@ describe('Web UI renders untrusted text as text', () => {
       const [project] = await db.insert(schema.projects).values({ folderPath: `Projects/${name}`, title: `${name} ${XSS}` }).returning();
       const [snapshot] = await db.insert(schema.projectSnapshots).values({
         projectId: project.id, treeHash: name, thesisText: XSS, notesContent: XSS, embedding: vector, embeddingModel: 'bge-m3',
+        noteIssues: [{ path: `${XSS}.md`, reason: 'too_large', bytes: 14 * 1024 * 1024 }, { path: 'pegado.md', reason: 'binary_removed', bytes: 900 }],
       }).returning();
       await db.insert(schema.projectNoteSnapshots).values({
         projectSnapshotId: snapshot.id, projectId: project.id, notePath: `${XSS}.md`, noteTitle: `${XSS}${ATTR}`,
@@ -174,6 +175,12 @@ describe('Web UI renders untrusted text as text', () => {
         accepted.click();
         await waitFor(() => doc().getElementById('selected-project-title')?.textContent?.startsWith('Beta') ?? false, 'the linked project');
         await waitFor(() => !!doc().querySelector(`.suggestion-card.focused[data-content-id="${readyContentId}"]`), 'the linked card');
+        // Notes Rekindle left out are listed under the project, their paths as text
+        const issues = doc().querySelector('.note-issues')!;
+        expect(issues.textContent).toContain(lang === 'en' ? '2 notes Rekindle does not read in full' : '2 notas que Rekindle no lee enteras');
+        expect(issues.textContent).toContain(`${XSS}.md: ${lang === 'en' ? 'not read, too large (14.0 MB)' : 'no se leyó, demasiado grande (14.0 MB)'}`);
+        expect(issues.querySelectorAll('li')).toHaveLength(2);
+        expect(injected()).toEqual(clean);
         expect(doc().getElementById('tab-status-accepted')!.getAttribute('data-state')).toBe('active');
         expect(injected()).toEqual(clean);
 

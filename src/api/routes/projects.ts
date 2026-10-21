@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { db } from '../../db';
-import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents } from '../../db/schema';
+import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents, NoteIssue } from '../../db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
 import { env } from '../../config';
@@ -38,6 +38,12 @@ const ProjectItemSchema = z.object({
   idleDays: z.number().nullable(),
   /** Idle for DORMANT_AFTER_DAYS or more. */
   isDormant: z.boolean(),
+  /** Notes left out of the latest snapshot or changed on the way in (parser.ts), for a warning. */
+  noteIssues: z.array(z.object({
+    path: z.string(),
+    reason: z.enum(['too_large', 'binary', 'cut', 'binary_removed']),
+    bytes: z.number(),
+  })).optional(),
 });
 
 const ListProjectsQuerySchema = z.object({
@@ -196,24 +202,27 @@ export default async function (server: FastifyInstance) {
       note_titles: any;
       captured_at: string | null;
       notes_modified_at: Date | null;
+      note_issues: NoteIssue[] | null;
     }>(sql`
       SELECT DISTINCT ON (project_id)
         project_id,
         thesis_text,
         note_titles,
         captured_at,
-        notes_modified_at
+        notes_modified_at,
+        note_issues
       FROM project_snapshots
       WHERE project_id IN ${sql`(${sql.join(projectIds.map(id => sql`${id}`), sql`, `)})`}
       ORDER BY project_id, captured_at DESC
     `);
 
-    const snapshotMap = new Map<string, { thesisText: string | null; noteTitles: string[]; notesModifiedAt: Date | null }>();
+    const snapshotMap = new Map<string, { thesisText: string | null; noteTitles: string[]; notesModifiedAt: Date | null; noteIssues: NoteIssue[] }>();
     for (const r of snapshotRows.rows) {
       snapshotMap.set(r.project_id, {
         thesisText: r.thesis_text ?? null,
         noteTitles: Array.isArray(r.note_titles) ? r.note_titles : [],
         notesModifiedAt: r.notes_modified_at ? new Date(r.notes_modified_at) : null,
+        noteIssues: Array.isArray(r.note_issues) ? r.note_issues : [],
       });
     }
 
@@ -295,6 +304,7 @@ export default async function (server: FastifyInstance) {
         isActive: proj.isActive,
         thesisText: snap?.thesisText ?? null,
         noteTitles: snap?.noteTitles ?? [],
+        noteIssues: snap?.noteIssues ?? [],
         counts: {
           pending,
           accepted,

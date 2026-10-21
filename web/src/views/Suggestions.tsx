@@ -1,8 +1,8 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { BookMarked, ChevronDown, RefreshCcw, Sparkles, Loader2 } from 'lucide-react';
+import { BookMarked, ChevronDown, RefreshCcw, Sparkles, Loader2, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import { api, ApiError, type Project, type Suggestion, type SuggestionStatus, type Synergy } from '@/lib/api';
+import { api, ApiError, type NoteIssue, type Project, type Suggestion, type SuggestionStatus, type Synergy } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -175,6 +175,7 @@ export function Suggestions({ refreshKey, onChange, focus = null }: { refreshKey
                 {project.idleDays === null ? t('idle.unknown') : project.idleDays === 0 ? t('idle.active') : t('idle.days', { n: project.idleDays })}
               </p>
             )}
+            {project && <NoteIssues issues={project.noteIssues ?? []} />}
           </div>
           {project && (
             <Button id="btn-synthesize-project" size="sm" onClick={synthesize} title={t('triage.synthesizeTitle')}>
@@ -272,5 +273,25 @@ function ProjectButton({ active, onClick, title, count, meter }: { active: boole
       {meter}
       {count > 0 && <span className={cn('rounded-full px-1.5 text-xs tabular-nums text-ink', active ? 'bg-surface-2' : 'bg-surface')}>{count}</span>}
     </button>
+  );
+}
+
+const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`);
+
+/** Notes the reconciler left out or changed, so the owner knows what the model does not see. */
+function NoteIssues({ issues }: { issues: NoteIssue[] }) {
+  const { t } = useI18n();
+  if (issues.length === 0) return null;
+  return (
+    <div className="note-issues mt-2 max-w-prose text-sm text-ink-2">
+      <p className="flex items-center gap-1.5"><TriangleAlert size={14} aria-hidden="true" />{t('noteIssues.title', { n: issues.length })}</p>
+      <ul className="mt-1 space-y-0.5 pl-5 text-ink-3">
+        {issues.map(issue => (
+          <li key={`${issue.path}:${issue.reason}`}>
+            <code className="text-ink-2">{issue.path}</code>: {t(`noteIssues.${issue.reason}`, { size: formatBytes(issue.bytes) })}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
