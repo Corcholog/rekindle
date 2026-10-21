@@ -259,7 +259,8 @@ ${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
             projectTitle: note.projectTitle,
             noteTitle: note.noteTitle,
             notePath: note.notePath,
-            contentSnippet: note.contentSnippet,
+            // Notes are stored in full; the UI previews the start only
+            contentSnippet: note.contentSnippet?.substring(0, 4000) ?? null,
             whyItConnects: mn.whyItConnects,
           });
         }

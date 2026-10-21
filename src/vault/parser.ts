@@ -10,6 +10,12 @@ export interface ProjectMarkdown {
   rawContent: string;
 }
 
+/** Guards against pathological files; a real note is far shorter. */
+export const MAX_NOTE_CHARS = 200_000;
+
+/** The text of a note that feeds embeddings and the project thesis, unchanged since note text was first cut at this length. */
+export const EMBED_NOTE_CHARS = 4000;
+
 export async function parseMarkdownFile(filePath: string): Promise<ProjectMarkdown | null> {
   try {
     const rawContent = await fs.readFile(filePath, 'utf-8');
@@ -37,7 +43,8 @@ export async function parseMarkdownFile(filePath: string): Promise<ProjectMarkdo
       .replace(INLINE_PROJECT_TAG, '$1') // Remove the #project hashtag itself
       .trim();
 
-    const thesis = textOnly.substring(0, 4000);
+    // The whole note is kept for the model's context; only the embedding input is cut (reconciler)
+    const thesis = textOnly.substring(0, MAX_NOTE_CHARS);
 
     return {
       hasProjectTag,

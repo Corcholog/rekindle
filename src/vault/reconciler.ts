@@ -4,7 +4,7 @@ import { db } from '../db';
 import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getDirectoryHash } from './hash';
-import { parseMarkdownFile } from './parser';
+import { parseMarkdownFile, EMBED_NOTE_CHARS } from './parser';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { enqueueProjectBacklogEvaluations } from '../evaluator';
 import { PROJECT_DIR_NAMES, env } from '../config';
@@ -120,13 +120,15 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         if (parsed) {
           noteTitles.push(parsed.title);
 
+          // Embedding inputs and the thesis keep the cut text, so vectors do not move (I7, staleness)
+          const embedText = parsed.thesis.substring(0, EMBED_NOTE_CHARS);
           if (parsed.hasProjectTag && !foundTaggedThesis) {
-            foundTaggedThesis = parsed.thesis;
+            foundTaggedThesis = embedText;
             taggedNoteTitle = parsed.title;
           }
 
-          if (parsed.thesis) {
-            notesContent += `### Nota: ${parsed.title}\n${parsed.thesis}\n\n`;
+          if (embedText) {
+            notesContent += `### Nota: ${parsed.title}\n${embedText}\n\n`;
           }
 
           parsedNotes.push({
@@ -163,7 +165,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
     }[] = [];
 
     for (const note of parsedNotes) {
-      const textForNote = `Nota: ${note.noteTitle}\n\n${note.contentSnippet}`.substring(0, 4000);
+      const textForNote = `Nota: ${note.noteTitle}\n\n${note.contentSnippet}`.substring(0, EMBED_NOTE_CHARS);
       try {
         const noteEmb = await ollama.getEmbedding(textForNote);
         if (noteEmb.length > 0) {

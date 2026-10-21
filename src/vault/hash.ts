@@ -18,6 +18,12 @@ export async function getFileHash(filePath: string): Promise<string> {
 }
 
 /**
+ * Changes when what a snapshot stores changes, so every project is reconciled once after an upgrade.
+ * v2: notes are stored in full, not cut at 4,000 characters.
+ */
+const SNAPSHOT_FORMAT = 'snapshot-format:2:';
+
+/**
  * Calculates deterministic hash of a project directory.
  * Hashes the *.md files the reconciler parses (recursively), ignoring suggestions.md and Rekindle-generated notes.
  * Incorporates file names so renaming a file triggers reconciliation.
@@ -55,6 +61,7 @@ export async function getDirectoryHash(dirPath: string): Promise<string> {
   mdFiles.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   const finalHash = crypto.createHash('sha256');
+  finalHash.update(SNAPSHOT_FORMAT);
 
   for (const file of mdFiles) {
     finalHash.update(`filename:${file.relPath}:`);
