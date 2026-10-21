@@ -19,7 +19,7 @@ Rekindle runs in **English or Spanish** (interface, suggestions and what it writ
 - **Clip anything you read**: paste a link in the web UI or use the browser extension (`extension/`), which queues clips while Rekindle is offline. Web pages are read with Readability; YouTube videos through their transcripts.
 - **Two-step matching**: local embeddings (`bge-m3` on Ollama) and pgvector find the 3 closest projects and notes; an LLM then judges each pair as actionable, tentative or irrelevant and proposes an action for a specific note. Providers are tried in order: DeepSeek, Gemini, then local `qwen2.5:7b-instruct`; without API keys everything runs locally.
 - **Projects cool down**: each project burns while you work on it, cools to embers after a week and turns to ash once dormant; dormant projects with new suggestions come first.
-- **You decide**: accepting appends an Obsidian callout to `<project>/suggestions.md`, linking to the suggested note. Pending, tentative and discarded suggestions never touch the vault.
+- **You decide**: accepting appends an Obsidian callout to `<project>/suggestions.md`, linking to the suggested note (an existing one, or a new one Obsidian creates when you click the link). Pending, tentative and discarded suggestions never touch the vault.
 - **Beyond single suggestions**: connections between your own projects, a research consultant that answers questions across your library and notes, and briefs compiled from accepted suggestions, all saved only when you ask.
 
 Your projects are folders inside `Projects/` (or `Proyectos/`) in your vault:
@@ -70,9 +70,9 @@ What counts as a connection is partly subjective: a model can force links, and i
 Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the following leaves your machine for Google's API:
 
 - the article text (up to 50,000 characters) for summarisation;
-- for each evaluation and re-evaluation, **up to 15,000 characters of your project notes**, plus the article summary;
+- for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary;
 - for each Consultor question, **the summaries of every ready item in your library and a snippet of every active project note**;
-- for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 10,000 characters of project notes.
+- for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 60,000 characters of project notes.
 
 With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails; without that key DeepSeek is skipped. Leave both keys empty and every LLM call runs on local Ollama. Rekindle still contacts the sites you ingest (and YouTube for transcripts). The web UI's fonts are bundled, so opening it contacts nothing outside your machine.
 

@@ -51,7 +51,7 @@ A dataset is a directory:
 
 Suggestion quality (relevance, usefulness, actionability) needs the owner's ratings and is **not measured** yet.
 
-Target-note accuracy (did the suggestion name the note the owner would have picked) is **not measured**. It was scored until 2026-10-19 and dropped: the notes in the labeled projects were not good enough to judge which note a suggestion belongs in, so the number said little. Results recorded before then still carry it; the report no longer shows it. That a suggestion can only target an existing note of its project is enforced in code and tested (`tests/failure_target_path.test.ts`).
+Target-note accuracy (did the suggestion name the note the owner would have picked) is **not measured**. It was scored until 2026-10-19 and dropped: the notes in the labeled projects were not good enough to judge which note a suggestion belongs in, so the number said little. Results recorded before then still carry it; the report no longer shows it. That a suggestion can only target an existing note of its project, or a new note with a plain name inside it, is enforced in code and tested (`tests/failure_target_path.test.ts`). Since 2026-10-21 each result also counts, without labels, how many actions point at a note other than the closest one and how many propose a new note ("Where suggestions point" in the report).
 
 ## Privacy
 

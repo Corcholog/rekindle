@@ -386,7 +386,7 @@ erDiagram
    - Unique composite index on `(content_id, project_snapshot_id, consumption_seq)` prevents redundant LLM evaluations.
 6. **`action_suggestions`**:
    - Concrete proposed actions generated when an evaluation is `actionable`.
-   - `target_file` is the note the LLM proposed (falling back to the closest-affinity note, then `ideas.md`). It is shown in the UI ("Suggested note"), used for staleness detection, and linked from the accepted callout (`[[<project folder>/<note>|<note>]]`, by `suggestedNoteLink`, omitted when the name would break the link syntax); it is **not** where anything is written: accepted callouts always go to `<project>/suggestions.md`, and the note itself is never edited.
+   - `target_file` is the note the LLM proposed: an existing note of the project, or, with `target_is_new`, a new note it suggests creating (falling back to the closest-affinity note, then `unknown`, meaning no note). It is shown in the UI ("Suggested note"), used for staleness detection, and linked from the accepted callout (`[[<project folder>/<note>|<note>]]`, by `suggestedNoteLink`, omitted when the name would break the link syntax; for a new note the link is unresolved until the owner clicks it and Obsidian creates the note); it is **not** where anything is written: accepted callouts always go to `<project>/suggestions.md`, and the note itself is never edited or created.
    - Partial btree index `action_suggestions_status_partial_idx` on `status` where `status = 'pending'`.
 7. **`llm_telemetry`**:
    - One row per provider attempt of every LLM call that passes a call context (all six: `summary`, `triage`, `consult`, `synergy`, `synthesis`, `reevaluate`), failures included: provider, model, attempt number, error kind, fallback flag, rate-limit wait, latency, tokens, estimated cost (`src/ai/pricing.ts`), prompt and answer lengths and a 16-hex prompt hash. Never prompt or answer text. Indexed on `created_at` and `trace_id`. See section 16.
@@ -409,7 +409,7 @@ Rekindle monitors two top-level directories: `Projects/` and `Proyectos/`.
 - Strips YAML frontmatter anchored at file start.
 - Strips fenced code blocks to prevent false-positive hashtag or title matches inside code snippets.
 - Extracts the first Markdown `# H1` heading outside code blocks as the note title.
-- Truncates extracted note thesis/snippet to 4,000 characters.
+- Keeps the whole note text (up to 200,000 characters, a guard against pathological files). The reconciler embeds only the first 4,000 characters of each note, and builds the project thesis and `notes_content` from that same cut text, so embeddings do not change with note length; the whole text is stored in `project_note_snapshots.content_snippet` for prompts.
 
 ### 7.3 Hash Engine (`hash.ts`)
 - Recursively traverses the project folder for all `.md` files (excluding `suggestions.md`).
@@ -528,7 +528,7 @@ LIMIT 3; -- TOP_K_PROJECTS_LIMIT
 
 ### Step 2: Unified LLM Synthesis & Note Targeting
 For each candidate project under the 0.6 cutoff:
-1. **Focal Note Context Injection**: The evaluator injects the specific note with highest semantic affinity (`matchedNotePath`, `matchedNoteSnippet`) directly into `<PROJECT_CONTEXT>`, ensuring the LLM knows which specific file to target.
+1. **Notes context** (`notesContext.ts`, `projectNotesContext` in `retrieval.ts`): `<PROJECT_CONTEXT>` starts with an index of every note (path and title), so the model can point at any of them, followed by the notes' text within `NOTES_CONTEXT_CHARS` (60,000 characters). A project that fits is sent whole in path order, so this block is the same for every article and providers can serve it from their prompt cache; a larger one sends the notes closest to the article first (distances from the same embedding model, I7), cuts the next one if at least 1,000 characters are left, and marks the rest "text not included" in the index. After the notes comes the note closest to the article (`matchedNotePath`), as a hint the model may override. Ollama runs with a 32k-token window so a full budget fits the local fallback.
 2. **Single Structured LLM Call**:
    ```ts
    const unifiedEvaluationSchema = z.object({
@@ -540,10 +540,11 @@ For each candidate project under the 0.6 cutoff:
        observation: z.string(),
        suggestedAction: z.string(),
        targetFile: z.string().nullish(),
+       targetIsNew: z.boolean().nullish(),
      }).nullable(),
    });
    ```
-3. **Target File Resolution** (`targetFile.ts`): the LLM's `targetFile` is kept only if it names one of the snapshot's notes (exact path, path plus `.md`, or a file name only one note has); anything else, including paths outside the project, falls back to `matchedNotePath`, then `ideas.md`. Re-evaluation refinements go through the same check.
+3. **Target File Resolution** (`resolveTarget` in `targetFile.ts`): the LLM's `targetFile` names an existing note if it matches one of the snapshot's notes (exact path, path plus `.md`, case-insensitive path, a file name only one note has, or a title only one note has). Otherwise, when the model marks it `targetIsNew`, it is kept as a proposed new note only if it is a plain relative name (no `..`, no leading `/`, no `[]|#^:*?"<>\\` or control characters, at most 120 characters) at the project root or in a folder that already holds notes. Anything else, including paths outside the project, falls back to `matchedNotePath`, then `unknown` (no note). Re-evaluation refinements go through the same check. The evaluation also stores `matched_note_path`, which an accepted tentative verdict points at.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Rekindle automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
 5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`; a concurrent duplicate hits the unique index and is skipped. An evaluation and its suggestion are written in one transaction, so an interrupted job leaves neither. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`). The pg-boss queues use the standard policy, where `singletonKey` does not de-duplicate, so duplicate jobs rely on this idempotency.
 6. **Failure handling**: an LLM error for one project is recorded (a failed `evaluate` event, the failed LLM attempts, `failures` on the `evaluate_job` event), the other projects are still evaluated, and then the worker fails the job so pg-boss retries it (3 retries, backoff from 30 s). Projects already evaluated are skipped on retry. After the last retry the job stays failed and the pair waits for a backlog run; the UI does not show it, `telemetry:report` does.
@@ -586,7 +587,7 @@ As the user writes notes in Obsidian, previously generated suggestions may becom
 
 ### Context-Aware Re-evaluation (`POST /api/suggestions/:id/reevaluate`)
 When re-evaluating a stale suggestion:
-1. Rekindle loads the original suggestion, the content summary, and the **latest project snapshot** from the database (all notes concatenated, capped at 15,000 characters).
+1. Rekindle loads the original suggestion, the content summary, and the **latest project snapshot** from the database (the same notes context as triage, ranked against the article when the project exceeds the budget).
 2. The LLM evaluates whether the suggestion should be:
    - `keep_or_refine`: Kept and updated with refined observations matching the new draft.
    - `already_addressed`: Auto-resolved because the writer already incorporated the ideas.
@@ -783,8 +784,8 @@ The problem Rekindle exists for is a project left alone for weeks. Each snapshot
 | Area | Current Behavior | Future Consideration |
 |---|---|---|
 | **Authentication** | No auth token. The server only binds to loopback, rejects any `Host` other than `127.0.0.1`/`localhost`/`[::1]` (blocks DNS rebinding), and rejects state-changing requests from foreign origins; the extension origin may only call `/api/ingest` (`src/api/requestGuard.ts`). | A per-install token if LAN access is ever needed. |
-| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 15,000 chars) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus notes for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
-| **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (`ideas.md` / `discarded` target); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
+| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 60,000 chars, plus every note's path and title) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus project notes (same 60,000-char budget) for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
+| **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (target: the note closest to the article at evaluation time, or `unknown`; `discarded` when discarded); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
 | **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
 | **Prompt injection** | Untrusted text (pages, transcripts, summaries, notes, earlier suggestions, queries) is wrapped by `promptBlock` (`src/ai/promptSafety.ts`), which neutralizes tag-like sequences; `AiProvider` appends a rule to every system prompt that delimited content is data. Code-side limits (sanitized writes on accept only, validated target notes) are the real boundary. See `docs/THREAT_MODEL.md`. | Measure how often injected pages change verdicts (not measured). |
 | **Multi-Vault Support** | Rekindle operates against a single active vault directory specified in `VAULT_PATH`. | Support multi-vault switching or profile presets in settings. |
