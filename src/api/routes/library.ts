@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { contents } from '../../db/schema';
 import { sql } from 'drizzle-orm';
+import { env, CONSULT_TOP_CONTENTS, CONSULT_TOP_NOTES, CONSULT_SUMMARY_CHARS, CONSULT_NOTE_CHARS, CONSULT_LABEL_CHARS, MAX_CONSULT_QUERY_CHARS } from '../../config';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { promptBlock } from '../../ai/promptSafety';
 import { Language, languageName, outputLanguage } from '../../ai/language';
@@ -11,7 +12,7 @@ import { serverText } from '../../i18n/serverText';
 const ollama = sharedAiProvider;
 
 const LibraryAskBodySchema = z.object({
-  query: z.string().min(2, 'La pregunta debe tener al menos 2 caracteres'),
+  query: z.string().min(2, 'La pregunta debe tener al menos 2 caracteres').max(MAX_CONSULT_QUERY_CHARS),
 });
 
 // Built per call: the explanations are written in the current output language
@@ -29,7 +30,7 @@ const consultAnswerSchema = (lang: Language) => z.object({
 });
 
 export default async function (server: FastifyInstance) {
-  // 0. Archive & Vault Research Partner (Full-Catalog Cross-Source Consultant)
+  // 0. Archive & Vault Research Partner: the library items and notes closest to the question
   server.post('/api/library/consult', {
     schema: {
       body: LibraryAskBodySchema,
@@ -40,6 +41,8 @@ export default async function (server: FastifyInstance) {
           projectViability: z.string().nullable(),
           totalLibraryEvaluated: z.number(),
           totalNotesEvaluated: z.number(),
+          totalLibrary: z.number(),
+          totalNotes: z.number(),
           matchedContents: z.array(z.object({
             refId: z.string(),
             id: z.string().uuid(),
@@ -76,7 +79,22 @@ export default async function (server: FastifyInstance) {
   }, async (request, reply) => {
     const { query } = request.body as { query: string };
 
-    // 1. Fetch all ready contents from the library
+    // The question is embedded locally (I3) and compared only with embeddings of the same model (I7)
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await ollama.getEmbedding(query);
+    } catch (err) {
+      server.log.error({ err }, 'Embedding the Consultor question failed');
+      return reply.status(500).send({
+        error: 'Failed to consult library and vault',
+        message: 'The local embedding model failed to read the question.',
+        code: 'embedding_failed',
+      });
+    }
+    const targetVector = `[${queryEmbedding.join(',')}]`;
+    const embedModel = env.EMBED_MODEL;
+
+    // 1. The ready contents closest to the question
     const readyContentsRes = await db.execute(sql`
       SELECT
         c.id,
@@ -88,7 +106,10 @@ export default async function (server: FastifyInstance) {
         c.consumed_at
       FROM ${contents} c
       WHERE c.ingest_status = 'ready'
-      ORDER BY c.consumed_at DESC
+        AND c.embedding IS NOT NULL
+        AND c.embedding_model = ${embedModel}
+      ORDER BY c.embedding <=> ${targetVector}::vector ASC
+      LIMIT ${CONSULT_TOP_CONTENTS}
     `);
 
     const libraryCatalog = readyContentsRes.rows.map((row: any, idx: number) => ({
@@ -102,70 +123,74 @@ export default async function (server: FastifyInstance) {
       consumedAt: new Date(row.consumed_at),
     }));
 
-    // 2. Fetch all active projects and their latest snapshot + note snapshots
+    // 2. The notes of active projects (latest snapshot) closest to the question. A snapshot without
+    // note rows (older data) is one entry, its project text ranked by the project embedding.
     const latestNotesRes = await db.execute(sql`
       WITH latest_snaps AS (
         SELECT DISTINCT ON (ps.project_id)
           ps.id AS snapshot_id,
           ps.project_id,
           p.title AS project_title,
-          ps.thesis_text,
-          ps.notes_content
+          COALESCE(ps.notes_content, ps.thesis_text) AS project_text,
+          ps.embedding,
+          ps.embedding_model
+        FROM project_snapshots ps
+        INNER JOIN projects p ON p.id = ps.project_id
+        WHERE p.is_active = true
+        ORDER BY ps.project_id, ps.captured_at DESC
+      ),
+      ranked AS (
+        SELECT
+          pns.id AS note_id, ls.project_id, ls.project_title, pns.note_title, pns.note_path,
+          pns.content_snippet, (pns.embedding <=> ${targetVector}::vector) AS distance
+        FROM latest_snaps ls
+        INNER JOIN project_note_snapshots pns ON pns.project_snapshot_id = ls.snapshot_id
+        WHERE pns.embedding IS NOT NULL AND pns.embedding_model = ${embedModel}
+        UNION ALL
+        SELECT
+          ls.snapshot_id, ls.project_id, ls.project_title, NULL, NULL,
+          ls.project_text, (ls.embedding <=> ${targetVector}::vector)
+        FROM latest_snaps ls
+        WHERE NOT EXISTS (SELECT 1 FROM project_note_snapshots x WHERE x.project_snapshot_id = ls.snapshot_id)
+          AND ls.project_text IS NOT NULL
+          AND ls.embedding IS NOT NULL AND ls.embedding_model = ${embedModel}
+      )
+      SELECT * FROM ranked
+      ORDER BY distance ASC
+      LIMIT ${CONSULT_TOP_NOTES}
+    `);
+
+    const notesCatalog = (latestNotesRes.rows as any[]).map((row, idx) => {
+      const isNote = row.note_path !== null;
+      return {
+        refId: `N${idx + 1}`,
+        id: row.note_id as string,
+        projectId: row.project_id as string,
+        projectTitle: row.project_title as string,
+        noteTitle: isNote ? ((row.note_title as string) || serverText().untitledNote) : `${row.project_title} (Resumen de Proyecto)`,
+        notePath: isNote ? (row.note_path as string) : `${row.project_title}.md`,
+        contentSnippet: (row.content_snippet as string) || null,
+      };
+    });
+
+    // What the selection was taken from, so the model and the owner know it is a selection
+    const totalsRes = await db.execute(sql`
+      WITH latest_snaps AS (
+        SELECT DISTINCT ON (ps.project_id) ps.id, ps.notes_content, ps.thesis_text
         FROM project_snapshots ps
         INNER JOIN projects p ON p.id = ps.project_id
         WHERE p.is_active = true
         ORDER BY ps.project_id, ps.captured_at DESC
       )
       SELECT
-        ls.snapshot_id,
-        ls.project_id,
-        ls.project_title,
-        ls.thesis_text,
-        ls.notes_content,
-        pns.id AS note_id,
-        pns.note_title,
-        pns.note_path,
-        pns.content_snippet
-      FROM latest_snaps ls
-      LEFT JOIN project_note_snapshots pns ON pns.project_snapshot_id = ls.snapshot_id
-      ORDER BY ls.project_title ASC, pns.note_title ASC
+        (SELECT COUNT(*) FROM ${contents} WHERE ingest_status = 'ready') AS library,
+        (SELECT COUNT(*) FROM project_note_snapshots pns INNER JOIN latest_snaps ls ON pns.project_snapshot_id = ls.id)
+          + (SELECT COUNT(*) FROM latest_snaps ls
+             WHERE COALESCE(ls.notes_content, ls.thesis_text) IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM project_note_snapshots x WHERE x.project_snapshot_id = ls.id)) AS notes
     `);
-
-    const notesCatalog: Array<{
-      refId: string;
-      id: string;
-      projectId: string;
-      projectTitle: string;
-      noteTitle: string;
-      notePath: string;
-      contentSnippet: string | null;
-    }> = [];
-
-    let noteCounter = 1;
-    for (const row of latestNotesRes.rows as any[]) {
-      if (row.note_id) {
-        notesCatalog.push({
-          refId: `N${noteCounter++}`,
-          id: row.note_id as string,
-          projectId: row.project_id as string,
-          projectTitle: row.project_title as string,
-          noteTitle: (row.note_title as string) || serverText().untitledNote,
-          notePath: (row.note_path as string) || '',
-          contentSnippet: (row.content_snippet as string) || null,
-        });
-      } else if (row.notes_content || row.thesis_text) {
-        // Fallback if project snapshot has no granular rows in project_note_snapshots
-        notesCatalog.push({
-          refId: `N${noteCounter++}`,
-          id: row.snapshot_id as string,
-          projectId: row.project_id as string,
-          projectTitle: row.project_title as string,
-          noteTitle: `${row.project_title} (Resumen de Proyecto)`,
-          notePath: `${row.project_title}.md`,
-          contentSnippet: ((row.notes_content || row.thesis_text) as string).substring(0, 1800),
-        });
-      }
-    }
+    const totalLibrary = Number((totalsRes.rows[0] as any).library);
+    const totalNotes = Number((totalsRes.rows[0] as any).notes);
 
     if (libraryCatalog.length === 0 && notesCatalog.length === 0) {
       return {
@@ -174,6 +199,8 @@ export default async function (server: FastifyInstance) {
         projectViability: null,
         totalLibraryEvaluated: 0,
         totalNotesEvaluated: 0,
+        totalLibrary,
+        totalNotes,
         matchedContents: [],
         matchedNotes: [],
       };
@@ -182,16 +209,20 @@ export default async function (server: FastifyInstance) {
     const libraryPromptBlock = libraryCatalog.length > 0
       ? libraryCatalog.map(item => {
           const bodyText = item.summary
-            ? `Resumen: ${item.summary}`
+            ? `Resumen: ${item.summary.substring(0, CONSULT_SUMMARY_CHARS)}`
             : `Extracto: ${item.rawPreview}`;
-          return `[${item.refId}] Título: "${item.title || 'Sin título'}" | Fuente: ${item.channelOrDomain || item.uri}\n${bodyText}`;
+          const title = (item.title || 'Sin título').substring(0, CONSULT_LABEL_CHARS);
+          const source = (item.channelOrDomain || item.uri).substring(0, CONSULT_LABEL_CHARS);
+          return `[${item.refId}] Título: "${title}" | Fuente: ${source}\n${bodyText}`;
         }).join('\n\n---\n\n')
       : 'No hay contenidos guardados en la biblioteca.';
 
     const notesPromptBlock = notesCatalog.length > 0
       ? notesCatalog.map(note => {
-          const snippet = (note.contentSnippet || '').substring(0, 1800);
-          return `[${note.refId}] Proyecto: "${note.projectTitle}" | Archivo de Nota: "${note.notePath || note.noteTitle}"\nContenido de la nota:\n${snippet}`;
+          const snippet = (note.contentSnippet || '').substring(0, CONSULT_NOTE_CHARS);
+          const project = note.projectTitle.substring(0, CONSULT_LABEL_CHARS);
+          const file = (note.notePath || note.noteTitle).substring(0, CONSULT_LABEL_CHARS);
+          return `[${note.refId}] Proyecto: "${project}" | Archivo de Nota: "${file}"\nContenido de la nota:\n${snippet}`;
         }).join('\n\n---\n\n')
       : 'No hay notas de proyectos activas en el Vault de Obsidian.';
 
@@ -209,9 +240,13 @@ REGLAS ESTRICTAS:
 3. En "diagnosis", responde en ${languageName(lang).upper} de forma clara, conversacional y estructurada. Cita explícitamente en el texto las referencias relevantes usando sus etiquetas exactas entre corchetes, por ejemplo [C1], [N1].
 4. Si el usuario pregunta si puede armar un proyecto sobre un tema (o si detectas un puente fértil entre lo que tiene en la biblioteca y sus notas de Obsidian), completa "projectViability" con una propuesta concreta de enfoque, ángulo o estructura. Si es solo una consulta de inventario simple y no aplica o no hay material, puedes dejar "projectViability" en null o sugerir brevemente qué ángulo podría explorar con lo encontrado.
 5. Incluye en "matchedContents" ÚNICAMENTE los contenidos [C#] que realmente aportan a la consulta (no rellenes con ítems irrelevantes), explicando en "whyItConnects" exactamente por qué ese video o artículo conecta con lo que preguntó el usuario.
-6. Incluye en "matchedNotes" ÚNICAMENTE las notas de Obsidian [N#] que realmente conectan con la consulta (incluso si mencionan el tema como referencia, ejemplo o estructura), explicando en "whyItConnects" qué contiene esa nota y cómo aporta.`;
+6. Incluye en "matchedNotes" ÚNICAMENTE las notas de Obsidian [N#] que realmente conectan con la consulta (incluso si mencionan el tema como referencia, ejemplo o estructura), explicando en "whyItConnects" qué contiene esa nota y cómo aporta.
+7. Solo ves una selección: los contenidos y las notas más cercanos a la consulta, según <SELECCION>. Si el usuario pide un inventario completo o un recuento, aclara que respondes sobre esa selección.`;
 
-    const userMessage = `${promptBlock('CATALOGO_BIBLIOTECA', libraryPromptBlock)}
+    const selection = `Recibes los ${libraryCatalog.length} contenidos más cercanos a la consulta, de ${totalLibrary} en la biblioteca, y las ${notesCatalog.length} notas más cercanas, de ${totalNotes} en los proyectos activos.`;
+    const userMessage = `${promptBlock('SELECCION', selection)}
+
+${promptBlock('CATALOGO_BIBLIOTECA', libraryPromptBlock)}
 
 ${promptBlock('NOTAS_PROYECTOS_OBSIDIAN', notesPromptBlock)}
 
@@ -272,6 +307,8 @@ ${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
         projectViability: result.projectViability || null,
         totalLibraryEvaluated: libraryCatalog.length,
         totalNotesEvaluated: notesCatalog.length,
+        totalLibrary,
+        totalNotes,
         matchedContents,
         matchedNotes,
       };

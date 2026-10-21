@@ -54,6 +54,15 @@ export const NOTES_CONTEXT_CHARS = 60_000;
 export const MAX_ARTICLE_CHARS = 50_000;
 // Largest ingest request accepted; the extension cuts selections to MAX_ARTICLE_CHARS before sending
 export const MAX_INGEST_BODY_BYTES = 256 * 1024;
+// Consultor: the library items and notes closest to the question, each cut (titles, sources and
+// note paths too), so the prompt stays under 63,000 characters (tests/consult_budget.test.ts)
+// whatever the size of the library and the vault
+export const CONSULT_TOP_CONTENTS = 15;
+export const CONSULT_TOP_NOTES = 15;
+export const CONSULT_SUMMARY_CHARS = 2_000;
+export const CONSULT_NOTE_CHARS = 1_800;
+export const CONSULT_LABEL_CHARS = 300;
+export const MAX_CONSULT_QUERY_CHARS = 2_000;
 export const STALE_DRIFT_THRESHOLD = 0.04;
 export const PROMOTION_DELTA_THRESHOLD = 0.08;
 export const NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50;

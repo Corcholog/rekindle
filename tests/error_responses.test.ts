@@ -21,12 +21,16 @@ describe('500 responses do not leak internal error messages', () => {
     await dbModule.pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await migrate(db, { migrationsFolder: './drizzle' });
     schema = await import('../src/db/schema');
+    const { env } = await import('../src/config');
+    // The Consultor embeds the question and reads the closest items before calling the model
+    const unitVector = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0));
 
     const [project] = await db.insert(schema.projects).values({ folderPath: 'Projects/P', title: 'P' }).returning();
     projectId = project.id;
     const [snapshot] = await db.insert(schema.projectSnapshots).values({ projectId, treeHash: 'h', notesContent: 'Notas' }).returning();
     const [content] = await db.insert(schema.contents).values({
       uri: 'https://example.com/x', title: 'X', summary: 'Resumen', ingestStatus: 'ready',
+      embedding: unitVector, embeddingModel: env.EMBED_MODEL,
     }).returning();
     const [evaluation] = await db.insert(schema.evaluations).values({
       contentId: content.id, projectSnapshotId: snapshot.id, verdict: 'actionable', consumptionSeq: 1,
@@ -39,6 +43,7 @@ describe('500 responses do not leak internal error messages', () => {
 
     const { sharedAiProvider } = await import('../src/ai/aiProvider');
     vi.spyOn(sharedAiProvider, 'evaluateContent').mockRejectedValue(new Error(secret));
+    vi.spyOn(sharedAiProvider, 'getEmbedding').mockResolvedValue(unitVector);
 
     server = (await import('../src/api/server')).server;
     await server.ready();
@@ -59,7 +64,9 @@ describe('500 responses do not leak internal error messages', () => {
   };
 
   it('Consultor', async () => {
-    expectGeneric500(await server.inject({ method: 'POST', url: '/api/library/consult', payload: { query: 'agentes' } }));
+    const res = await server.inject({ method: 'POST', url: '/api/library/consult', payload: { query: 'agentes' } });
+    expectGeneric500(res);
+    expect(res.json().code).toBe('llm_failed');
   });
 
   it('single re-evaluation', async () => {
