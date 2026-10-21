@@ -1,3 +1,6 @@
+// Rekindle reads at most this much of an article or selection (see background.js)
+const MAX_SELECTION_CHARS = 50000;
+
 // Rekindle Clipper - Popup Script (Manifest V3)
 // Direct storage-backed offline queue with background sync
 
@@ -85,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         url: item.url,
         title: item.title || '',
-        selection: item.selection || '',
+        selection: (item.selection || '').slice(0, MAX_SELECTION_CHARS),
         timestamp: Date.now(),
         retries: 0
       };
@@ -266,7 +269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const url = urlInput.value.trim();
     const title = titleInput.value.trim();
-    const selection = selectionInput.value.trim();
+    const selection = selectionInput.value.trim().slice(0, MAX_SELECTION_CHARS);
 
     if (!url) return;
 

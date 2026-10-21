@@ -50,6 +50,10 @@ export const TOP_K_PROJECTS_LIMIT = 3;
 // Characters of note text per project in a prompt (about 15k tokens). A project that fits is sent
 // whole; a larger one sends the notes closest to the article first (src/evaluator/notesContext.ts).
 export const NOTES_CONTEXT_CHARS = 60_000;
+// Characters of an article, transcript or clipped selection that Rekindle reads and summarizes
+export const MAX_ARTICLE_CHARS = 50_000;
+// Largest ingest request accepted; the extension cuts selections to MAX_ARTICLE_CHARS before sending
+export const MAX_INGEST_BODY_BYTES = 256 * 1024;
 export const STALE_DRIFT_THRESHOLD = 0.04;
 export const PROMOTION_DELTA_THRESHOLD = 0.08;
 export const NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50;

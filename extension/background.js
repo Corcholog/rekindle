@@ -1,3 +1,7 @@
+// Rekindle reads at most this much of an article or selection; longer text is cut here, so a
+// huge selection never makes the server reject (and the queue drop) a clip
+const MAX_SELECTION_CHARS = 50000;
+
 // Rekindle Clipper - Background Service Worker (Manifest V3)
 // Provides offline queueing with auto-sync when the Rekindle server reconnects
 
@@ -56,7 +60,7 @@ async function enqueueItem(item) {
       : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     url: item.url,
     title: item.title || '',
-    selection: item.selection || '',
+    selection: (item.selection || '').slice(0, MAX_SELECTION_CHARS),
     timestamp: Date.now(),
     retries: 0
   };
@@ -282,7 +286,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     targetUrl = info.linkUrl;
     targetTitle = '';
   } else if (info.menuItemId === 'rekindle-clip-selection') {
-    selection = info.selectionText || '';
+    selection = (info.selectionText || '').slice(0, MAX_SELECTION_CHARS);
   }
 
   if (!targetUrl) return;

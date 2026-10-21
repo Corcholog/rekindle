@@ -6,6 +6,7 @@ import { boss, INGEST_JOB_OPTIONS } from '../../queue';
 import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
 import { newTraceId } from '../../observability/pipeline';
 import { and, eq } from 'drizzle-orm';
+import { MAX_INGEST_BODY_BYTES } from '../../config';
 
 const IngestRequestSchema = z.object({
   url: z.string().url().refine((val) => {
@@ -23,6 +24,8 @@ const IngestRequestSchema = z.object({
 
 export default async function (server: FastifyInstance) {
   server.post('/api/ingest', {
+    // A larger body gets 413 before it is parsed; the extension cuts selections well below this
+    bodyLimit: MAX_INGEST_BODY_BYTES,
     schema: {
       body: IngestRequestSchema,
       response: {

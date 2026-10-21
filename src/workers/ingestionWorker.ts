@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { sharedAiProvider } from '../ai/aiProvider';
-import { env } from '../config';
+import { env, MAX_ARTICLE_CHARS } from '../config';
 import { summarizeText } from '../ai/summarize';
 import * as net from 'net';
 import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
@@ -88,6 +88,19 @@ export function canonicalizeYouTubeUrl(urlStr: string): string {
   return canonicalizeUrl(urlStr);
 }
 
+/**
+ * The text Rekindle reads from a web clip: the extracted article, with the user's selection first
+ * when the article does not already contain it, or the selection alone when nothing was extracted.
+ * The selection comes from the client, so everything is cut to MAX_ARTICLE_CHARS. Null: no text.
+ */
+export function clipText(articleText: string | null | undefined, selection?: string | null): string | null {
+  const clipped = (selection ?? '').trim().substring(0, MAX_ARTICLE_CHARS);
+  const article = (articleText ?? '').trim().substring(0, MAX_ARTICLE_CHARS);
+  if (!article) return clipped || null;
+  if (!clipped || article.includes(clipped.substring(0, 50))) return article;
+  return `[Cita seleccionada por el usuario]:\n${clipped}\n\n---\n\n${article}`.substring(0, MAX_ARTICLE_CHARS);
+}
+
 export async function extractYouTubeContent(url: string): Promise<{ title: string; rawText: string; author: string }> {
   const canonicalUrl = canonicalizeYouTubeUrl(url);
 
@@ -111,7 +124,7 @@ export async function extractYouTubeContent(url: string): Promise<{ title: strin
     throw new Error('No subtitles or transcript are available for this YouTube video');
   }
 
-  const rawText = parts.map(p => p.text).join(' ').trim().substring(0, 50000);
+  const rawText = parts.map(p => p.text).join(' ').trim().substring(0, MAX_ARTICLE_CHARS);
   return { title, rawText, author };
 }
 
@@ -174,18 +187,9 @@ export const setupIngestionWorker = async () => {
             return new Readability(doc.window.document).parse();
           }, r => ({ chars: r?.textContent?.length ?? 0 }));
 
-          if (!article || !article.textContent) {
-            if (selection && selection.trim().length > 0) {
-              rawText = selection.trim();
-            } else {
-              throw new Error('Readability failed to extract text content');
-            }
-          } else {
-            rawText = article.textContent.trim().substring(0, 50000);
-            if (selection && selection.trim().length > 0 && !rawText.includes(selection.trim().substring(0, 50))) {
-              rawText = `[Cita seleccionada por el usuario]:\n${selection.trim()}\n\n---\n\n${rawText}`;
-            }
-          }
+          const text = clipText(article?.textContent, selection);
+          if (text === null) throw new Error('Readability failed to extract text content');
+          rawText = text;
 
           const author = article?.byline ? article.byline.trim() : null;
           channelOrDomain = author || new URL(url).hostname.replace(/^www\./, '');

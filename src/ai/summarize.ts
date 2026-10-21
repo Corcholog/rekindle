@@ -3,6 +3,7 @@ import type { AiProvider } from './aiProvider';
 import type { LlmCallContext } from '../observability/llmTelemetry';
 import { promptBlock } from './promptSafety';
 import { Language, languageName, notesLanguage, promptLanguage } from './language';
+import { MAX_ARTICLE_CHARS } from '../config';
 
 export const summarySchema = z.object({
   summary: z.string().describe('Un resumen estructurado del contenido extraído'),
@@ -48,6 +49,7 @@ export async function summarizeText(
   languages: SummaryLanguages = { summary: notesLanguage(), prompt: promptLanguage() },
 ): Promise<string> {
   const { system, tag } = summaryPrompt(languages);
-  const { data } = await ai.evaluateContent(system, promptBlock(tag, rawText), summarySchema, undefined, ctx && { component: 'summary', ...ctx });
+  // Callers cut their text already; this is the last line before a paid provider
+  const { data } = await ai.evaluateContent(system, promptBlock(tag, rawText.substring(0, MAX_ARTICLE_CHARS)), summarySchema, undefined, ctx && { component: 'summary', ...ctx });
   return data.summary;
 }
