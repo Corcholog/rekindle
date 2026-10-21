@@ -7,7 +7,7 @@ import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
-import { resolveTarget } from '../../evaluator/targetFile';
+import { NO_NOTE, resolveTarget } from '../../evaluator/targetFile';
 import { projectNotesContext } from '../../evaluator/retrieval';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
@@ -1023,6 +1023,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         contentId: evaluations.contentId,
         triageReasoning: evaluations.triageReasoning,
         projectIdleDays: evaluations.projectIdleDays,
+        matchedNotePath: evaluations.matchedNotePath,
         verdict: evaluations.verdict,
         confidenceScore: evaluations.confidenceScore,
         createdAt: evaluations.evaluatedAt,
@@ -1038,7 +1039,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         const resolution = status === 'accepted'
           ? {
             actionType: 'narrative_bridge' as const,
-            targetFile: 'ideas.md',
+            // The note closest to the article when it was evaluated; older rows have none
+            targetFile: evalRow.matchedNotePath || NO_NOTE,
             observation: serverText().acceptedTentativeObservation,
             suggestedAction: evalRow.triageReasoning || serverText().acceptedTentativeAction,
           }

@@ -173,6 +173,9 @@ describe('Failure scenario 8: target paths from the model', () => {
     const { eq } = await import('drizzle-orm');
     const [suggestion] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.contentId, content.id));
     expect(suggestion).toMatchObject({ targetFile: 'research/ejemplos.md', targetIsNew: false });
+    // The evaluation keeps the closest note, for accepting a tentative verdict later
+    const [evaluation] = await db.select().from(schema.evaluations).where(eq(schema.evaluations.id, suggestion.evaluationId));
+    expect(evaluation.matchedNotePath).toBe('borrador.md');
   });
 
   it('stores a proposed new note without creating it, and accepting links to it from suggestions.md', async () => {

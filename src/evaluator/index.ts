@@ -193,6 +193,7 @@ async function runEvaluation(
             contentId,
             projectSnapshotId: snapshotId,
             projectIdleDays: idleDays(snapshotDates?.notesModifiedAt),
+            matchedNotePath,
             verdict,
             confidenceScore: result.confidenceScore,
             triageReasoning,

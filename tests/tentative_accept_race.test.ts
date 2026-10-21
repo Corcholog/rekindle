@@ -16,10 +16,10 @@ describe('Concurrent accept of a tentative evaluation', () => {
   let contentId: string;
   let snapshotId: string;
 
-  async function createTentativeEvaluation(seq: number): Promise<string> {
+  async function createTentativeEvaluation(seq: number, matchedNotePath: string | null = null): Promise<string> {
     const [evaluation] = await db.insert(schema.evaluations).values({
       contentId, projectSnapshotId: snapshotId, verdict: 'tentative',
-      confidenceScore: 0.5, triageReasoning: 'Relación tangencial', consumptionSeq: seq,
+      confidenceScore: 0.5, triageReasoning: 'Relación tangencial', consumptionSeq: seq, matchedNotePath,
     }).returning();
     return evaluation.id;
   }
@@ -85,6 +85,23 @@ describe('Concurrent accept of a tentative evaluation', () => {
     };
     await db.insert(schema.actionSuggestions).values(row);
     await expect(db.insert(schema.actionSuggestions).values(row)).rejects.toThrow();
+  });
+
+  it('points an accepted tentative at the note closest to the article, or at no note, never an invented ideas.md', async () => {
+    const { eq } = await import('drizzle-orm');
+    const withNote = await createTentativeEvaluation(4, 'research/fuentes.md');
+    const withoutNote = await createTentativeEvaluation(5);
+    expect((await patch(withNote, 'accepted')).statusCode).toBe(200);
+    expect((await patch(withoutNote, 'accepted')).statusCode).toBe(200);
+
+    const [a] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.evaluationId, withNote));
+    const [b] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.evaluationId, withoutNote));
+    expect(a).toMatchObject({ targetFile: 'research/fuentes.md', targetIsNew: false });
+    expect(b.targetFile).toBe('unknown');
+
+    const text = await fs.readFile(path.join(vaultPath, 'Projects', 'Ensayo', 'suggestions.md'), 'utf-8');
+    expect(text).toContain('[[Projects/Ensayo/research/fuentes|fuentes]]');
+    expect(text).not.toContain('ideas');
   });
 
   it('rejects a conflicting resolution of an already resolved tentative item', async () => {
