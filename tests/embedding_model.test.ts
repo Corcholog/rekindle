@@ -50,7 +50,7 @@ describe('Embedding model consistency', () => {
     const { sharedAiProvider } = await import('../src/ai/aiProvider');
     const { evaluateContentMatch, findBacklogUnevaluatedContents } = await import('../src/evaluator');
     const llm = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValue({
-      data: { verdict: 'irrelevant', confidenceScore: 0.1, connection: 'x', action: null },
+      data: { verdict: 'irrelevant', confidenceScore: 0.1, triageReasoning: 'x', action: null },
       model: 'fake',
     } as any);
 

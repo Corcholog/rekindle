@@ -95,7 +95,7 @@ describe('Re-ingesting a known URL', () => {
 
     const llm = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValue({
       data: {
-        verdict: 'actionable', confidenceScore: 0.9, connection: 'Útil',
+        verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Útil',
         action: { actionType: 'evidence_citation', observation: 'Obs', suggestedAction: 'Citar', targetFile: null },
       },
       model: 'fake',
@@ -109,7 +109,8 @@ describe('Re-ingesting a known URL', () => {
     const suggestions = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.contentId, content.id));
     expect(evals).toHaveLength(1);
     expect(suggestions).toHaveLength(1);
-    expect(llm).toHaveBeenCalledTimes(1);
+    // One triage call (the second call that lays out the text is not a new evaluation)
+    expect(llm.mock.calls.filter(call => (call[4] as any)?.component === 'triage')).toHaveLength(1);
     llm.mockRestore();
   });
 });

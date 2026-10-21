@@ -8,8 +8,8 @@ import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
 import { NO_NOTE, resolveTarget } from '../../evaluator/targetFile';
-import { actionPlainText, headline, resolveSteps } from '../../evaluator/actionSteps';
-import { actionStepsSchema } from '../../evaluator/triagePrompt';
+import { actionPlainText, reasoningPlainText } from '../../evaluator/actionSteps';
+import { structureSuggestionText } from '../../evaluator/structureText';
 import { projectNotesContext } from '../../evaluator/retrieval';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
@@ -62,8 +62,7 @@ const reevaluationSchema = (lang: Language) => z.object({
   refinedAction: z.object({
     actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
     observation: z.string(),
-    suggestedAction: z.string().describe('Titular de la acción en una sola oración (máximo 20 palabras): qué agregar y en qué nota.'),
-    steps: actionStepsSchema('es'),
+    suggestedAction: z.string(),
     targetFile: z.string().nullish().describe("Ruta de una nota existente del proyecto, o el nombre de una nota nueva con 'targetIsNew' en true."),
     targetIsNew: z.boolean().nullish(),
   }).nullish().describe("Acción refinada obligatoria si resolution es 'keep_or_refine'. Debe ser null si resolution es 'already_addressed' o 'obsolete'."),
@@ -820,15 +819,22 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       const target = refinedAction?.targetFile
         ? resolveTarget(refinedAction.targetFile, refinedAction.targetIsNew, latestNotes, sug.targetIsNew ? null : sug.targetFile)
         : { path: sug.targetFile, isNew: sug.targetIsNew };
-      // A refined action brings its own steps (or none); otherwise the old ones stay
-      const steps = refinedAction ? resolveSteps(refinedAction.steps, latestNotes, target) : null;
-      const refinedSteps = refinedAction ? (steps!.length ? steps : null) : sug.actionSteps;
+      // A refined action is laid out as steps by the same second call as triage (structureText.ts);
+      // without one, or if that call fails, it is stored as plain text. Without a refinement the old steps stay
+      const refined = refinedAction?.suggestedAction
+        ? await structureSuggestionText(sharedAiProvider, {
+          reasoning: evalResult.reasoning,
+          action: { observation: refinedAction.observation || sug.observation, suggestedAction: refinedAction.suggestedAction, targetFile: target.path },
+          notes: latestNotes,
+          output: outputLanguage(),
+        }, target, { traceId, contentId: sug.contentId, snapshotId: latestSnapshot.id, suggestionId: sug.id })
+        : null;
       await db.update(actionSuggestions).set({
         ...(await evaluationLink(newEvaluationId, sug.id)),
         actionType: refinedAction?.actionType || sug.actionType,
         observation: refinedAction?.observation || sug.observation,
-        suggestedAction: refinedAction?.suggestedAction ? headline(refinedAction.suggestedAction) : sug.suggestedAction,
-        actionSteps: refinedSteps,
+        suggestedAction: refined?.headline ?? (refinedAction?.suggestedAction || sug.suggestedAction),
+        actionSteps: refinedAction?.suggestedAction ? (refined?.headline ? refined.steps : null) : sug.actionSteps,
         targetFile: target.path,
         targetIsNew: target.isNew,
       }).where(eq(actionSuggestions.id, sug.id));
@@ -1104,6 +1110,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       .limit(1);
 
       if (evalRow) {
+        // The reasoning as the owner read it on the card: connection first when it was laid out
+        const evalReasoning = evalRow.reasoningConnection ? reasoningPlainText(evalRow.reasoningConnection, evalRow.reasoningGap) : evalRow.triageReasoning;
         // Resolving a tentative evaluation creates its suggestion row. The unique index on
         // evaluation_id makes concurrent requests safe: only one insert wins.
         const resolution = status === 'accepted'
@@ -1112,13 +1120,13 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
             // The note closest to the article when it was evaluated; older rows have none
             targetFile: evalRow.matchedNotePath || NO_NOTE,
             observation: serverText().acceptedTentativeObservation,
-            suggestedAction: evalRow.triageReasoning || serverText().acceptedTentativeAction,
+            suggestedAction: evalReasoning || serverText().acceptedTentativeAction,
           }
           : {
             actionType: 'other' as const,
             targetFile: 'discarded',
             observation: serverText().userDiscardObservation,
-            suggestedAction: evalRow.triageReasoning || serverText().discardShort,
+            suggestedAction: evalReasoning || serverText().discardShort,
           };
 
         await db.insert(actionSuggestions).values({

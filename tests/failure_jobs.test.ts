@@ -5,7 +5,7 @@ import { installFakeAi, fakeEmbedding, FakeAi } from './helpers/fakeAi';
 // Audit failure scenario 3: a queued job runs twice, concurrently, or is interrupted.
 
 const actionable = {
-  verdict: 'actionable', confidenceScore: 0.9, connection: 'Aporta un caso concreto.',
+  verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Aporta un caso concreto.',
   action: { actionType: 'evidence_citation', observation: 'Caso útil.', suggestedAction: 'Citarlo en el capítulo dos.', targetFile: null },
 };
 

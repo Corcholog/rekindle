@@ -47,11 +47,12 @@ describe('eval harness replay', () => {
     expect(result.retrieval).toMatchObject({ k: 2, precisionAtK: 1, recallAtK: 1, casesWithRelevant: 2, casesWithoutRelevant: 1 });
     expect(result.triage.macroF1).toBe(1);
     expect(result.triage).not.toHaveProperty('targetNoteAccuracy');
-    expect(result.reliability).toMatchObject({ llmCalls: 3, failures: 0, fallbacks: 0, malformedOutputs: 0 });
+    // 3 triage calls, and 2 calls that lay out the text of the two actionable answers
+    expect(result.reliability).toMatchObject({ llmCalls: 3, failures: 0, fallbacks: 0, malformedOutputs: 0, structure: { calls: 2, failures: 0 } });
     expect(result.cost.estimatedUsd).toBe(0);
 
     // The production telemetry of the run agrees with the harness's own accounting
-    expect(result.telemetry).toMatchObject({ llmCalls: result.reliability.llmCalls, failedCalls: 0, fallbackCalls: 0 });
+    expect(result.telemetry).toMatchObject({ llmCalls: result.reliability.llmCalls + result.reliability.structure!.calls, failedCalls: 0, fallbackCalls: 0 });
     expect(result.telemetry!.stages.map(s => s.stage)).toEqual(['evaluate', 'evaluate_job', 'retrieve']);
     expect(result.telemetry!.stages.find(s => s.stage === 'evaluate_job')!.events).toBe(3);
 

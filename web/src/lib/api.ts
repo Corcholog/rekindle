@@ -38,6 +38,7 @@ export interface ContentItem {
   counts: { evaluations: number; actionable: number; tentative: number; irrelevant: number; suggestions: number };
   evaluationsList?: {
     projectId: string; projectTitle: string; verdict: Verdict | null; confidenceScore: number | null; triageReasoning: string | null;
+    reasoningConnection?: string | null; reasoningGap?: string | null;
     suggestionStatus: 'pending' | 'accepted' | 'discarded' | null;
   }[];
   isEvaluating?: boolean;
@@ -45,7 +46,7 @@ export interface ContentItem {
 
 export interface ContentDetail extends ContentItem {
   summary: string | null;
-  evaluations: { id: string; projectTitle: string; verdict: Verdict | null; confidenceScore: number | null; triageReasoning: string | null }[];
+  evaluations: { id: string; projectTitle: string; verdict: Verdict | null; confidenceScore: number | null; triageReasoning: string | null; reasoningConnection?: string | null; reasoningGap?: string | null }[];
 }
 
 export interface Project {

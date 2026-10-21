@@ -116,7 +116,8 @@ describe('suggestionTextStats', () => {
           pairs: {
             // Recorded before steps: the whole action in one text, the reasoning in one text
             'Projects/A': { verdict: 'actionable', reasoning: 'r', action: { suggestedAction: 'Una acción larga en un bloque', targetFile: 'a.md' } },
-            'Projects/B': { verdict: 'tentative', reasoning: 'Toca el Acto 1, pero sin datos.', action: null },
+            // Laid out by the second call: the connection and gap are what is shown and counted
+            'Projects/B': { verdict: 'tentative', reasoning: 'El artículo trata de otra cosa, pero toca el Acto 1.', reasoningConnection: 'Toca el Acto 1,', reasoningGap: 'sin datos.', action: null },
           },
         },
       },
@@ -125,7 +126,7 @@ describe('suggestionTextStats', () => {
     // with two values the median is the upper one
     expect(suggestionTextStats(details)).toEqual({
       actions: 2, actionsWithSteps: 1, steps: 2, stepsWithText: 1, stepsOnOtherNote: 1, actionCharsP50: 37,
-      tentatives: 2, tentativesWithGap: 1, tentativeReasoningCharsP50: 45, tentativesOpeningWithSummary: 1,
+      tentatives: 2, tentativesWithGap: 2, tentativeReasoningCharsP50: 45, tentativesOpeningWithSummary: 1,
     });
   });
 });

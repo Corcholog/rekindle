@@ -86,7 +86,7 @@ describe('Evaluation Pipeline Integration', () => {
     fake.answerNext({
       verdict: 'actionable',
       confidenceScore: 0.85,
-      connection: 'El artículo aporta evidencia sobre el desacople con pub/sub en sistemas multi-agente.',
+      triageReasoning: 'El artículo aporta evidencia sobre el desacople con pub/sub en sistemas multi-agente.',
       action: {
         actionType: 'evidence_citation',
         observation: 'Muestra cómo pub/sub elimina cuellos de botella entre agentes.',
@@ -129,7 +129,7 @@ describe('Evaluation Pipeline Integration', () => {
     }).returning();
 
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.8, connection: 'Parece relacionado.',
+      verdict: 'actionable', confidenceScore: 0.8, triageReasoning: 'Parece relacionado.',
       action: { actionType: 'other', observation: 'No aporta nada nuevo.', suggestedAction: 'Descartar el artículo.', targetFile: null },
     });
     const { evaluateContentMatch } = await import('../src/evaluator');
@@ -155,7 +155,7 @@ describe('Evaluation Pipeline Integration', () => {
 
     fake.calls.length = 0;
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.8, connection: 'Looks related.',
+      verdict: 'actionable', confidenceScore: 0.8, triageReasoning: 'Looks related.',
       action: { actionType: 'other', observation: 'It adds nothing new.', suggestedAction: 'Discard the article.', targetFile: null },
     });
     const { evaluateContentMatch } = await import('../src/evaluator');

@@ -104,7 +104,7 @@ describe('project dormancy end to end', () => {
     // Same vector as the project, so retrieval surely selects it
     await db.update(schema.projectSnapshots).set({ embedding: fakeEmbedding('faro') }).where((await import('drizzle-orm')).eq(schema.projectSnapshots.id, snapshot.id));
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.9, connection: 'Sirve.',
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Sirve.',
       action: { actionType: 'evidence_citation', observation: 'o', suggestedAction: 'Citar.', targetFile: 'ideas.md' },
     });
     const { evaluateContentMatch } = await import('../src/evaluator');

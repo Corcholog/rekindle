@@ -65,11 +65,14 @@ describe('Pipeline trace', () => {
       embed: async () => VECTOR,
       evaluate: async (_system: string, _user: string, zodSchema: any) => {
         const isSummary = 'summary' in (zodSchema.shape ?? {});
+        const isStructure = 'headline' in (zodSchema.shape ?? {});
         if (!isSummary && failTriage) throw new Error(`El modelo respondió: ${SENTINEL}`);
         const data = isSummary
           ? { summary: `Resumen ${SENTINEL}` }
+          : isStructure
+          ? { connection: `Conexión ${SENTINEL}`, gap: null, headline: `Citar ${SENTINEL}`, steps: [{ note: null, where: null, change: `Citar ${SENTINEL}`, text: null }] }
           : {
-            verdict: 'actionable', confidenceScore: 0.9, connection: `Razonamiento ${SENTINEL}`,
+            verdict: 'actionable', confidenceScore: 0.9, triageReasoning: `Razonamiento ${SENTINEL}`,
             action: { actionType: 'evidence_citation', observation: `Observación ${SENTINEL}`, suggestedAction: `Citar ${SENTINEL}`, targetFile: null },
           };
         return {
@@ -162,7 +165,7 @@ describe('Pipeline trace', () => {
     expect(events.find((e: any) => e.stage === 'evaluate_job').attrs).toMatchObject({ origin: 'ingest', candidates: 1, evaluated: 1, suggestions: 1, failures: 0 });
 
     const telemetry = await db.select().from(schema.llmTelemetry).where(eq(schema.llmTelemetry.traceId, traceId));
-    expect(telemetry.map((t: any) => t.component).sort()).toEqual(['summary', 'triage']);
+    expect(telemetry.map((t: any) => t.component).sort()).toEqual(['structure', 'summary', 'triage']);
     expect(telemetry.find((t: any) => t.component === 'triage')).toMatchObject({ suggestionId: suggestion.id, snapshotId: snapshot.id, costUsd: expect.any(Number) });
 
     // Nothing private in the observability tables
@@ -180,7 +183,7 @@ describe('Pipeline trace', () => {
     expect(view.evaluation?.id).toBe(suggestion.evaluationId);
     const retrieve = view.traces.flatMap(t => t.events).find(e => e.stage === 'retrieve')!;
     expect(view.evaluation?.retrievalEventId).toBe(retrieve.id);
-    expect(view.traces[0].llm.map(a => a.component)).toEqual(['summary', 'triage']);
+    expect(view.traces[0].llm.map(a => a.component)).toEqual(['summary', 'triage', 'structure']);
 
     const text = renderTrace(view);
     expect(text).toContain(`Selected by retrieval event: ${retrieve.id}`);

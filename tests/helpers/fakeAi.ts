@@ -46,7 +46,7 @@ type Answer = unknown | ((call: FakeCall) => unknown);
 function defaultAnswer(call: FakeCall): unknown {
   if (call.kind === 'summary') return { summary: `Resumen simulado: ${call.user.slice(0, 200)}` };
   if (call.kind === 'triage') {
-    return { verdict: 'irrelevant', confidenceScore: 0.1, connection: 'Respuesta simulada: sin relación.', action: null };
+    return { verdict: 'irrelevant', confidenceScore: 0.1, triageReasoning: 'Respuesta simulada: sin relación.', action: null };
   }
   throw new Error('fakeAi: no scripted answer for this schema; use answerNext()');
 }
@@ -56,16 +56,26 @@ export interface FakeAi {
   embeddings: string[];
   /** Answers for the next LLM calls, in order. A function receives the call; an Error is thrown. */
   answerNext(...answers: Answer[]): void;
+  /**
+   * The second call that lays out a suggestion's text (src/evaluator/structureText.ts) has its own
+   * queue and list, so scripted triage answers and call counts are unaffected. Unscripted, it fails
+   * and the suggestion keeps its plain text.
+   */
+  structureCalls: FakeCall[];
+  answerStructureNext(...answers: Answer[]): void;
   uninstall(): void;
 }
 
 export function installFakeAi(ai: AiProvider, options: { model?: string } = {}): FakeAi {
   const model = options.model ?? 'fake:scripted';
   const queue: Answer[] = [];
+  const structureQueue: Answer[] = [];
   const fake: FakeAi = {
     calls: [],
     embeddings: [],
+    structureCalls: [],
     answerNext: (...answers) => { queue.push(...answers); },
+    answerStructureNext: (...answers) => { structureQueue.push(...answers); },
     uninstall: () => ai.setOverrides({}),
   };
   ai.setOverrides({
@@ -75,10 +85,14 @@ export function installFakeAi(ai: AiProvider, options: { model?: string } = {}):
     },
     evaluate: async (system, user, schema) => {
       const shape = (schema as any).shape ?? {};
+      const isStructure = 'connection' in shape && 'headline' in shape;
       const call: FakeCall = { system, user, kind: 'summary' in shape ? 'summary' : 'verdict' in shape ? 'triage' : 'other' };
-      fake.calls.push(call);
-      const scripted = queue.length > 0 ? queue.shift() : undefined;
-      const answer = scripted === undefined ? defaultAnswer(call) : typeof scripted === 'function' ? (scripted as (c: FakeCall) => unknown)(call) : scripted;
+      (isStructure ? fake.structureCalls : fake.calls).push(call);
+      const pending = isStructure ? structureQueue : queue;
+      const scripted = pending.length > 0 ? pending.shift() : undefined;
+      const answer = scripted === undefined
+        ? (isStructure ? new Error('fakeAi: no scripted structure answer') : defaultAnswer(call))
+        : typeof scripted === 'function' ? (scripted as (c: FakeCall) => unknown)(call) : scripted;
       if (answer instanceof Error) throw answer;
       const [provider, ...rest] = model.split(':');
       return {

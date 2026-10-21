@@ -12,7 +12,7 @@ import { ProviderError, type ChatProvider } from '../src/ai/types';
 type Script = (attempt: number) => ChatProvider[];
 
 const triageAnswer = {
-  verdict: 'actionable', confidenceScore: 0.9, connection: 'Aporta evidencia directa.',
+  verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Aporta evidencia directa.',
   action: { actionType: 'evidence_citation', observation: 'Dato útil.', suggestedAction: 'Citarlo en el borrador.', targetFile: null },
 };
 
@@ -125,7 +125,8 @@ describe('Failure scenarios: invalid output, timeouts and failing providers', ()
     expect(evaluate.map((e: any) => [e.ok, e.errorKind])).toEqual([[false, 'llm_chain'], [true, null]]);
 
     const attempts = await db.select().from(schema.llmTelemetry).where(eq(schema.llmTelemetry.traceId, traceId));
-    const kinds = attempts.map((a: any) => `${a.provider}:${a.isSuccess ? 'ok' : a.errorKind}`).sort();
+    // The triage attempts; the second call that lays out the text is not part of these scenarios
+    const kinds = attempts.filter((a: any) => a.component === 'triage').map((a: any) => `${a.provider}:${a.isSuccess ? 'ok' : a.errorKind}`).sort();
     expect(kinds).toEqual(['deepseek:invalid_json', 'deepseek:invalid_json', 'deepseek:ok', 'ollama:timeout'].sort());
   }, 90000);
 

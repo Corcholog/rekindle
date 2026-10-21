@@ -29,6 +29,9 @@ const ContentItemSchema = z.object({
     verdict: z.enum(['irrelevant', 'tentative', 'actionable']).nullable(),
     confidenceScore: z.number().nullable(),
     triageReasoning: z.string().nullable(),
+    /** The reasoning laid out connection first (null on older evaluations and when that call failed). */
+    reasoningConnection: z.string().nullable().optional(),
+    reasoningGap: z.string().nullable().optional(),
     /** Status of the suggestion this evaluation produced; null while a tentative one is unresolved. */
     suggestionStatus: z.enum(['pending', 'accepted', 'discarded']).nullable(),
   })).optional(),
@@ -45,6 +48,9 @@ const ContentDetailSchema = ContentItemSchema.extend({
     verdict: z.enum(['irrelevant', 'tentative', 'actionable']).nullable(),
     confidenceScore: z.number().nullable(),
     triageReasoning: z.string().nullable(),
+    /** The reasoning laid out connection first (null on older evaluations and when that call failed). */
+    reasoningConnection: z.string().nullable().optional(),
+    reasoningGap: z.string().nullable().optional(),
     evaluatedAt: z.string(),
   })),
 });
@@ -100,6 +106,8 @@ const evaluationsListSql = sql<any>`coalesce((
     'verdict', e.verdict,
     'confidenceScore', e.confidence_score,
     'triageReasoning', e.triage_reasoning,
+    'reasoningConnection', e.reasoning_connection,
+    'reasoningGap', e.reasoning_gap,
     'suggestionStatus', s.status
   ))
   FROM evaluations e
@@ -264,6 +272,8 @@ export default async function (server: FastifyInstance) {
       verdict: evaluations.verdict,
       confidenceScore: evaluations.confidenceScore,
       triageReasoning: evaluations.triageReasoning,
+      reasoningConnection: evaluations.reasoningConnection,
+      reasoningGap: evaluations.reasoningGap,
       evaluatedAt: evaluations.evaluatedAt,
     })
     .from(evaluations)

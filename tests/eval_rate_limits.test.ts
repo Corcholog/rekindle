@@ -15,7 +15,7 @@ describe('eval run under rate limiting', () => {
   let alwaysLimited = false;
 
   const triage = JSON.stringify({
-    choices: [{ message: { content: '{"verdict":"irrelevant","confidenceScore":0.1,"connection":"x","action":null}' } }],
+    choices: [{ message: { content: '{"verdict":"irrelevant","confidenceScore":0.1,"triageReasoning":"x","action":null}' } }],
     usage: { prompt_tokens: 100, completion_tokens: 20 },
   });
 

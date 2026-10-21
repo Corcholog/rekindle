@@ -41,7 +41,7 @@ describe('triage prompt', () => {
     expect(triageSystemPrompt({ prompt: 'es', output: 'es' })).toContain(answerInLine('es'));
     expect(triageSystemPrompt({ prompt: 'es', output: 'en' })).toContain('Debes responder SIEMPRE en INGLÉS.');
     expect(triageSystemPrompt({ prompt: 'en', output: 'es' })).toContain('You MUST ALWAYS answer in SPANISH.');
-    const reasoning = (l: Parameters<typeof triageSchema>[0]) => triageSchema(l).shape.connection.description;
+    const reasoning = (l: Parameters<typeof triageSchema>[0]) => triageSchema(l).shape.triageReasoning.description;
     expect(reasoning({ prompt: 'es', output: 'es' })).toContain('en español');
     expect(reasoning({ prompt: 'es', output: 'en' })).toContain('en inglés');
     expect(reasoning({ prompt: 'en', output: 'en' })).toContain('in English');

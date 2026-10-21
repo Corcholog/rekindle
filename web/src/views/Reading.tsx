@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { ArrowUpRight, ChevronRight, Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { api, ApiError, type ContentDetail, type ContentItem, type IngestStatus } from '@/lib/api';
-import { cn, safeHref } from '@/lib/utils';
+import { cn, reasoningText, safeHref } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
 import { Dialog } from '@/components/ui/dialog';
@@ -235,9 +235,9 @@ function EvaluationRow({ evaluation: ev, contentId }: { evaluation: NonNullable<
             <span className="font-medium text-ink">{ev.projectTitle}</span>
             <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
           </span>
-          {(open || (preview && ev.triageReasoning)) && (
+          {(open || (preview && reasoningText(ev))) && (
             <span className={cn('evaluation-reasoning mt-0.5 block whitespace-pre-line text-ink-2', !open && 'line-clamp-2')}>
-              {ev.triageReasoning || t('sug.noReasoning')}
+              {reasoningText(ev) || t('sug.noReasoning')}
             </span>
           )}
         </span>
@@ -294,7 +294,7 @@ export function ContentDetailDialog({ id, onClose }: { id: string | null; onClos
                       <strong className="text-sm text-ink">{ev.projectTitle}</strong>
                       <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
                     </div>
-                    <p className="mt-1 whitespace-pre-line text-sm text-ink-2">{ev.triageReasoning || t('sug.noReasoning')}</p>
+                    <p className="mt-1 whitespace-pre-line text-sm text-ink-2">{reasoningText(ev) || t('sug.noReasoning')}</p>
                   </li>
                 ))}
               </ul>

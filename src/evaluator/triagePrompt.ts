@@ -17,68 +17,43 @@ export function triageSchema({ prompt, output }: TriageLanguages) {
   const d = prompt === 'es'
     ? {
       actionType: 'Tipo de acción constructiva para Obsidian',
-      observation: 'Por qué: observación específica de lo que aporta constructivamente el artículo al proyecto, en 1 a 3 oraciones',
-      suggestedAction: 'Titular de la acción en una sola oración (máximo 20 palabras): qué agregar y en qué nota.',
-      steps: 'Pasos concretos de la acción, de 1 a 4, en orden. Cada paso es un cambio en una nota.',
-      stepNote: "Ruta de la nota del ÍNDICE DE NOTAS donde se hace este paso, o la nota nueva de 'targetFile'.",
-      stepWhere: 'Lugar dentro de la nota: sección, encabezado, viñeta o acto (ej. "bajo la viñeta de Sartre"). null si da igual.',
-      stepChange: 'Qué hacer, en una oración (ej. "añadir una viñeta con la cita").',
-      stepText: 'Texto exacto para pegar en la nota: una cita del artículo o una frase ya redactada. null si el paso no agrega texto.',
+      observation: 'Observación específica de lo que aporta constructivamente el artículo al proyecto',
+      suggestedAction: 'Instrucción concreta de redacción o integración en las notas de Obsidian (ej. citar en Acto 2, crear puente narrativo).',
       targetFile: "Ruta de la nota del ÍNDICE DE NOTAS a la que apunta la acción, tal como aparece en el índice (ej. borrador.md o research/fuentes.md). Si ninguna nota existente encaja, el nombre de una nota NUEVA a crear (ej. contraargumentos.md) con 'targetIsNew' en true.",
       targetIsNew: "true solo si 'targetFile' es una nota nueva que no está en el índice; false si es una nota existente.",
       verdict: "Veredicto: 'actionable' si aporta ideas, citas o argumentos concretos para enriquecer el borrador; 'tentative' si es tangencial o dudoso; 'irrelevant' si no aporta nada o está fuera de foco.",
       confidenceScore: 'Puntaje decimal entre 0.0 y 1.0 que mide el grado de afinidad temática y relevancia con el proyecto: 0.0-0.3 si es irrelevant, 0.4-0.6 si es tentative, 0.7-1.0 si es actionable.',
-      connection: `Conexión, en ${languageName(output).lower}: qué vincula el artículo con el proyecto, en 1 o 2 oraciones, nombrando la nota o sección. Si no hay conexión, dilo. Empieza directamente por la conexión: no resumas el artículo ni el proyecto.`,
-      gap: `Qué le falta, en ${languageName(output).lower}, para ser 'actionable', o por qué no aplica al proyecto, en 1 o 2 oraciones. null si es 'actionable'.`,
+      triageReasoning: `Razonamiento detallado en ${languageName(output).lower} explicando por qué es útil o por qué es irrelevante`,
       action: "Propuesta de acción concreta. REQUERIDO si verdict es 'actionable'. Debe ser null si verdict es 'tentative' o 'irrelevant'.",
     }
     : {
       actionType: 'Type of constructive action for Obsidian',
-      observation: 'Why: specific observation of what the article constructively brings to the project, in 1 to 3 sentences',
-      suggestedAction: 'Headline of the action in one sentence (at most 20 words): what to add and in which note.',
-      steps: 'Concrete steps of the action, 1 to 4, in order. Each step is one change in one note.',
-      stepNote: "Path of the note from the NOTE INDEX where this step happens, or the new note in 'targetFile'.",
-      stepWhere: 'Place inside the note: section, heading, bullet or act (e.g. "under the Sartre bullet"). null if it does not matter.',
-      stepChange: 'What to do, in one sentence (e.g. "add a bullet with the quote").',
-      stepText: 'Exact text to paste into the note: a quote from the article or a ready-written sentence. null if the step adds no text.',
+      observation: 'Specific observation of what the article constructively brings to the project',
+      suggestedAction: 'Concrete writing or integration instruction for the Obsidian notes (e.g. cite in Act 2, build a narrative bridge).',
       targetFile: "Path of the note from the NOTE INDEX the action points to, exactly as listed (e.g. draft.md or research/sources.md). If no existing note fits, the name of a NEW note to create (e.g. counterarguments.md) with 'targetIsNew' set to true.",
       targetIsNew: "true only if 'targetFile' is a new note that is not in the index; false for an existing note.",
       verdict: "Verdict: 'actionable' if it brings concrete ideas, quotes or arguments that enrich the draft; 'tentative' if it is tangential or doubtful; 'irrelevant' if it adds nothing or is off topic.",
       confidenceScore: 'Decimal score between 0.0 and 1.0 measuring thematic affinity and relevance to the project: 0.0-0.3 if irrelevant, 0.4-0.6 if tentative, 0.7-1.0 if actionable.',
-      connection: `Connection, in ${languageName(output, 'en').lower}: what links the article to the project, in 1 or 2 sentences, naming the note or section. If nothing does, say so. Start with the connection itself: do not summarize the article or the project.`,
-      gap: `What it lacks, in ${languageName(output, 'en').lower}, to be 'actionable', or why it does not apply to the project, in 1 or 2 sentences. null if it is 'actionable'.`,
+      triageReasoning: `Detailed reasoning in ${languageName(output, 'en').lower} explaining why it is useful or why it is irrelevant`,
       action: "Concrete action proposal. REQUIRED if verdict is 'actionable'. Must be null if verdict is 'tentative' or 'irrelevant'.",
     };
 
-  const stepSchema = z.object({
-    note: z.string().nullish().describe(d.stepNote),
-    where: z.string().nullish().describe(d.stepWhere),
-    change: z.string().describe(d.stepChange),
-    text: z.string().nullish().describe(d.stepText),
-  });
   const actionSchema = z.object({
     actionType: z.enum(ACTION_TYPES).describe(d.actionType),
     observation: z.string().describe(d.observation),
     suggestedAction: z.string().describe(d.suggestedAction),
-    steps: z.array(stepSchema).nullish().describe(d.steps),
     targetFile: z.string().nullish().describe(d.targetFile),
     targetIsNew: z.boolean().nullish().describe(d.targetIsNew),
   });
   return z.object({
     verdict: z.enum(['actionable', 'tentative', 'irrelevant']).describe(d.verdict),
     confidenceScore: z.number().min(0).max(1).describe(d.confidenceScore),
-    connection: z.string().describe(d.connection),
-    gap: z.string().nullish().describe(d.gap),
+    triageReasoning: z.string().describe(d.triageReasoning),
     action: actionSchema.nullable().describe(d.action),
   });
 }
 
 export type TriageResult = z.infer<ReturnType<typeof triageSchema>>;
-
-/** The steps field of an action, for other prompts that return an action (re-evaluation). */
-export function actionStepsSchema(prompt: Language) {
-  return triageSchema({ prompt, output: prompt }).shape.action.unwrap().shape.steps;
-}
 
 export function triageSystemPrompt({ prompt, output }: TriageLanguages): string {
   if (prompt === 'en') {

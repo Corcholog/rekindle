@@ -130,8 +130,9 @@ const median = (values: number[]): number | null => {
 /**
  * The shape of what the model wrote, without labels: how many actions came as steps, how many steps
  * carry text to paste or point at another note than the target, the length of the action text
- * (headline and steps), and for tentatives the length of the reasoning, whether it says what is
- * missing, and how many still open by describing the article or the project.
+ * (headline and steps), and for tentatives the length of the reasoning as shown (the laid-out
+ * connection and gap when there are), whether it says what is missing, and how many still open by
+ * describing the article or the project.
  */
 export function suggestionTextStats(details: RunDetails) {
   let actions = 0, actionsWithSteps = 0, steps = 0, stepsWithText = 0, stepsOnOtherNote = 0;
@@ -152,7 +153,8 @@ export function suggestionTextStats(details: RunDetails) {
       if (pair.verdict === 'tentative') {
         tentatives++;
         if (pair.reasoningGap) tentativesWithGap++;
-        const reasoning = pair.reasoning ?? '';
+        // What the owner reads: the laid-out connection and gap, or the model's own reasoning
+        const reasoning = pair.reasoningConnection ? [pair.reasoningConnection, pair.reasoningGap].filter(Boolean).join('\n\n') : (pair.reasoning ?? '');
         tentativeChars.push(reasoning.length);
         if (OPENS_WITH_SUMMARY.test(reasoning.trim())) tentativesOpeningWithSummary++;
       }

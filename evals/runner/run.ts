@@ -27,7 +27,7 @@ export interface RunOptions {
 }
 
 interface SinkEntry {
-  phase: 'triage' | 'summary';
+  phase: 'triage' | 'summary' | 'structure';
   ok: boolean;
   attempts: Attempt[];
   latencyMs: number;
@@ -169,7 +169,14 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       return { data: recorded.data, model: recorded.model, usage: recorded.usage, latencyMs: recorded.latencyMs, attempts: recorded.attempts };
     };
 
-    sharedAiProvider.setOverrides({ embed, evaluate: makeEvaluate(config.providers, 'triage') });
+    // The second call that lays out a suggestion's text (src/evaluator/structureText.ts) runs on
+    // the same chain but is counted apart, so triage reliability stays comparable across runs
+    const triageEvaluate = makeEvaluate(config.providers, 'triage');
+    const structureEvaluate = makeEvaluate(config.providers, 'structure');
+    sharedAiProvider.setOverrides({
+      embed,
+      evaluate: (system, user, zodSchema, callOptions) => ('headline' in ((zodSchema as any).shape ?? {}) ? structureEvaluate : triageEvaluate)(system, user, zodSchema, callOptions),
+    });
     const summaryAi = new AiProvider();
     summaryAi.setOverrides({ embed, evaluate: makeEvaluate(config.summaryProviders, 'summary') });
 
@@ -268,6 +275,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     };
     const score = scoreRun({ projects: dataset.projects.map(p => p.folderPath), cases, predictions: predictionsFromDetails(details), k: config.k });
     const triageEntries = sink.filter(e => e.phase === 'triage');
+    const structureEntries = sink.filter(e => e.phase === 'structure');
     const allAttempts = sink.flatMap(e => e.attempts);
     const firstProvider = config.providers[0].name;
     const unpriced = new Set<string>();
@@ -311,6 +319,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         rateLimitWaitMs: triageEntries.flatMap(e => e.attempts).reduce((s, a) => s + (a.waitedMs ?? 0), 0),
         latencyMsP50: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 50),
         latencyMsP95: percentile(triageEntries.filter(e => e.ok).map(e => e.latencyMs), 95),
+        structure: {
+          calls: structureEntries.length,
+          malformedOutputs: structureEntries.flatMap(e => e.attempts).filter(a => !a.ok && a.errorKind && MALFORMED.has(a.errorKind)).length,
+          failures: structureEntries.filter(e => !e.ok).length,
+          latencyMsP50: percentile(structureEntries.filter(e => e.ok).map(e => e.latencyMs), 50),
+        },
       },
       cost: {
         promptTokens: allAttempts.reduce((s, a) => s + (a.usage?.promptTokens ?? 0), 0),

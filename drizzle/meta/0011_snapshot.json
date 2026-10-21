@@ -1,5 +1,5 @@
 {
-  "id": "41f4038b-405e-4e01-98b0-dcbe88730d66",
+  "id": "4dce67a5-f5d9-45d2-962d-613e4a05ec20",
   "prevId": "953a145e-a1f4-4297-b56e-9847426f3330",
   "version": "7",
   "dialect": "postgresql",
@@ -1261,7 +1261,8 @@
         "consult",
         "synergy",
         "synthesis",
-        "reevaluate"
+        "reevaluate",
+        "structure"
       ]
     },
     "public.verdict": {

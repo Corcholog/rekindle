@@ -120,7 +120,7 @@ describe('Failure scenario 8: target paths from the model', () => {
       embedding: noteRows[0].embedding, embeddingModel: 'bge-m3',
     }).returning();
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.9, connection: 'Relacionado.',
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Relacionado.',
       action: { actionType: 'evidence_citation', observation: 'Dato.', suggestedAction: 'Citar.', targetFile: '../../Personal/diario.md' },
     });
 
@@ -159,7 +159,7 @@ describe('Failure scenario 8: target paths from the model', () => {
       embedding: noteRows[0].embedding, embeddingModel: 'bge-m3',
     }).returning();
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.9, connection: 'Relacionado.',
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Relacionado.',
       action: { actionType: 'evidence_citation', observation: 'Dato.', suggestedAction: 'Añadir un ejemplo.', targetFile: 'Ejemplos para el ensayo', targetIsNew: false },
     });
 
@@ -187,7 +187,7 @@ describe('Failure scenario 8: target paths from the model', () => {
       embedding: noteRows[0].embedding, embeddingModel: 'bge-m3',
     }).returning();
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 0.9, connection: 'Aporta críticas.',
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Aporta críticas.',
       action: { actionType: 'counter_argument', observation: 'Críticas.', suggestedAction: 'Abrir una nota de críticas.', targetFile: 'Críticas a la IA', targetIsNew: true },
     });
 
