@@ -13,6 +13,7 @@ import { languageName, outputLanguage } from '../../ai/language';
 import { SERVER_TEXT, serverText } from '../../i18n/serverText';
 import { idleDays, isDormant } from '../../vault/dormancy';
 import { promptBlock } from '../../ai/promptSafety';
+import { projectNotesContext } from '../../evaluator/retrieval';
 
 const ProjectItemSchema = z.object({
   id: z.string().uuid(),
@@ -754,7 +755,10 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       .orderBy(desc(projectSnapshots.capturedAt))
       .limit(1);
 
-    const projectContext = latestSnapshot?.notesContent || latestSnapshot?.thesisText || proj.title;
+    const projectFallback = latestSnapshot?.notesContent || latestSnapshot?.thesisText || proj.title;
+    const projectContext = latestSnapshot
+      ? (await projectNotesContext(latestSnapshot.id, null, projectFallback, 'es')).text
+      : projectFallback;
 
     // 3. Format accepted suggestions list for LLM
     const suggestionsPrompt = acceptedList.map((s, idx) => {
@@ -775,7 +779,7 @@ REGLAS:
 
     const userMessage = `${promptBlock('CONTEXTO_DEL_PROYECTO', `Proyecto: "${proj.title}"
 Notas y Borradores Actuales:
-${projectContext.substring(0, 10000)}`)}
+${projectContext}`)}
 
 ${promptBlock('SUGERENCIAS_ACEPTADAS_A_SINTETIZAR', `Total de sugerencias aceptadas: ${acceptedList.length}
 

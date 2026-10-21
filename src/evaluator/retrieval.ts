@@ -1,7 +1,9 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
-import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, env } from '../config';
+import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, NOTES_CONTEXT_CHARS, env } from '../config';
+import { Language } from '../ai/language';
+import { buildNotesContext, ContextNote, NotesContext, notesTextChars } from './notesContext';
 
 export interface RetrievalCandidate {
   snapshotId: string;
@@ -115,4 +117,55 @@ export async function retrieveWithStats(
   }));
   const withinThreshold = result.rows.length > 0 ? Number((result.rows[0] as any).within_threshold) : 0;
   return { candidates, withinThreshold, threshold, limit };
+}
+
+/** Every note of a project snapshot with its full text, for the notes context of a prompt. */
+export async function snapshotNotes(projectSnapshotId: string): Promise<ContextNote[]> {
+  const rows = await db.select({
+    path: projectNoteSnapshots.notePath,
+    title: projectNoteSnapshots.noteTitle,
+    text: projectNoteSnapshots.contentSnippet,
+  }).from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, projectSnapshotId));
+  return rows.map(r => ({ path: r.path, title: r.title, text: r.text ?? '' }));
+}
+
+/**
+ * Distance from the article to each note of a snapshot, only for notes embedded with `embedModel`
+ * (I7). Notes without a comparable embedding get none and go last.
+ */
+export async function rankSnapshotNotes(
+  projectSnapshotId: string,
+  contentEmbedding: number[],
+  embedModel: string = env.EMBED_MODEL,
+): Promise<Map<string, number>> {
+  const targetVector = `[${contentEmbedding.join(',')}]`;
+  const result = await db.execute(sql`
+    SELECT note_path, (embedding <=> ${targetVector}::vector) AS distance
+    FROM ${projectNoteSnapshots}
+    WHERE project_snapshot_id = ${projectSnapshotId}
+      AND embedding IS NOT NULL
+      AND embedding_model = ${embedModel}
+  `);
+  return new Map(result.rows.map((r: any) => [r.note_path as string, Number(r.distance)]));
+}
+
+/**
+ * The notes context for one project and article: whole when it fits NOTES_CONTEXT_CHARS, otherwise
+ * ranked by distance to the article. Snapshots without note rows (older data, tests) fall back to
+ * the project's notes text, cut to the budget.
+ */
+export async function projectNotesContext(
+  projectSnapshotId: string,
+  contentEmbedding: number[] | null,
+  fallbackText: string,
+  lang: Language,
+  embedModel: string = env.EMBED_MODEL,
+): Promise<NotesContext> {
+  const notes = await snapshotNotes(projectSnapshotId);
+  if (notes.length === 0) return { text: fallbackText.substring(0, NOTES_CONTEXT_CHARS), included: 0, omitted: 0 };
+  if (notesTextChars(notes) > NOTES_CONTEXT_CHARS && contentEmbedding) {
+    const distances = await rankSnapshotNotes(projectSnapshotId, contentEmbedding, embedModel);
+    for (const note of notes) note.distance = distances.get(note.path) ?? null;
+  }
+  return buildNotesContext(notes, NOTES_CONTEXT_CHARS, lang);
 }

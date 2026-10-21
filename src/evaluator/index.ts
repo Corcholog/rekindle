@@ -4,7 +4,7 @@ import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
-import { retrieveWithStats, RetrievalOptions } from './retrieval';
+import { projectNotesContext, retrieveWithStats, RetrievalOptions } from './retrieval';
 import { resolveTargetFile } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
@@ -131,10 +131,8 @@ async function runEvaluation(
     const snapshotId = candidate.snapshotId;
     const projectId = candidate.projectId;
     const thesisText = candidate.thesisText;
-    const notesContent = candidate.notesContent;
     const matchedNotePath = candidate.notePath;
     const matchedNoteTitle = candidate.noteTitle;
-    const matchedNoteSnippet = candidate.noteSnippet;
 
     // Idempotency: Check if evaluation already exists before invoking LLM
     const [existing] = await db.select({ id: evaluations.id })
@@ -157,17 +155,17 @@ async function runEvaluation(
     // Read at call time, so a language change in the settings applies to the next evaluation
     const languages = { prompt: promptLanguage(), output: outputLanguage() };
     const systemPrompt = triageSystemPrompt(languages);
-    // Cap context strings to prevent overflowing model token limits
+    const notesContext = await projectNotesContext(snapshotId, content.embedding, candidate.notesContent, languages.prompt, embedModel);
     const userMessage = triageUserMessage(languages.prompt, {
-      matchedNotePath, matchedNoteTitle, matchedNoteSnippet, thesisText,
-      projectNotes: notesContent.substring(0, 15000),
+      matchedNotePath, matchedNoteTitle, thesisText,
+      projectNotes: notesContext.text,
       summary: (content.summary || '').substring(0, 10000),
     });
 
     const evaluateStarted = Date.now();
     const evaluateEvent = (ok: boolean, attrs: Record<string, unknown>, errorKind?: string) => recordStage({
       traceId, stage: 'evaluate', contentId, snapshotId, durationMs: Date.now() - evaluateStarted, ok, errorKind,
-      attrs: { rank, projectId, distance: Number(candidate.distance.toFixed(4)), level: candidate.level, ...attrs },
+      attrs: { rank, projectId, distance: Number(candidate.distance.toFixed(4)), level: candidate.level, notesIncluded: notesContext.included, notesOmitted: notesContext.omitted, ...attrs },
     });
     try {
       const { data: result, model: modelUsed, telemetryIds = [] } = await ollama.evaluateContent(

@@ -35,7 +35,7 @@ describe('summary prompt', () => {
 });
 
 describe('triage prompt', () => {
-  const context = { matchedNotePath: 'a.md', matchedNoteTitle: 'A', matchedNoteSnippet: 'x', projectNotes: 'notas', summary: 'resumen' };
+  const context = { matchedNotePath: 'a.md', matchedNoteTitle: 'A', projectNotes: 'notas', summary: 'resumen' };
 
   it('states the output language in the instructions and in the reasoning field', () => {
     expect(triageSystemPrompt({ prompt: 'es', output: 'es' })).toContain(answerInLine('es'));
@@ -53,8 +53,17 @@ describe('triage prompt', () => {
       expect(user.match(/<PROJECT_CONTEXT>/g)).toHaveLength(1);
       expect(user.match(/<ARTICLE_SUMMARY>/g)).toHaveLength(1);
     }
-    expect(triageUserMessage('en', context)).toContain('NOTE WITH THE HIGHEST SEMANTIC AFFINITY');
-    expect(triageUserMessage('es', context)).toContain('NOTA CON MAYOR AFINIDAD SEMÁNTICA DETECTADA');
+    expect(triageUserMessage('en', context)).toContain('NOTE CLOSEST TO THE ARTICLE (a hint, not a requirement): a.md ("A")');
+    expect(triageUserMessage('es', context)).toContain('NOTA MÁS CERCANA AL ARTÍCULO (orientativa, no obligatoria): a.md ("A")');
+  });
+
+  it('puts the notes before anything that depends on the article', () => {
+    const one = triageUserMessage('es', context);
+    const other = triageUserMessage('es', { ...context, matchedNotePath: 'b.md', matchedNoteTitle: 'B', summary: 'otro' });
+    const prefix = 'NOTAS Y BORRADORES DEL PROYECTO:\nnotas';
+    expect(one.indexOf(prefix)).toBeGreaterThan(-1);
+    expect(one.slice(0, one.indexOf(prefix) + prefix.length)).toBe(other.slice(0, other.indexOf(prefix) + prefix.length));
+    expect(one.indexOf('notas')).toBeLessThan(one.indexOf('NOTA MÁS CERCANA'));
   });
 
   it('recognizes a disguised discard in either language', () => {

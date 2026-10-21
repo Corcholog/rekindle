@@ -76,10 +76,10 @@ REGLAS DE EVALUACIÓN:
 }
 
 export interface TriageContext {
+  /** The note closest to the article, a hint for the model; it may choose another. */
   matchedNotePath?: string | null;
   matchedNoteTitle?: string | null;
-  matchedNoteSnippet?: string | null;
-  /** Project notes, already capped. */
+  /** The notes context (notesContext.ts): every note's path and the notes' text within the budget. */
   projectNotes: string;
   thesisText?: string | null;
   /** Article summary, already capped. */
@@ -88,23 +88,23 @@ export interface TriageContext {
 
 export function triageUserMessage(prompt: Language, c: TriageContext): string {
   const en = prompt === 'en';
-  let matchedNoteContext = '';
-  if (c.matchedNotePath) {
-    const title = c.matchedNoteTitle ? ` ("${c.matchedNoteTitle}")` : '';
-    const excerpt = c.matchedNoteSnippet ? `${en ? '- Relevant excerpt' : '- Extracto relevante'}:\n${c.matchedNoteSnippet}\n` : '';
-    matchedNoteContext = en
-      ? `\nNOTE WITH THE HIGHEST SEMANTIC AFFINITY:\n- File: ${c.matchedNotePath}${title}\n${excerpt}`
-      : `\nNOTA CON MAYOR AFINIDAD SEMÁNTICA DETECTADA:\n- Archivo: ${c.matchedNotePath}${title}\n${excerpt}`;
-  }
   const notes = c.projectNotes || c.thesisText || (en ? 'Project with no additional notes.' : 'Proyecto sin notas adicionales.');
   const heading = en ? "PROJECT'S NOTES AND DRAFTS:" : 'NOTAS Y BORRADORES DEL PROYECTO:';
+  // The notes come first and do not depend on the article, so the prompt prefix repeats across
+  // articles and providers can serve it from their cache
+  let closestNote = '';
+  if (c.matchedNotePath) {
+    const title = c.matchedNoteTitle ? ` ("${c.matchedNoteTitle}")` : '';
+    closestNote = en
+      ? `\n\nNOTE CLOSEST TO THE ARTICLE (a hint, not a requirement): ${c.matchedNotePath}${title}`
+      : `\n\nNOTA MÁS CERCANA AL ARTÍCULO (orientativa, no obligatoria): ${c.matchedNotePath}${title}`;
+  }
   const closing = en
     ? 'Please critically evaluate the affinity and the constructive proposal following the structured rules.'
     : 'Por favor, evalúa de manera crítica la afinidad y propuesta constructiva siguiendo las reglas estructuradas.';
 
-  return `${promptBlock('PROJECT_CONTEXT', `${matchedNoteContext}
-${heading}
-${notes}`)}
+  return `${promptBlock('PROJECT_CONTEXT', `${heading}
+${notes}${closestNote}`)}
 
 ${promptBlock('ARTICLE_SUMMARY', c.summary)}
 

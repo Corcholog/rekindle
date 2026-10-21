@@ -23,7 +23,7 @@ export class OllamaChatProvider implements ChatProvider {
       model: this.model,
       maxRetries: 3,
       temperature: 0.1,
-      numCtx: 16384, // Explicit 16k context window so the system prompt is never truncated
+      numCtx: 32768, // 32k tokens: a full notes budget (NOTES_CONTEXT_CHARS) plus the summary and instructions fit
       fetch: localFetch,
     });
   }

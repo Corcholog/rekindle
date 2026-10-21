@@ -8,6 +8,7 @@ import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
 import { resolveTargetFile } from '../../evaluator/targetFile';
+import { projectNotesContext } from '../../evaluator/retrieval';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
 import { answerInLine, Language, languageName, outputLanguage } from '../../ai/language';
@@ -696,7 +697,11 @@ export default async function (server: FastifyInstance) {
       return { error: 'Bad Request', statusCode: 400, message: 'The project has no snapshot to re-evaluate against.', code: 'no_snapshot' };
     }
 
-    const projectNotes = latestSnapshot.notesContent || latestSnapshot.thesisText || 'Sin notas adicionales.';
+    const projectNotes = (await projectNotesContext(
+      latestSnapshot.id, content.embedding, latestSnapshot.notesContent || latestSnapshot.thesisText || 'Sin notas adicionales.', 'es',
+      // Notes are ranked only against embeddings of the article's own model (I7)
+      content.embeddingModel ?? undefined,
+    )).text;
 
     const systemPrompt = `Eres un asistente de redacción y análisis crítico en Obsidian. Tu misión es RE-EVALUAR una sugerencia previa a la luz de los cambios y notas más recientes del proyecto.
 ${answerInLine(outputLanguage())}
@@ -713,7 +718,7 @@ REGLAS DE RESOLUCIÓN:
 
 ${promptBlock('PROJECT_CONTEXT_ACTUAL', `Proyecto: ${project.title}
 NOTAS Y BORRADORES ACTUALES:
-${projectNotes.substring(0, 15000)}`)}
+${projectNotes}`)}
 
 ${promptBlock('ARTICLE_SUMMARY', (content.summary || '').substring(0, 10000))}
 
