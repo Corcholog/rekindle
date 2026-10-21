@@ -95,7 +95,7 @@ describe('Re-ingesting a known URL', () => {
 
     const llm = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValue({
       data: {
-        verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Útil',
+        verdict: 'actionable', confidenceScore: 0.9, connection: 'Útil',
         action: { actionType: 'evidence_citation', observation: 'Obs', suggestedAction: 'Citar', targetFile: null },
       },
       model: 'fake',

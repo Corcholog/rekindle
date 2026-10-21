@@ -4,7 +4,7 @@ import * as path from 'path';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { z } from 'zod';
 import { ChainError, runChain } from '../../src/ai/chain';
-import { Attempt } from '../../src/ai/types';
+import { Attempt, toJsonSchema } from '../../src/ai/types';
 import { ConfigSchema, EvalConfig, EvalResult, ResultSchema, RunDetails } from '../schema';
 import { JsonCache, RecordedCall, roundVector, sha256 } from './cache';
 import { buildChainFromSpecs } from './chainSpec';
@@ -121,7 +121,9 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const makeEvaluate = (specs: EvalConfig['providers'], phase: SinkEntry['phase']) => {
       const providers = options.mode === 'replay' ? [] : buildChainFromSpecs(specs, process.env);
       return async (system: string, user: string, zodSchema: z.ZodTypeAny, callOptions?: { thinking?: boolean }) => {
-        const key = sha256(JSON.stringify({ chain: specs, system, user, options: callOptions ?? null }));
+        // The answer schema is part of the prompt (providers describe it to the model), so a schema
+        // change must never replay answers recorded for the old one
+        const key = sha256(JSON.stringify({ chain: specs, system, user, options: callOptions ?? null, schema: toJsonSchema(zodSchema) }));
         const recorded = llmCache.get(key);
 
         // Record mode resumes: answers recorded earlier are reused, failures are retried

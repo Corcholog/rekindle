@@ -12,7 +12,7 @@ import { ProviderError, type ChatProvider } from '../src/ai/types';
 type Script = (attempt: number) => ChatProvider[];
 
 const triageAnswer = {
-  verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Aporta evidencia directa.',
+  verdict: 'actionable', confidenceScore: 0.9, connection: 'Aporta evidencia directa.',
   action: { actionType: 'evidence_citation', observation: 'Dato útil.', suggestedAction: 'Citarlo en el borrador.', targetFile: null },
 };
 

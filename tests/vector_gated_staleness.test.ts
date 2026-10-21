@@ -195,6 +195,11 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
           actionType: 'counter_argument',
           observation: 'Contrastar la latencia de brokers centralizados frente a mesh descentralizado.',
           suggestedAction: 'Discutir compensaciones de latencia en architecture.md',
+          // The first step names its note by title; the second points outside the project
+          steps: [
+            { note: 'Architecture Overview Updated', where: 'Sección de latencia', change: 'Añadir una comparación broker frente a mesh.', text: null },
+            { note: '../fuera.md', where: null, change: 'Copiar la tabla.', text: 'Tabla' },
+          ],
           targetFile: 'architecture.md',
         },
       },
@@ -216,10 +221,17 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
     // Verify action_suggestions in DB points to a new evaluation linked to snap2
     const [sugDb] = await drizzleDb.select().from(actionSuggestions).where(eq(actionSuggestions.id, sugId));
     expect(sugDb.actionType).toBe('counter_argument');
+    expect(sugDb.actionSteps).toEqual([
+      { note: 'chapter1/architecture.md', noteIsNew: false, where: 'Sección de latencia', change: 'Añadir una comparación broker frente a mesh.', text: null },
+      { note: null, noteIsNew: false, where: null, change: 'Copiar la tabla.', text: 'Tabla' },
+    ]);
+    expect(body.suggestion.actionSteps).toHaveLength(2);
 
     const [evalDb] = await drizzleDb.select().from(evaluations).where(eq(evaluations.id, sugDb.evaluationId));
     expect(evalDb.projectSnapshotId).toBe(snap2Id);
     expect(evalDb.verdict).toBe('actionable');
+    // The re-evaluation's reasoning replaces the triage's two parts
+    expect(evalDb.reasoningConnection).toBeNull();
 
     // Subsequent GET query returns isStale = false
     const getRes = await server.inject({

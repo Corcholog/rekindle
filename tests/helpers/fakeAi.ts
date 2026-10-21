@@ -46,7 +46,7 @@ type Answer = unknown | ((call: FakeCall) => unknown);
 function defaultAnswer(call: FakeCall): unknown {
   if (call.kind === 'summary') return { summary: `Resumen simulado: ${call.user.slice(0, 200)}` };
   if (call.kind === 'triage') {
-    return { verdict: 'irrelevant', confidenceScore: 0.1, triageReasoning: 'Respuesta simulada: sin relación.', action: null };
+    return { verdict: 'irrelevant', confidenceScore: 0.1, connection: 'Respuesta simulada: sin relación.', action: null };
   }
   throw new Error('fakeAi: no scripted answer for this schema; use answerNext()');
 }

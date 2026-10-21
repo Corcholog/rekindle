@@ -20,6 +20,8 @@ import type { NoteIssueReason } from '../vault/parser';
 
 /** A note the reconciler left out or changed; see project_snapshots.note_issues. */
 export interface NoteIssue { path: string; reason: NoteIssueReason; bytes: number }
+/** One step of a suggested action (src/evaluator/actionSteps.ts); `note` is a validated project note path. */
+export interface ActionStep { note: string | null; noteIsNew: boolean; where: string | null; change: string; text: string | null }
 
 // Custom type para el vector de pgvector
 const vector = customType<{ data: number[]; driverData: string }>({
@@ -126,6 +128,10 @@ export const evaluations = pgTable('evaluations', {
   verdict: verdictEnum('verdict'),
   confidenceScore: real('confidence_score'),
   triageReasoning: text('triage_reasoning'),
+  // The reasoning in two parts, connection first; null on evaluations made before them.
+  // triage_reasoning holds both joined, for every reader that wants plain text.
+  reasoningConnection: text('reasoning_connection'),
+  reasoningGap: text('reasoning_gap'),
   evaluatedAt: timestamp('evaluated_at').defaultNow().notNull(),
   consumptionSeq: integer('consumption_seq').notNull(),
   traceId: uuid('trace_id'),
@@ -151,6 +157,8 @@ export const actionSuggestions = pgTable('action_suggestions', {
   targetFile: text('target_file').notNull(),
   // The model proposes creating target_file; Rekindle never creates it (I1), the callout links to it
   targetIsNew: boolean('target_is_new').default(false).notNull(),
+  // Null on suggestions made before steps; suggested_action then holds the whole action as text
+  actionSteps: jsonb('action_steps').$type<ActionStep[]>(),
   observation: text('observation').notNull(),
   suggestedAction: text('suggested_action').notNull(),
   status: suggestionStatusEnum('status').default('pending').notNull(),

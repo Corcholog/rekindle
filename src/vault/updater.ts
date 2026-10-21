@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { db } from '../db';
-import { actionSuggestions, projects, contents } from '../db/schema';
+import { actionSuggestions, projects, contents, ActionStep } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { sanitizeForVault } from './sanitize';
 import { getLogger } from '../observability/logger';
@@ -20,6 +20,8 @@ type WritableSuggestion = {
   actionType: string;
   observation: string;
   suggestedAction: string;
+  /** Null on older suggestions: suggestedAction then holds the whole action. */
+  actionSteps?: ActionStep[] | null;
   userFeedback: string | null;
   sourceUri: string | null;
   sourceTitle: string | null;
@@ -79,7 +81,13 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
 
   let callout = `\n\n> [!tip] ${text.calloutTitle}: ${typeLabel} (${formatCalloutDate(date, lang)})\n`;
   callout += prefixLines(text.calloutAction, sug.suggestedAction);
-  callout += prefixLines(text.calloutObservation, sug.observation);
+  if (sug.actionSteps?.length) {
+    callout += `> **${text.calloutSteps}:**\n`;
+    callout += sug.actionSteps.map((step, i) => formatStep(step, i, sug.folderPath)).join('');
+    callout += prefixLines(text.calloutWhy, sug.observation);
+  } else {
+    callout += prefixLines(text.calloutObservation, sug.observation);
+  }
   const noteLink = suggestedNoteLink(sug.targetFile, sug.folderPath);
   if (noteLink) callout += `> **${sug.targetIsNew ? text.calloutNewNote : text.calloutNote}:** ${noteLink}\n`;
   callout += `> **${text.calloutSource}:** ${link}\n`;
@@ -89,6 +97,20 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
   // Hidden Obsidian comment used to detect an already-written callout after a crash
   callout += `> ${calloutMarker(sug.id)}\n`;
   return callout;
+}
+
+/**
+ * One numbered step inside the callout: "1. [[note]], place: change", then the text to paste as a
+ * quote nested in the list item. Model text is sanitized, so it cannot open its own quote or callout.
+ */
+function formatStep(step: ActionStep, index: number, folderPath?: string | null): string {
+  const oneLine = (value: string) => sanitizeForVault(value, 800).replace(/\s*\n\s*/g, ' ').trim();
+  const place = [suggestedNoteLink(step.note, folderPath), step.where ? oneLine(step.where) : null].filter(Boolean).join(', ');
+  let out = `> ${index + 1}. ${place ? `${place}: ` : ''}${oneLine(step.change)}\n`;
+  if (step.text) {
+    out += sanitizeForVault(step.text, 800).trim().split('\n').map(line => `>    > ${line}\n`).join('');
+  }
+  return out;
 }
 
 /** Sanitized model text cannot contain "%%", so it cannot forge another suggestion's marker. */
@@ -111,6 +133,7 @@ const writableSelection = {
   actionType: actionSuggestions.actionType,
   observation: actionSuggestions.observation,
   suggestedAction: actionSuggestions.suggestedAction,
+  actionSteps: actionSuggestions.actionSteps,
   userFeedback: actionSuggestions.userFeedback,
   targetFile: actionSuggestions.targetFile,
   targetIsNew: actionSuggestions.targetIsNew,

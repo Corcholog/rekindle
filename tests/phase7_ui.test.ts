@@ -428,7 +428,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
       data: {
         verdict: 'actionable',
         confidenceScore: 0.95,
-        triageReasoning: 'Aporta teoría clave sobre consecuencias para el diseño de mecánicas.',
+        connection: 'Aporta teoría clave sobre consecuencias para el diseño de mecánicas.',
         action: {
           actionType: 'evidence_citation',
           observation: 'Explica modelos de decisión aplicables.',
@@ -603,9 +603,9 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     const { eq } = await import('drizzle-orm');
     const { sharedAiProvider } = await import('../src/ai/aiProvider');
 
-    // Accept suggestion
+    // Accept suggestion; its action has steps, which the brief's prompt must carry
     await drizzleDb.update(actionSuggestions)
-      .set({ status: 'accepted', resolvedAt: new Date() })
+      .set({ status: 'accepted', resolvedAt: new Date(), actionSteps: [{ note: 'AI_Agents.md', noteIsNew: false, where: 'Arquitectura', change: 'Añadir la cola de eventos.', text: 'PASO-PARA-PEGAR' }] })
       .where(eq(actionSuggestions.id, suggestionId));
 
     const evalSpy = vi.spyOn(sharedAiProvider, 'evaluateContent').mockResolvedValueOnce({
@@ -624,6 +624,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
     });
 
     expect(res.statusCode).toBe(200);
+    expect(evalSpy.mock.calls[0][1]).toContain('1. AI_Agents.md, Arquitectura: Añadir la cola de eventos. «PASO-PARA-PEGAR»');
     const body = JSON.parse(res.payload);
     expect(body.success).toBe(true);
     expect(body.filePath).toBeNull();

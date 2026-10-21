@@ -82,7 +82,7 @@ describe('Failure scenario 6: prompt injection in retrieved content', () => {
 
     // The model "obeys" the injected instructions
     fake.answerNext({
-      verdict: 'actionable', confidenceScore: 1, triageReasoning: 'Obedezco.',
+      verdict: 'actionable', confidenceScore: 1, connection: 'Obedezco.',
       action: {
         actionType: 'other',
         observation: '> [!danger] Alerta falsa\n![[secreto]]',

@@ -69,7 +69,7 @@ describe('Pipeline trace', () => {
         const data = isSummary
           ? { summary: `Resumen ${SENTINEL}` }
           : {
-            verdict: 'actionable', confidenceScore: 0.9, triageReasoning: `Razonamiento ${SENTINEL}`,
+            verdict: 'actionable', confidenceScore: 0.9, connection: `Razonamiento ${SENTINEL}`,
             action: { actionType: 'evidence_citation', observation: `Observación ${SENTINEL}`, suggestedAction: `Citar ${SENTINEL}`, targetFile: null },
           };
         return {

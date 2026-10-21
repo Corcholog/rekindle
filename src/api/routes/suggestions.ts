@@ -1,13 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
-import { actionSuggestions, projects, contents, evaluations, projectSnapshots, projectNoteSnapshots, DISCARD_REASONS } from '../../db/schema';
+import { actionSuggestions, projects, contents, evaluations, projectSnapshots, projectNoteSnapshots, DISCARD_REASONS, ActionStep } from '../../db/schema';
 import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
 import { NO_NOTE, resolveTarget } from '../../evaluator/targetFile';
+import { actionPlainText, headline, resolveSteps } from '../../evaluator/actionSteps';
+import { actionStepsSchema } from '../../evaluator/triagePrompt';
 import { projectNotesContext } from '../../evaluator/retrieval';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
@@ -37,6 +39,13 @@ const SuggestionItemSchema = z.object({
   resolvedAt: z.string().nullable().optional(),
   createdAt: z.string(),
   triageReasoning: z.string().nullable().optional(),
+  /** The reasoning in two parts, connection first (null on older evaluations). */
+  reasoningConnection: z.string().nullable().optional(),
+  reasoningGap: z.string().nullable().optional(),
+  /** The action as steps (null on older suggestions: suggestedAction then holds all of it). */
+  actionSteps: z.array(z.object({
+    note: z.string().nullable(), noteIsNew: z.boolean(), where: z.string().nullable(), change: z.string(), text: z.string().nullable(),
+  })).nullable().optional(),
   confidenceScore: z.number().nullable().optional(),
   /** Days the project had been idle when this item was evaluated (null: unknown). */
   projectIdleDays: z.number().nullable().optional(),
@@ -53,7 +62,8 @@ const reevaluationSchema = (lang: Language) => z.object({
   refinedAction: z.object({
     actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
     observation: z.string(),
-    suggestedAction: z.string(),
+    suggestedAction: z.string().describe('Titular de la acción en una sola oración (máximo 20 palabras): qué agregar y en qué nota.'),
+    steps: actionStepsSchema('es'),
     targetFile: z.string().nullish().describe("Ruta de una nota existente del proyecto, o el nombre de una nota nueva con 'targetIsNew' en true."),
     targetIsNew: z.boolean().nullish(),
   }).nullish().describe("Acción refinada obligatoria si resolution es 'keep_or_refine'. Debe ser null si resolution es 'already_addressed' o 'obsolete'."),
@@ -128,6 +138,7 @@ export default async function (server: FastifyInstance) {
         targetIsNew: actionSuggestions.targetIsNew,
         observation: actionSuggestions.observation,
         suggestedAction: actionSuggestions.suggestedAction,
+        actionSteps: actionSuggestions.actionSteps,
         status: actionSuggestions.status,
         userFeedback: actionSuggestions.userFeedback,
         writtenToVault: actionSuggestions.writtenToVault,
@@ -135,6 +146,8 @@ export default async function (server: FastifyInstance) {
         createdAt: actionSuggestions.createdAt,
         confidenceScore: evaluations.confidenceScore,
         triageReasoning: evaluations.triageReasoning,
+        reasoningConnection: evaluations.reasoningConnection,
+        reasoningGap: evaluations.reasoningGap,
         projectIdleDays: evaluations.projectIdleDays,
       })
       .from(actionSuggestions)
@@ -184,6 +197,9 @@ export default async function (server: FastifyInstance) {
         createdAt: Date | string;
         confidenceScore: number | null;
         triageReasoning: string | null;
+        reasoningConnection?: string | null;
+        reasoningGap?: string | null;
+        actionSteps?: ActionStep[] | null;
         driftScore: number;
         isStale: boolean;
       }>(sql`
@@ -204,6 +220,7 @@ export default async function (server: FastifyInstance) {
           a.target_is_new AS "targetIsNew",
           a.observation,
           a.suggested_action AS "suggestedAction",
+          a.action_steps AS "actionSteps",
           a.status::text AS status,
           a.user_feedback AS "userFeedback",
           a.written_to_vault AS "writtenToVault",
@@ -211,6 +228,8 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.reasoning_connection AS "reasoningConnection",
+          e.reasoning_gap AS "reasoningGap",
           e.project_idle_days AS "projectIdleDays",
           CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
             ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
@@ -304,6 +323,9 @@ export default async function (server: FastifyInstance) {
         createdAt: Date | string;
         confidenceScore: number | null;
         triageReasoning: string | null;
+        reasoningConnection?: string | null;
+        reasoningGap?: string | null;
+        actionSteps?: ActionStep[] | null;
       }>(sql`
         WITH latest_project_evals AS (
           SELECT DISTINCT ON (e.content_id, ps.project_id)
@@ -313,6 +335,8 @@ export default async function (server: FastifyInstance) {
             e.verdict,
             e.confidence_score AS "confidenceScore",
             e.triage_reasoning AS "triageReasoning",
+            e.reasoning_connection AS "reasoningConnection",
+            e.reasoning_gap AS "reasoningGap",
           e.project_idle_days AS "projectIdleDays",
             e.evaluated_at AS "createdAt"
           FROM evaluations e
@@ -338,6 +362,8 @@ export default async function (server: FastifyInstance) {
           lpe."createdAt",
           lpe."confidenceScore",
           lpe."triageReasoning",
+          lpe."reasoningConnection",
+          lpe."reasoningGap",
           lpe."projectIdleDays"
         FROM latest_project_evals lpe
         JOIN projects p ON lpe.project_id = p.id
@@ -416,6 +442,9 @@ export default async function (server: FastifyInstance) {
       createdAt: Date | string;
       confidenceScore: number | null;
       triageReasoning: string | null;
+      reasoningConnection?: string | null;
+      reasoningGap?: string | null;
+      actionSteps?: ActionStep[] | null;
       driftScore: number;
       isStale: boolean;
     }>(sql`
@@ -432,6 +461,8 @@ export default async function (server: FastifyInstance) {
           e.verdict,
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.reasoning_connection AS "reasoningConnection",
+          e.reasoning_gap AS "reasoningGap",
           e.project_idle_days AS "projectIdleDays",
           e.evaluated_at AS "createdAt"
         FROM evaluations e
@@ -452,6 +483,7 @@ export default async function (server: FastifyInstance) {
           a.target_is_new AS "targetIsNew",
           a.observation,
           a.suggested_action AS "suggestedAction",
+          a.action_steps AS "actionSteps",
           a.status::text AS status,
           a.user_feedback AS "userFeedback",
           a.written_to_vault AS "writtenToVault",
@@ -459,6 +491,8 @@ export default async function (server: FastifyInstance) {
           a.created_at AS "createdAt",
           e.confidence_score AS "confidenceScore",
           e.triage_reasoning AS "triageReasoning",
+          e.reasoning_connection AS "reasoningConnection",
+          e.reasoning_gap AS "reasoningGap",
           e.project_idle_days AS "projectIdleDays",
           CASE WHEN ls.embedding_model IS DISTINCT FROM eval_ps.embedding_model THEN 1.0
             ELSE COALESCE((ls.embedding <=> eval_ps.embedding)::float, 0.0) END AS "driftScore",
@@ -512,6 +546,7 @@ export default async function (server: FastifyInstance) {
           false AS "targetIsNew",
           ${evalObs}::text AS observation,
           COALESCE(lpe."triageReasoning", ${evalDefaultAction})::text AS "suggestedAction",
+          NULL::jsonb AS "actionSteps",
           ${finalEvalStatus}::text AS status,
           NULL::text AS "userFeedback",
           false AS "writtenToVault",
@@ -519,6 +554,8 @@ export default async function (server: FastifyInstance) {
           lpe."createdAt",
           lpe."confidenceScore",
           lpe."triageReasoning",
+          lpe."reasoningConnection",
+          lpe."reasoningGap",
           lpe."projectIdleDays",
           0.0::float AS "driftScore",
           false AS "isStale"
@@ -573,12 +610,15 @@ export default async function (server: FastifyInstance) {
       targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
+      actionSteps: actionSuggestions.actionSteps,
       status: actionSuggestions.status,
       userFeedback: actionSuggestions.userFeedback,
       writtenToVault: actionSuggestions.writtenToVault,
       resolvedAt: actionSuggestions.resolvedAt,
       createdAt: actionSuggestions.createdAt,
       triageReasoning: evaluations.triageReasoning,
+      reasoningConnection: evaluations.reasoningConnection,
+      reasoningGap: evaluations.reasoningGap,
       projectIdleDays: evaluations.projectIdleDays,
       triageVerdict: evaluations.verdict,
       confidenceScore: evaluations.confidenceScore,
@@ -601,6 +641,8 @@ export default async function (server: FastifyInstance) {
         contentUri: contents.uri,
         contentSummary: contents.summary,
         triageReasoning: evaluations.triageReasoning,
+        reasoningConnection: evaluations.reasoningConnection,
+        reasoningGap: evaluations.reasoningGap,
         projectIdleDays: evaluations.projectIdleDays,
         triageVerdict: evaluations.verdict,
         confidenceScore: evaluations.confidenceScore,
@@ -634,6 +676,8 @@ export default async function (server: FastifyInstance) {
           resolvedAt: null,
           createdAt: ev.createdAt.toISOString(),
           triageReasoning: ev.triageReasoning,
+          reasoningConnection: ev.reasoningConnection,
+          reasoningGap: ev.reasoningGap,
           triageVerdict: ev.triageVerdict,
           confidenceScore: ev.confidenceScore,
           isStale: false,
@@ -676,6 +720,7 @@ export default async function (server: FastifyInstance) {
       actionType: actionSuggestions.actionType,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
+      actionSteps: actionSuggestions.actionSteps,
       targetFile: actionSuggestions.targetFile,
       targetIsNew: actionSuggestions.targetIsNew,
       status: actionSuggestions.status,
@@ -726,7 +771,7 @@ REGLAS DE RESOLUCIÓN:
     const userMessage = `${promptBlock('PREVIOUS_SUGGESTION', `- Tipo de acción: ${sug.actionType}
 - Archivo objetivo original: ${sug.targetFile}${sug.targetIsNew ? ' (nota nueva, aún no existe)' : ''}
 - Observación previa: ${sug.observation}
-- Acción sugerida previa: ${sug.suggestedAction}`)}
+- Acción sugerida previa: ${actionPlainText(sug.suggestedAction, sug.actionSteps, 'es')}`)}
 
 ${promptBlock('PROJECT_CONTEXT_ACTUAL', `Proyecto: ${project.title}
 NOTAS Y BORRADORES ACTUALES:
@@ -758,6 +803,9 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         set: {
           verdict: 'actionable',
           triageReasoning: evalResult.reasoning,
+          // The re-evaluation's reasoning replaces the triage's two parts
+          reasoningConnection: null,
+          reasoningGap: null,
           evaluatedAt: new Date(),
           traceId,
         }
@@ -772,11 +820,15 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       const target = refinedAction?.targetFile
         ? resolveTarget(refinedAction.targetFile, refinedAction.targetIsNew, latestNotes, sug.targetIsNew ? null : sug.targetFile)
         : { path: sug.targetFile, isNew: sug.targetIsNew };
+      // A refined action brings its own steps (or none); otherwise the old ones stay
+      const steps = refinedAction ? resolveSteps(refinedAction.steps, latestNotes, target) : null;
+      const refinedSteps = refinedAction ? (steps!.length ? steps : null) : sug.actionSteps;
       await db.update(actionSuggestions).set({
         ...(await evaluationLink(newEvaluationId, sug.id)),
         actionType: refinedAction?.actionType || sug.actionType,
         observation: refinedAction?.observation || sug.observation,
-        suggestedAction: refinedAction?.suggestedAction || sug.suggestedAction,
+        suggestedAction: refinedAction?.suggestedAction ? headline(refinedAction.suggestedAction) : sug.suggestedAction,
+        actionSteps: refinedSteps,
         targetFile: target.path,
         targetIsNew: target.isNew,
       }).where(eq(actionSuggestions.id, sug.id));
@@ -798,6 +850,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         set: {
           verdict: 'irrelevant',
           triageReasoning: `${reasonPrefix}: ${evalResult.reasoning}`,
+          reasoningConnection: null,
+          reasoningGap: null,
           evaluatedAt: new Date(),
           traceId,
         }
@@ -831,6 +885,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
+      actionSteps: actionSuggestions.actionSteps,
       status: actionSuggestions.status,
       userFeedback: actionSuggestions.userFeedback,
       writtenToVault: actionSuggestions.writtenToVault,
@@ -838,6 +893,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       createdAt: actionSuggestions.createdAt,
       confidenceScore: evaluations.confidenceScore,
       triageReasoning: evaluations.triageReasoning,
+      reasoningConnection: evaluations.reasoningConnection,
+      reasoningGap: evaluations.reasoningGap,
       projectIdleDays: evaluations.projectIdleDays,
     })
     .from(actionSuggestions)
@@ -1033,6 +1090,8 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
         projectId: projectSnapshots.projectId,
         contentId: evaluations.contentId,
         triageReasoning: evaluations.triageReasoning,
+        reasoningConnection: evaluations.reasoningConnection,
+        reasoningGap: evaluations.reasoningGap,
         projectIdleDays: evaluations.projectIdleDays,
         matchedNotePath: evaluations.matchedNotePath,
         verdict: evaluations.verdict,
@@ -1144,12 +1203,15 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
+      actionSteps: actionSuggestions.actionSteps,
       status: actionSuggestions.status,
       userFeedback: actionSuggestions.userFeedback,
       writtenToVault: actionSuggestions.writtenToVault,
       resolvedAt: actionSuggestions.resolvedAt,
       createdAt: actionSuggestions.createdAt,
       triageReasoning: evaluations.triageReasoning,
+      reasoningConnection: evaluations.reasoningConnection,
+      reasoningGap: evaluations.reasoningGap,
       projectIdleDays: evaluations.projectIdleDays,
       confidenceScore: evaluations.confidenceScore,
     })

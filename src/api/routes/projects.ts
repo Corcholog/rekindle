@@ -14,6 +14,7 @@ import { SERVER_TEXT, serverText } from '../../i18n/serverText';
 import { idleDays, isDormant } from '../../vault/dormancy';
 import { promptBlock } from '../../ai/promptSafety';
 import { projectNotesContext } from '../../evaluator/retrieval';
+import { actionPlainText } from '../../evaluator/actionSteps';
 
 const ProjectItemSchema = z.object({
   id: z.string().uuid(),
@@ -738,6 +739,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       actionType: actionSuggestions.actionType,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
+      actionSteps: actionSuggestions.actionSteps,
       targetFile: actionSuggestions.targetFile,
       userFeedback: actionSuggestions.userFeedback,
       sourceTitle: contents.title,
@@ -774,7 +776,7 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
     const suggestionsPrompt = acceptedList.map((s, idx) => {
       return `[Sugerencia ${idx + 1} - ${s.actionType.toUpperCase()}]
 - Nota destino: ${s.targetFile || 'general'}
-- Acción propuesta: ${s.suggestedAction}
+- Acción propuesta: ${actionPlainText(s.suggestedAction, s.actionSteps, 'es')}
 - Observación/Aporte: ${s.observation}
 - Fuente: "${s.sourceTitle || 'Fuente web'}" (${s.sourceUri || 'N/A'})${s.userFeedback ? `\n- Feedback del usuario: ${s.userFeedback}` : ''}`;
     }).join('\n\n---\n\n');
