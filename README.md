@@ -61,7 +61,7 @@ I labeled 47 articles × 8 of my projects (376 pairs) by hand and ran Rekindle's
 | Triage macro-F1 | 0.69* | **0.75** | 0.71* | 0.57 |
 | Latency p50 | 4.4 s* | **2.4 s** | 4.1 s* | 7.2 s |
 
-\* Measured with the previous prompt (2026-10-19). On 2026-10-21 the prompt started showing the model every note of the project instead of one, so it can point a suggestion at the right note or propose a new one; the default and Qwen were measured again. With the previous prompt the default found 46 connections with 19 extra, and every pair it called actionable was right (100% / 77%); with the current one, 1 of its 28 actionable pairs is labeled otherwise. That difference is within the run-to-run variance measured so far.
+\* Measured with the previous prompt (2026-10-19). On 2026-10-21 the prompt started showing the model every note of the project instead of one, so it can point a suggestion at the right note or propose a new one; the default and Qwen were measured again. With the previous prompt the default found 46 connections with 19 extra, and every pair it called actionable was right (100% / 77%); with the current one, 1 of its 28 actionable pairs is labeled otherwise. That difference is within the run-to-run variance measured so far. A repeat of the current prompt later that day (`deepseek-flash-top3-structured`, same prompt byte for byte) gave macro-F1 0.72, 44 connections with 18 extra, and 96% / 71% on actionable.
 
 ![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 45 of 56 and proposes 17 extra; with thinking on 49 and 26 (previous prompt); Gemini 3.1 Flash Lite 49 and 25 (previous prompt); local Qwen 2.5 7B 30 and 9](docs/images/eval-connections.svg)
 
@@ -72,7 +72,7 @@ What counts as a connection is partly subjective: a model can force links, and i
 Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the following leaves your machine for Google's API:
 
 - the article text (up to 50,000 characters) for summarisation;
-- for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary;
+- for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary; for an actionable or tentative result, a second short call sends the model's reasoning and action back with the notes' paths and titles, to lay them out as steps;
 - for each Consultor question, your question plus **the summaries of the 15 library items and snippets of the 15 project notes closest to it** (under 63,000 characters in all);
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 60,000 characters of project notes.
 

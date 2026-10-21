@@ -323,6 +323,7 @@ erDiagram
     text target_file
     text observation
     text suggested_action
+    jsonb action_steps
     suggestion_status status
     text user_feedback
     discard_reason discard_reason
@@ -382,14 +383,14 @@ erDiagram
    - Enables fine-grained targeting: Rekindle matches content directly to specific notes (`research/combat.md`, `ideas.md`) instead of diluting them into an aggregate project blob.
    - Indexes: HNSW cosine index `project_note_snapshots_embedding_idx`; foreign key indexes on `project_snapshot_id` and `project_id`.
 5. **`evaluations`**:
-   - The verdict (`actionable`, `tentative`, `irrelevant`) and reasoning of the LLM for a given `(content_id, project_snapshot_id)`.
+   - The verdict (`actionable`, `tentative`, `irrelevant`) and reasoning of the LLM for a given `(content_id, project_snapshot_id)`. `triage_reasoning` is the model's own text; `reasoning_connection` (what links the article to the project) and `reasoning_gap` (what it lacks) are the same reasoning laid out connection first by the second call (step 4b), shown on tentative cards, in Reading and in an accepted tentative's callout. They are null on evaluations from before 2026-10-21, on irrelevant ones, on re-evaluations and when that call failed.
    - Unique composite index on `(content_id, project_snapshot_id, consumption_seq)` prevents redundant LLM evaluations.
 6. **`action_suggestions`**:
-   - Concrete proposed actions generated when an evaluation is `actionable`.
+   - Concrete proposed actions generated when an evaluation is `actionable`. `suggested_action` is a one-sentence headline and `action_steps` (jsonb, up to 4, from the second call) the steps: `note` (a checked project note path or null), `noteIsNew`, `where` (place in the note), `change`, `text` (to paste). Suggestions from before 2026-10-21, or answers without steps, have `action_steps = null` and the whole action in `suggested_action`.
    - `target_file` is the note the LLM proposed: an existing note of the project, or, with `target_is_new`, a new note it suggests creating (falling back to the closest-affinity note, then `unknown`, meaning no note). It is shown in the UI ("Suggested note"), used for staleness detection, and linked from the accepted callout (`[[<project folder>/<note>|<note>]]`, by `suggestedNoteLink`, omitted when the name would break the link syntax; for a new note the link is unresolved until the owner clicks it and Obsidian creates the note); it is **not** where anything is written: accepted callouts always go to `<project>/suggestions.md`, and the note itself is never edited or created.
    - Partial btree index `action_suggestions_status_partial_idx` on `status` where `status = 'pending'`.
 7. **`llm_telemetry`**:
-   - One row per provider attempt of every LLM call that passes a call context (all six: `summary`, `triage`, `consult`, `synergy`, `synthesis`, `reevaluate`), failures included: provider, model, attempt number, error kind, fallback flag, rate-limit wait, latency, tokens, estimated cost (`src/ai/pricing.ts`), prompt and answer lengths and a 16-hex prompt hash. Never prompt or answer text. Indexed on `created_at` and `trace_id`. See section 16.
+   - One row per provider attempt of every LLM call that passes a call context (all seven: `summary`, `triage`, `structure`, `consult`, `synergy`, `synthesis`, `reevaluate`), failures included: provider, model, attempt number, error kind, fallback flag, rate-limit wait, latency, tokens, estimated cost (`src/ai/pricing.ts`), prompt and answer lengths and a 16-hex prompt hash. Never prompt or answer text. Indexed on `created_at` and `trace_id`. See section 16.
 8. **`pipeline_events`**:
    - One row per pipeline stage of a trace (`fetch`, `extract`, `summarize`, `embed`, `ingest_job`, `retrieve`, `evaluate`, `evaluate_job`) with duration, outcome, error kind, pg-boss attempt and `attrs` (IDs, counts, lengths, distances). `evaluations.retrieval_event_id` points at the `retrieve` event that selected the project (set null if that event is pruned). Indexed on `created_at` and `trace_id`.
 
@@ -439,12 +440,17 @@ Policy: **Only accepted suggestions write to the vault.**
 - Callout format:
   ```markdown
   > [!tip] Sugerencia Aceptada: CITA DE EVIDENCIA (16/10/2026)
-  > **Acción:** Integrar datos del artículo en la sección de antecedentes.
-  > **Observación:** El informe aporta cifras que validan la hipótesis principal.
+  > **Acción:** Sumar las cifras del informe a los antecedentes
+  > **Qué hacer:**
+  > 1. [[Projects/Ensayo/antecedentes|antecedentes]], bajo "Contexto": añadir una viñeta con las cifras.
+  >    > En 2024 el 62% de los encuestados…
+  > 2. [[Projects/Ensayo/borrador|borrador]], Acto 2: citar la viñeta al presentar la hipótesis.
+  > **Por qué:** El informe aporta cifras que validan la hipótesis principal.
   > **Nota sugerida:** [[Projects/Ensayo/antecedentes|antecedentes]]
   > **Fuente:** [Título del Artículo](https://example.com/article)
   > **Feedback:** Considerar también el contraargumento de la página 4.
   ```
+- Steps are a numbered list with the note link (`suggestedNoteLink`, omitted when the note was not validated) and the place; the text to paste is a quote nested in the list item. A suggestion without steps keeps the older layout (**Acción**, then **Observación**). Every field is sanitized, so model text cannot open its own quote, callout or comment.
 - Each callout ends with a hidden Obsidian comment, `%% rekindle:<suggestion id> %%`.
 - The write runs in a transaction that locks the suggestion row (`SELECT … FOR UPDATE`): read `suggestions.md`; append the callout only if its marker is absent; then set `written_to_vault = true`. A crash after the append leaves the marker, so the retry only sets the flag (invariant I5).
 - If the write fails, the flag stays `false` and a `sync_suggestions` job retries; every pending writeback is also retried when the server starts.
@@ -548,6 +554,7 @@ For each candidate project under the 0.6 cutoff:
    ```
 3. **Target File Resolution** (`resolveTarget` in `targetFile.ts`): the LLM's `targetFile` names an existing note if it matches one of the snapshot's notes (exact path, path plus `.md`, case-insensitive path, a file name only one note has, or a title only one note has). Otherwise, when the model marks it `targetIsNew`, it is kept as a proposed new note only if it is a plain relative name (no `..`, no leading `/`, no `[]|#^:*?"<>\\` or control characters, at most 120 characters) at the project root or in a folder that already holds notes. Anything else, including paths outside the project, falls back to `matchedNotePath`, then `unknown` (no note). Re-evaluation refinements go through the same check. The evaluation also stores `matched_note_path`, which an accepted tentative verdict points at.
 4. **Anti-Discard Guardrail**: If an actionable verdict paradoxically recommends discarding the content, Rekindle automatically downgrades the verdict to `irrelevant` and appends the explanation to `triageReasoning`.
+4b. **Laying out the text** (`structureText.ts`, telemetry component `structure`): after an `actionable` or `tentative` answer, a second, short call on the same provider chain rewrites what the model wrote, without adding to it: the reasoning as `connection` (what links the article to the project, first, without summarizing either) and `gap` (what it lacks), and an action as a one-sentence `headline` and 1 to 4 `steps` (note, place, change, text to paste). Its input is only the triage reasoning, the action and the note index (paths and titles), each in its own tag; it never sees the verdict, so verdicts cannot move. Asking the triage call itself for this structure lowered macro-F1 from 0.75 to 0.69 on the labeled set (docs/JOURNEY.md). The answer is checked by `resolveSteps` (`actionSteps.ts`): at most `MAX_ACTION_STEPS` (4) steps with a non-empty change; `where`, `change` and `text` cut to 160, 500 and 800 characters, the headline to 300 and each reasoning part to 1,500; a step's `note` kept only if it resolves to one of the snapshot's notes or to the action's new note, otherwise null (no link). If the call fails or returns no steps, the suggestion keeps the triage text; `triage_reasoning` always keeps the model's own reasoning.
 5. **Idempotency**: an evaluation is skipped if one exists for the same `(content_id, project_snapshot_id, consumption_seq)`; a concurrent duplicate hits the unique index and is skipped. An evaluation and its suggestion are written in one transaction, so an interrupted job leaves neither. Re-ingesting a known URL does not re-queue it or change `consumption_seq` (now always 1), so it never re-runs evaluation (invariant I6). Each evaluation has at most one suggestion (unique `action_suggestions.evaluation_id`). The pg-boss queues use the standard policy, where `singletonKey` does not de-duplicate, so duplicate jobs rely on this idempotency.
 6. **Failure handling**: an LLM error for one project is recorded (a failed `evaluate` event, the failed LLM attempts, `failures` on the `evaluate_job` event), the other projects are still evaluated, and then the worker fails the job so pg-boss retries it (3 retries, backoff from 30 s). Projects already evaluated are skipped on retry. After the last retry the job stays failed and the pair waits for a backlog run; the UI does not show it, `telemetry:report` does.
 7. **Embedding model**: only embeddings produced by the current `EMBED_MODEL` are compared; contents and snapshots from another model are skipped until re-embedded (invariant I7).
@@ -591,7 +598,7 @@ As the user writes notes in Obsidian, previously generated suggestions may becom
 When re-evaluating a stale suggestion:
 1. Rekindle loads the original suggestion, the content summary, and the **latest project snapshot** from the database (the same notes context as triage, ranked against the article when the project exceeds the budget).
 2. The LLM evaluates whether the suggestion should be:
-   - `keep_or_refine`: Kept and updated with refined observations matching the new draft.
+   - `keep_or_refine`: Kept and updated with refined observations matching the new draft. A refined action is laid out as headline and steps by the same second call as triage; the previous action is shown to the model as plain text, headline then steps.
    - `already_addressed`: Auto-resolved because the writer already incorporated the ideas.
    - `obsolete`: Discarded because the draft moved in a completely different direction.
 
@@ -693,7 +700,7 @@ A React 19 + TypeScript single-page app, built by Vite into `web/dist` and serve
 - **Components**: Radix primitives in the shadcn/ui style, copied into `web/src/components/ui/` (Dialog, Tabs) plus native selects; icons from lucide-react; toasts from sonner.
 - **Views** (`web/src/views/`), addressed by the URL hash (`#reading`, `#suggestions`, `#consultant`, `#settings`):
   1. **Reading** (*Consumo*): clip a URL, first-run guidance pointing at the demo articles, the reading feed with per-project verdicts (each opens in place to show the model's full reasoning, and actionable or tentative ones link to their suggestion: `#suggestions?project=<id>&content=<id>&tab=<status>` opens that project and tab and outlines the card), and the content detail dialog. `/api/contents` gives each verdict its `projectId` and its suggestion's status for this.
-  2. **Suggestions** (*Sugerencias*): project sidebar sorted by `sortProjects` (dormant projects with something to review first) with an ember meter per project, status tabs, collapsible synergies, and `SuggestionCard`: the action first in Literata, a "rekindles a project idle for N days" badge, reasoning folded, accept / discard with a reason / re-evaluate.
+  2. **Suggestions** (*Sugerencias*): project sidebar sorted by `sortProjects` (dormant projects with something to review first) with an ember meter per project, status tabs, collapsible synergies, and `SuggestionCard`: the action's headline first in Literata, then **What to do** (numbered steps: note and place, the change, the text to paste in a quote box) and **Why** (the observation), or the older single text when there are no steps; a tentative item shows the article, then **Connection** and **What it lacks**. A "rekindles a project idle for N days" badge, reasoning folded, accept / discard with a reason / re-evaluate. All model text is rendered as text.
   3. **Consultant** (*Consultor*): question, example chips, the answer with `[C1]`/`[N1]` references turned into jump links by splitting the text (never markup), and the cited cards.
   4. **Settings** (*Configuración*): vault path, projects with their last edit, languages, theme.
 - **Data**: a typed client (`web/src/lib/api.ts`); views reload when background work finishes (the status poll bumps a refresh key).
@@ -789,7 +796,7 @@ The problem Rekindle exists for is a project left alone for weeks. Each snapshot
 | Area | Current Behavior | Future Consideration |
 |---|---|---|
 | **Authentication** | No auth token. The server only binds to loopback, rejects any `Host` other than `127.0.0.1`/`localhost`/`[::1]` (blocks DNS rebinding), and rejects state-changing requests from foreign origins; the extension origin may only call `/api/ingest` (`src/api/requestGuard.ts`). | A per-install token if LAN access is ever needed. |
-| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 60,000 chars, plus every note's path and title) plus the article summary per evaluation and re-evaluation; the question plus the summaries of the 15 closest library items and snippets of the 15 closest notes per Consultor query (under 63,000 chars); note snippets for synergies; accepted suggestions plus project notes (same 60,000-char budget) for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
+| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 60,000 chars, plus every note's path and title) plus the article summary per evaluation and re-evaluation; the model's reasoning and action plus every note's path and title in the second call that lays them out; the question plus the summaries of the 15 closest library items and snippets of the 15 closest notes per Consultor query (under 63,000 chars); note snippets for synergies; accepted suggestions plus project notes (same 60,000-char budget) for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
 | **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (target: the note closest to the article at evaluation time, or `unknown`; `discarded` when discarded); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
 | **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
 | **Prompt injection** | Untrusted text (pages, transcripts, summaries, notes, earlier suggestions, queries) is wrapped by `promptBlock` (`src/ai/promptSafety.ts`), which neutralizes tag-like sequences; `AiProvider` appends a rule to every system prompt that delimited content is data. Code-side limits (sanitized writes on accept only, validated target notes) are the real boundary. See `docs/THREAT_MODEL.md`. | Measure how often injected pages change verdicts (not measured). |
