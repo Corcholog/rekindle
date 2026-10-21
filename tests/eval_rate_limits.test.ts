@@ -55,7 +55,7 @@ describe('eval run under rate limiting', () => {
     vi.stubEnv('DEEPSEEK_BASE_URL', baseUrl);
     vi.stubEnv('OLLAMA_URL', 'http://127.0.0.1:9'); // a fallback to Ollama would fail loudly
     const { runEval } = await import('../evals/runner/run');
-    return runEval({ datasetDir: tmp, configPath: path.join(tmp, 'config.json'), mode: 'live', maxUsd: 1, resultsDir: tmp });
+    return runEval({ datasetDir: tmp, configPath: path.join(tmp, 'config.json'), mode: 'live', resultsDir: tmp });
   }
 
   it('waits through transient 429s and still gets every answer from the same provider', async () => {

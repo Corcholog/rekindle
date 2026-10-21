@@ -44,7 +44,7 @@ describe('eval language configs', () => {
 
     vi.resetModules();
     const { runEval } = await import('../evals/runner/run');
-    await expect(runEval({ datasetDir: 'tests/fixtures/eval-mini', configPath, mode: 'replay', maxUsd: 0, resultsDir: tmp, detailsDir: tmp }))
+    await expect(runEval({ datasetDir: 'tests/fixtures/eval-mini', configPath, mode: 'replay', resultsDir: tmp, detailsDir: tmp }))
       .rejects.toThrow(/replay/i);
     expect(process.env.OUTPUT_LANGUAGE).toBe('es');
     expect(process.env.PROMPT_LANGUAGE).toBeUndefined();

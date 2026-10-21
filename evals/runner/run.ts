@@ -18,8 +18,6 @@ export interface RunOptions {
   datasetDir: string;
   configPath: string;
   mode: RunMode;
-  /** Abort before the estimated spend exceeds this many USD. */
-  maxUsd: number;
   /** Require every verdict to be filled in. */
   strict?: boolean;
   resultsDir?: string;
@@ -35,8 +33,6 @@ interface SinkEntry {
   latencyMs: number;
   generated: boolean;
 }
-
-class BudgetExceededError extends Error {}
 
 const MALFORMED = new Set(['empty', 'invalid_json', 'schema']);
 const gitOutput = (...args: string[]) => execFileSync('git', args, { encoding: 'utf-8' }).trim();
@@ -104,8 +100,6 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
 
     const embedModel = env.EMBED_MODEL;
     const sink: SinkEntry[] = [];
-    let spentUsd = 0;
-    let budgetExceeded = false;
     let quotaExhausted = false;
     let replayMiss: string | null = null; // the evaluator swallows per-project errors, so misses are checked per case
 
@@ -141,17 +135,6 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
           return replayRecorded(recorded, phase);
         }
 
-        // Budget guard: estimate the call from its size before spending anything
-        const first = providers[0];
-        const price = first ? priceOf(first.name, first.model) : undefined;
-        if (price) {
-          const estimate = estimateCostUsd({ promptTokens: Math.ceil((system.length + user.length) / 3), completionTokens: 800 }, price);
-          if (spentUsd + estimate > options.maxUsd) {
-            budgetExceeded = true;
-            throw new BudgetExceededError(`El gasto estimado superaría EVAL_MAX_USD (${options.maxUsd} USD)`);
-          }
-        }
-
         try {
           const result = await runChain(providers, system, user, zodSchema, callOptions, {
             onRateLimit: 'wait',
@@ -161,10 +144,6 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
               return new Promise(resolve => setTimeout(resolve, ms));
             },
           });
-          for (const attempt of result.attempts) {
-            const p = priceOf(attempt.provider, attempt.model);
-            if (p) spentUsd += estimateCostUsd(attempt.usage, p, attemptTime(attempt));
-          }
           sink.push({ phase, ok: true, attempts: result.attempts, latencyMs: result.latencyMs, generated: true });
           if (options.mode === 'record') {
             llmCache.set(key, { ok: true, data: result.data, model: result.model, usage: result.usage, latencyMs: result.latencyMs, attempts: result.attempts });
@@ -241,7 +220,6 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         throw new Error('Cuota agotada en el proveedor de IA (límite diario). El progreso quedó guardado: vuelve a ejecutar con --record más tarde para continuar.');
       }
       if (replayMiss) throw new Error(replayMiss);
-      if (budgetExceeded) throw new BudgetExceededError(`Se alcanzó EVAL_MAX_USD (${options.maxUsd} USD); resultados parciales descartados`);
       log(`  [${++done}/${cases.length}] ${article.id}`);
     }
 

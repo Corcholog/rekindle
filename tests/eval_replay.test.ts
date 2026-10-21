@@ -21,7 +21,7 @@ describe('eval harness replay', () => {
     const { runEval } = await import('../evals/runner/run');
     const resultsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalresults-'));
     dirs.push(resultsDir);
-    const run = await runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', maxUsd: 0, resultsDir, detailsDir: resultsDir });
+    const run = await runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', resultsDir, detailsDir: resultsDir });
     return { ...run, detailsFile: path.join(resultsDir, 'mini-ollama.json') };
   }
 
@@ -101,7 +101,7 @@ describe('eval harness replay', () => {
     await fs.rm(path.join(copy, 'cache', 'llm.json'));
 
     await expect(runEval({
-      datasetDir: copy, configPath: path.join(copy, 'config.json'), mode: 'replay', maxUsd: 0, resultsDir: copy,
+      datasetDir: copy, configPath: path.join(copy, 'config.json'), mode: 'replay', resultsDir: copy,
     })).rejects.toThrow(/replay/i);
   }, 180000);
 });

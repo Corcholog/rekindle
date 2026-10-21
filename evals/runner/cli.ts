@@ -31,7 +31,7 @@ function parseArgs(argv: string[]) {
 
 const USAGE = `Uso: pnpm eval <comando>
 
-  run <dataset> --config <archivo> [--record | --replay] [--strict] [--max-usd N] [--results-dir dir] [--details-dir dir]
+  run <dataset> --config <archivo> [--record | --replay] [--strict] [--results-dir dir] [--details-dir dir]
   snapshot --vault <ruta> --out <dataset> [--project "Nombre"]...   copia de solo lectura
   fetch <dataset>                      descarga las URLs de <dataset>/sources.yaml a articles/
   label <dataset> [--check] [--strict] genera labels.yaml vacío o valida el que existe
@@ -52,9 +52,8 @@ async function main() {
       const configPath = flags.config as string | undefined;
       if (!datasetDir || !configPath) throw new Error('run necesita <dataset> y --config <archivo>');
       const mode: RunMode = flags.replay ? 'replay' : flags.record ? 'record' : 'live';
-      const maxUsd = Number(flags['max-usd'] ?? process.env.EVAL_MAX_USD ?? 0.5);
       const { result, resultFile } = await runEval({
-        datasetDir, configPath, mode, maxUsd, strict: Boolean(flags.strict), resultsDir: flags['results-dir'] as string | undefined, detailsDir: flags['details-dir'] as string | undefined, log: m => console.log(m),
+        datasetDir, configPath, mode, strict: Boolean(flags.strict), resultsDir: flags['results-dir'] as string | undefined, detailsDir: flags['details-dir'] as string | undefined, log: m => console.log(m),
       });
       console.log(`\nResultado: ${resultFile}`);
       console.log(JSON.stringify({ retrieval: result.retrieval, macroF1: result.triage.macroF1, reliability: result.reliability, cost: result.cost }, null, 2));
