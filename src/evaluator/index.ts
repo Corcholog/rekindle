@@ -6,7 +6,7 @@ import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
 import { projectNotesContext, retrieveCandidates, retrieveWithStats, RetrievalOptions } from './retrieval';
 import { resolveTarget } from './targetFile';
-import { structureSuggestionText } from './structureText';
+import { headline, reasoningPart, reasoningPlainText, resolveSteps } from './actionSteps';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, env } from '../config';
 import { getLogger } from '../observability/logger';
@@ -177,25 +177,13 @@ async function runEvaluation(
       const action = result.verdict === 'actionable' ? result.action : null;
       const suppressedDiscard = action !== null && isDiscardAction(action);
       const verdict = suppressedDiscard ? 'irrelevant' : result.verdict;
-      const triageReasoning = suppressedDiscard
-        ? `${result.triageReasoning}\n\n${serverText(languages.output).discardReasonLabel}: ${action!.observation || action!.suggestedAction}`.trim()
-        : result.triageReasoning;
+      // The reasoning comes in two parts, connection first; triage_reasoning keeps them joined
+      const reasoningConnection = reasoningPart(result.connection);
+      const reasoningGap = suppressedDiscard
+        ? reasoningPart(`${result.gap ?? ''}\n\n${serverText(languages.output).discardReasonLabel}: ${action!.observation || action!.suggestedAction}`)
+        : reasoningPart(result.gap);
+      const triageReasoning = reasoningPlainText(reasoningConnection ?? '', reasoningGap);
       if (suppressedDiscard) log.info({ traceId, projectId }, 'Suppressed a discard action; verdict set to irrelevant');
-
-      const notes = await db.select({ path: projectNoteSnapshots.notePath, title: projectNoteSnapshots.noteTitle })
-        .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshotId));
-      const target = action && !suppressedDiscard ? resolveTarget(action.targetFile, action.targetIsNew, notes, matchedNotePath) : null;
-      // A second, short call lays out what the model wrote: the action as steps, the reasoning
-      // connection first (structureText.ts). triage_reasoning keeps the model's own text; on a
-      // failure the suggestion keeps its plain text
-      const structured = verdict === 'tentative' || target
-        ? await structureSuggestionText(ollama, {
-          reasoning: result.triageReasoning,
-          action: target ? { observation: action!.observation, suggestedAction: action!.suggestedAction, targetFile: target.path } : null,
-          notes,
-          output: languages.output,
-        }, target, { traceId, contentId, snapshotId })
-        : null;
 
       // The evaluation and its suggestion are written in one transaction. An interrupted job leaves
       // neither, so its retry evaluates the pair again; otherwise the retry would skip an
@@ -213,13 +201,18 @@ async function runEvaluation(
             verdict,
             confidenceScore: result.confidenceScore,
             triageReasoning,
-            reasoningConnection: structured?.connection ?? null,
-            reasoningGap: structured?.gap ?? null,
+            reasoningConnection,
+            reasoningGap,
             consumptionSeq: content.consumptionSeq,
             traceId,
             retrievalEventId,
           }).returning({ id: evaluations.id });
-          if (!action || !target) return { evaluationId: evalRecord.id, suggestionId: null };
+          if (!action || suppressedDiscard) return { evaluationId: evalRecord.id, suggestionId: null };
+
+          const notes = await tx.select({ path: projectNoteSnapshots.notePath, title: projectNoteSnapshots.noteTitle })
+            .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshotId));
+          const target = resolveTarget(action.targetFile, action.targetIsNew, notes, matchedNotePath);
+          const steps = resolveSteps(action.steps, notes, target);
 
           const [sugRecord] = await tx.insert(actionSuggestions).values({
             evaluationId: evalRecord.id,
@@ -227,8 +220,8 @@ async function runEvaluation(
             contentId,
             actionType: action.actionType,
             observation: action.observation,
-            suggestedAction: structured?.headline ?? action.suggestedAction,
-            actionSteps: structured?.headline ? structured.steps : null,
+            suggestedAction: headline(action.suggestedAction),
+            actionSteps: steps.length ? steps : null,
             targetFile: target.path,
             targetIsNew: target.isNew,
             status: 'pending',

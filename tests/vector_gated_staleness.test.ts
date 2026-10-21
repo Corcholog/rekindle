@@ -195,22 +195,16 @@ describe('Option C: Vector-Gated Staleness & Context-Aware Re-evaluation Tests',
           actionType: 'counter_argument',
           observation: 'Contrastar la latencia de brokers centralizados frente a mesh descentralizado.',
           suggestedAction: 'Discutir compensaciones de latencia en architecture.md',
+          // The first step names its note by title; the second points outside the project
+          steps: [
+            { note: 'Architecture Overview Updated', where: 'Sección de latencia', change: 'Añadir una comparación broker frente a mesh.', text: null },
+            { note: '../fuera.md', where: null, change: 'Copiar la tabla.', text: 'Tabla' },
+          ],
           targetFile: 'architecture.md',
         },
       },
       model: 'mock-llm',
-    } as any).mockResolvedValueOnce({
-      // The second call lays the refined action out as steps: the first names its note by title,
-      // the second points outside the project
-      data: {
-        connection: 'Sigue aportando evidencia.', gap: null, headline: 'Discutir latencia en architecture.md',
-        steps: [
-          { note: 'Architecture Overview Updated', where: 'Sección de latencia', change: 'Añadir una comparación broker frente a mesh.', text: null },
-          { note: '../fuera.md', where: null, change: 'Copiar la tabla.', text: 'Tabla' },
-        ],
-      },
-      model: 'mock-llm',
-    } as any);
+    });
 
     const res = await server.inject({
       method: 'POST',

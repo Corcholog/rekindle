@@ -42,10 +42,10 @@ export function defineFirstSuggestionSuite(c: DemoCase) {
     }
     return call.user.includes(c.lighthouseTitle)
       ? {
-        verdict: 'actionable', confidenceScore: 0.9, triageReasoning: c.action.reasoning,
+        verdict: 'actionable', confidenceScore: 0.9, connection: c.action.reasoning,
         action: { actionType: 'evidence_citation', observation: c.action.observation, suggestedAction: c.action.suggestedAction, targetFile: c.targetNote },
       }
-      : { verdict: 'irrelevant', confidenceScore: 0.2, triageReasoning: '-', action: null };
+      : { verdict: 'irrelevant', confidenceScore: 0.2, connection: '-', action: null };
   };
 
   describe(`From a clean install to a first accepted suggestion (${c.language})`, () => {

@@ -215,8 +215,6 @@ export const ResultSchema = z.object({
     rateLimitWaitMs: z.number(),
     latencyMsP50: NullableNumber,
     latencyMsP95: NullableNumber,
-    /** The second call that lays out the text of actionable and tentative answers. Absent before 2026-10-21. */
-    structure: z.object({ calls: z.number(), malformedOutputs: z.number(), failures: z.number(), latencyMsP50: NullableNumber }).optional(),
   }),
   cost: z.object({
     promptTokens: z.number(),

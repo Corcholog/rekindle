@@ -45,7 +45,7 @@ export const suggestionStatusEnum = pgEnum('suggestion_status', ['pending', 'acc
 // Why the owner discarded a suggestion (optional), from a fixed list
 export const DISCARD_REASONS = ['unrelated', 'obvious', 'wrong_note', 'poorly_worded', 'other'] as const;
 export const discardReasonEnum = pgEnum('discard_reason', DISCARD_REASONS);
-export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action', 'consult', 'synergy', 'synthesis', 'reevaluate', 'structure']);
+export const telemetryComponentEnum = pgEnum('telemetry_component', ['summary', 'thesis', 'triage', 'action', 'consult', 'synergy', 'synthesis', 'reevaluate']);
 export const pipelineStageEnum = pgEnum('pipeline_stage', ['fetch', 'extract', 'summarize', 'embed', 'retrieve', 'evaluate', 'ingest_job', 'evaluate_job']);
 
 // 1. Contents Table
