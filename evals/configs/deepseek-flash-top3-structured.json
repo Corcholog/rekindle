@@ -1,6 +1,6 @@
 {
   "name": "deepseek-flash-top3-structured",
-  "description": "Same triage prompt as deepseek-flash-top3-notes (byte for byte), plus a second call after each actionable or tentative answer that lays out the text: the action as a headline and steps, the reasoning as connection and what it lacks (2026-10-21). The cache key holds the answer schema since 2026-10-21, so triage is re-recorded too: this run doubles as a repeat of the notes prompt.",
+  "description": "Same triage prompt as deepseek-flash-top3-notes (byte for byte), plus a second call after each actionable or tentative answer that lays out the text: the action as a headline and steps, the reasoning as connection and what it lacks (2026-10-21). The cache key holds the answer schema since 2026-10-21, so triage is re-recorded too: this run doubles as a repeat of the notes prompt. The second call was reverted the same day (one call kept); this run remains as a repeat of the notes prompt.",
   "providers": [
     {
       "name": "deepseek",

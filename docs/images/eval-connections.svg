@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="470" viewBox="0 0 760 470" role="img" aria-labelledby="t d">
   <title id="t">Connections found and extra connections, by model</title>
-  <desc id="d">DeepSeek Flash, thinking off (default): 45 of 56 found, 17 extra; DeepSeek Flash, thinking on*: 49 of 56 found, 26 extra; Gemini 3.1 Flash Lite*: 49 of 56 found, 25 extra; Qwen 2.5 7B (local): 30 of 56 found, 9 extra.</desc>
+  <desc id="d">DeepSeek Flash, thinking off (default): 42 of 56 found, 19 extra; DeepSeek Flash, thinking on*: 49 of 56 found, 26 extra; Gemini 3.1 Flash Lite*: 49 of 56 found, 25 extra; Qwen 2.5 7B (local)*: 30 of 56 found, 9 extra.</desc>
   <rect width="760" height="470" rx="14" fill="#1a1714"/>
   <text x="78" y="34" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="17" font-weight="600" fill="#efe6dc">Connections found vs. extra connections</text>
   <text x="78" y="54" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#b7aa9d">47 articles × 8 projects, labels by the owner. Up: more of the labeled connections. Right: more beyond them</text>
@@ -24,9 +24,9 @@
   <line x1="78" x2="720" y1="392" y2="392" stroke="#a39689" stroke-width="1"/>
   <text x="399" y="448" text-anchor="middle" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#b7aa9d">Extra: pairs labeled irrelevant that the model called actionable or tentative</text>
   <text transform="translate(22 231) rotate(-90)" text-anchor="middle" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#b7aa9d">Found, of 56 labeled connections</text>
-  <circle cx="441.8" cy="168.3888888888889" r="8" fill="#f07a30" stroke="#1a1714" stroke-width="2"/>
-  <text x="428.8" y="165.3888888888889" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#efe6dc">DeepSeek Flash, thinking off (default)</text>
-  <text x="428.8" y="181.3888888888889" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#a39689">45 found, 17 extra</text>
+  <circle cx="484.59999999999997" cy="195.2222222222222" r="8" fill="#f07a30" stroke="#1a1714" stroke-width="2"/>
+  <text x="471.59999999999997" y="192.2222222222222" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="600" fill="#efe6dc">DeepSeek Flash, thinking off (default)</text>
+  <text x="471.59999999999997" y="208.2222222222222" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#a39689">42 found, 19 extra</text>
   <path d="M634.4 123.61111111111109V102.61111111111109" stroke="#a39689" stroke-width="1"/>
   <circle cx="634.4" cy="132.6111111111111" r="6.5" fill="#a39689" stroke="#1a1714" stroke-width="2"/>
   <text x="720" y="86.61111111111109" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="400" fill="#efe6dc">DeepSeek Flash, thinking on*</text>
@@ -36,6 +36,6 @@
   <text x="720" y="172.6111111111111" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="400" fill="#efe6dc">Gemini 3.1 Flash Lite*</text>
   <text x="720" y="188.6111111111111" text-anchor="end" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#a39689">49 found, 25 extra</text>
   <circle cx="270.6" cy="302.55555555555554" r="6.5" fill="#a39689" stroke="#1a1714" stroke-width="2"/>
-  <text x="283.6" y="299.55555555555554" text-anchor="start" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="400" fill="#efe6dc">Qwen 2.5 7B (local)</text>
+  <text x="283.6" y="299.55555555555554" text-anchor="start" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="400" fill="#efe6dc">Qwen 2.5 7B (local)*</text>
   <text x="283.6" y="315.55555555555554" text-anchor="start" font-family="Hanken Grotesk, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12" fill="#a39689">30 found, 9 extra</text>
 </svg>

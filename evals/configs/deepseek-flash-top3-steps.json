@@ -1,6 +1,6 @@
 {
   "name": "deepseek-flash-top3-steps",
-  "description": "Same as deepseek-flash-top3-notes, measured after structured suggestion text (2026-10-21): an action is a one-sentence headline plus 1 to 4 steps (note, place, change, text to paste), and the reasoning is a connection plus what is missing. The answer schema differs, so it does not replay the notes cache. Not adopted: macro-F1 0.69 vs 0.75 and 9 invalid JSON answers; replaced by a second call (deepseek-flash-top3-structured).",
+  "description": "Same as deepseek-flash-top3-notes, measured after structured suggestion text (2026-10-21): an action is a one-sentence headline plus 1 to 4 steps (note, place, change, text to paste), and the reasoning is a connection plus what is missing. The answer schema differs, so it does not replay the notes cache. The shipped default since 2026-10-21: the owner chose one call over a second call that laid out the text (deepseek-flash-top3-structured), knowing it scored macro-F1 0.69 against 0.75 and 0.72 for two runs of the previous prompt.",
   "providers": [
     {
       "name": "deepseek",

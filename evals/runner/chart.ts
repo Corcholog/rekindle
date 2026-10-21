@@ -9,10 +9,10 @@ export interface ChartPoint { config: string; label: string; found: number; extr
 
 // With four points, each label's side is chosen by hand so nothing overlaps
 export const CHART_CONFIGS: { config: string; label: string; highlight?: boolean; side: LabelSide }[] = [
-  { config: 'deepseek-flash-top3-notes', label: 'DeepSeek Flash, thinking off (default)', highlight: true, side: 'left' },
+  { config: 'deepseek-flash-top3-steps', label: 'DeepSeek Flash, thinking off (default)', highlight: true, side: 'left' },
   { config: 'deepseek-flash-top3-thinking', label: 'DeepSeek Flash, thinking on*', side: 'above' },
   { config: 'baseline-gemini-top3', label: 'Gemini 3.1 Flash Lite*', side: 'below' },
-  { config: 'qwen-local-top3-notes', label: 'Qwen 2.5 7B (local)', side: 'right' },
+  { config: 'qwen-local-top3-notes', label: 'Qwen 2.5 7B (local)*', side: 'right' },
 ];
 
 /** Connections = pairs labeled actionable or tentative; extra = labeled irrelevant, called either. */

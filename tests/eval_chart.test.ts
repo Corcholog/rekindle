@@ -13,14 +13,14 @@ describe('eval connections chart', () => {
 
   it('counts connections found and extra ones from the latest result of each config', () => {
     const points = chartPoints([
-      result('deepseek-flash-top3-notes', '2026-01-01', 0.5, 0, 0), // older run, ignored
-      result('deepseek-flash-top3-notes', '2026-01-02', 46 / 56, 0, 19),
+      result('deepseek-flash-top3-steps', '2026-01-01', 0.5, 0, 0), // older run, ignored
+      result('deepseek-flash-top3-steps', '2026-01-02', 46 / 56, 0, 19),
       result('qwen-local-top3-notes', '2026-01-02', 32 / 56, 0, 9),
       result('qwen-local-top3', '2026-01-02', 1, 0, 0), // replaced by the notes-prompt run,
       result('not-in-chart', '2026-01-02', 1, 0, 0),
     ], 'private');
     expect(points.map(p => [p.config, p.found, p.extra, p.total])).toEqual([
-      ['deepseek-flash-top3-notes', 46, 19, 56],
+      ['deepseek-flash-top3-steps', 46, 19, 56],
       ['qwen-local-top3-notes', 32, 9, 56],
     ]);
 

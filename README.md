@@ -56,14 +56,14 @@ I labeled 47 articles × 8 of my projects (376 pairs) by hand and ran Rekindle's
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (default) | DeepSeek Flash, thinking on | Qwen 2.5 7B (local) |
 |---|---|---|---|---|
-| `actionable` precision / recall | 64% / 91%* | **96% / 77%** | 79% / 89%* | 100% / 31% |
-| Connections found (of 56) / extra | 49 / 25* | 45 / 17 | 49 / 26* | 30 / 9 |
-| Triage macro-F1 | 0.69* | **0.75** | 0.71* | 0.57 |
-| Latency p50 | 4.4 s* | **2.4 s** | 4.1 s* | 7.2 s |
+| `actionable` precision / recall | 64% / 91%* | **92% / 63%** | 79% / 89%* | 100% / 31%† |
+| Connections found (of 56) / extra | 49 / 25* | 42 / 19 | 49 / 26* | 30 / 9† |
+| Triage macro-F1 | 0.69* | **0.69** | 0.71* | 0.57† |
+| Latency p50 | 4.4 s* | **1.8 s** | 4.1 s* | 7.2 s† |
 
-\* Measured with the previous prompt (2026-10-19). On 2026-10-21 the prompt started showing the model every note of the project instead of one, so it can point a suggestion at the right note or propose a new one; the default and Qwen were measured again. With the previous prompt the default found 46 connections with 19 extra, and every pair it called actionable was right (100% / 77%); with the current one, 1 of its 28 actionable pairs is labeled otherwise. That difference is within the run-to-run variance measured so far. A repeat of the current prompt later that day (`deepseek-flash-top3-structured`, same prompt byte for byte) gave macro-F1 0.72, 44 connections with 18 extra, and 96% / 71% on actionable.
+The default column is the current prompt: since 2026-10-21 the model sees every note of the project and writes each suggestion as a headline with steps, and its reasoning as the connection first and then what is missing. \* Measured with the prompt of 2026-10-19. † Measured with the prompt before the structured text (2026-10-21), not repeated. The prompt just before the structured text scored macro-F1 0.75 and 0.72 in two runs (45 and 44 connections, `actionable` 96% / 77% and 96% / 71%); the same prompt run twice changes the verdict of 11 or 12 of the 118 pairs, so a gap of 0.03 is within noise. The structured prompt also returned 9 answers that were not valid JSON, 2 of them on both tries (in the app those fall back to the next provider).
 
-![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 45 of 56 and proposes 17 extra; with thinking on 49 and 26 (previous prompt); Gemini 3.1 Flash Lite 49 and 25 (previous prompt); local Qwen 2.5 7B 30 and 9](docs/images/eval-connections.svg)
+![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 42 of 56 and proposes 19 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](docs/images/eval-connections.svg)
 
 What counts as a connection is partly subjective: a model can force links, and it can also find ones I had missed (after reading the thinking-on answers I changed 7 labels, which favors it). *Extra* means a pair I labeled irrelevant that the model connected. This is one labeler and a small dataset, so gaps of a few points are noise. Method, caveats, costs and the language experiments: [docs/EVALUATION.md](docs/EVALUATION.md).
 
@@ -72,7 +72,7 @@ What counts as a connection is partly subjective: a model can force links, and i
 Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the following leaves your machine for Google's API:
 
 - the article text (up to 50,000 characters) for summarisation;
-- for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary; for an actionable or tentative result, a second short call sends the model's reasoning and action back with the notes' paths and titles, to lay them out as steps;
+- for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary;
 - for each Consultor question, your question plus **the summaries of the 15 library items and snippets of the 15 project notes closest to it** (under 63,000 characters in all);
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 60,000 characters of project notes.
 
