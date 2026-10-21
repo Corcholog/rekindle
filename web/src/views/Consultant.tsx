@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
 import { ContentDetailDialog } from '@/views/Reading';
 
+// Same limit as MAX_CONSULT_QUERY_CHARS in src/config.ts
+const MAX_QUERY_CHARS = 2000;
 const CITATION = /\[([CN]\d+(?:\s*,\s*[CN]\d+)*)\]/gi;
 
 /** Model text with [C1] / [N2] references turned into links to the cited cards. Text only. */
@@ -77,7 +79,7 @@ export function Consultant() {
           <label htmlFor="consultant-query-input" className="sr-only">{t('consult.inputLabel')}</label>
           <div className="relative flex-1">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden="true" />
-            <Input id="consultant-query-input" required autoComplete="off" value={query} onChange={e => setQuery(e.target.value)} placeholder={t('consult.placeholder')} className="pl-9" />
+            <Input id="consultant-query-input" required autoComplete="off" maxLength={MAX_QUERY_CHARS} value={query} onChange={e => setQuery(e.target.value)} placeholder={t('consult.placeholder')} className="pl-9" />
           </div>
           <Button type="submit" variant="primary" disabled={loading}>
             {loading && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
@@ -104,7 +106,7 @@ export function Consultant() {
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="font-serif text-xl text-ink">{answer.query}</h3>
               <div className="flex items-center gap-3 text-xs text-ink-3">
-                <span>{t('consult.reviewed', { library: answer.totalLibraryEvaluated, notes: answer.totalNotesEvaluated })}</span>
+                <span>{t('consult.reviewed', { library: answer.totalLibraryEvaluated, notes: answer.totalNotesEvaluated, totalLibrary: answer.totalLibrary, totalNotes: answer.totalNotes })}</span>
                 <Button size="sm" variant="ghost" onClick={() => setAnswer(null)}>{t('consult.clear')}</Button>
               </div>
             </div>

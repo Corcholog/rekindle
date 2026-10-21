@@ -125,6 +125,9 @@ export interface ConsultAnswer {
   projectViability?: string | null;
   totalLibraryEvaluated: number;
   totalNotesEvaluated: number;
+  /** Everything the selection was taken from: ready library items and notes of active projects. */
+  totalLibrary: number;
+  totalNotes: number;
   matchedContents: { refId: string; id: string; uri: string; title: string | null; channelOrDomain?: string | null; whyItConnects: string }[];
   matchedNotes: { refId: string; projectTitle: string; noteTitle: string; notePath: string; contentSnippet: string | null; whyItConnects: string }[];
 }
