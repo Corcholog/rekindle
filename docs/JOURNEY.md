@@ -225,6 +225,21 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/ui_contrast.test.ts` (text AA, card edges and the spark 3:1), `tests/ui_dormancy.test.ts` (heat scale), `tests/ui_xss.test.ts` (reasoning rows, the link, the race with a deliberately slow response, an invalid link; each new check confirmed to fail on the old code), `tests/phase7_ui.test.ts` (API fields).
 - **Outcome / lesson:** the visual metaphor has to match what the product does; a palette that looks rich can still say the wrong thing. Screenshots against seeded data caught a bug that the fast, in-process tests had not.
 
+### 2026-10-21 — Phases 6 and 7 closed: published, with no demo recording, testers or Windows check
+- **Context:** the publication package (README, architecture diagram, eval chart, post text) was done, and three Phase 6 items were still open: a demo recording, 3 to 5 user sessions, and a run of `start.bat` on Windows.
+- **What happened:** the owner reviewed and approved the README and the post, and made the repository public. The owner dropped the demo recording and the user sessions (there are no testers, so the owner's own use is the only real use), and Windows stays untested because the owner works on Linux.
+- **Alternatives considered:** keeping Phase 6 open until testers turn up (it would never close, and the README already reports what is missing).
+- **Evidence:** README ("not tested on a real Windows machine", "Usefulness is not measured"), `docs/SETUP.md`, `docs/DEMO.md` (a script, not recorded).
+- **Outcome / lesson:** real-user acceptance rate, rejection reasons and time to a useful suggestion remain **not measured**; Windows remains **not tested**.
+
+### 2026-10-21 — Evals: sending the 4 closest projects instead of 3
+- **Context:** an open item since the Phase 3 follow-up: with the top-3 cutoff, 7 of the 56 labeled connections never reach the model.
+- **What happened:** `pnpm eval sweep` (no model calls) with the revised labels shows that the 4th-closest project is a labeled connection in 3 of the 28 articles that have one (1 actionable, 2 tentative; 24 irrelevant, 1 unlabeled), and that the other 4 missed connections rank 5th or lower. New config `deepseek-flash-top4` (`maxProjects: 4`), run with `--record`: the 118 top-3 calls replayed from the cache and only the 28 calls for the 4th project went to DeepSeek.
+- **Results (against `deepseek-flash-top3`, same labels):** connections found 46 → 49 of 56 (the 3 extra connections that reach the model were all found), extra connections 19 → 27 (8 of the 25 non-connection pairs at rank 4), false actionables 0 → 0 (`actionable` recall 27 → 28 of 35), macro-F1 0.77 → 0.77, LLM calls 118 → 146 (+24%), p50 latency 2.2 s. Thinking on at top-3 found the same 49 with 26 extra and 8 false actionables, at twice the latency.
+- **Alternatives considered:** thinking on (same recall, false actionables, slower); a distance cutoff (loses connections faster than a rank cutoff, `evals/SWEEP.md`).
+- **Evidence:** `evals/results/2026-10-21T05-46-51-263Z-0305477-deepseek-flash-top4-private.json`, `evals/REPORT.md`, `evals/SWEEP.md`. The report's $0.137 prices all 146 calls as if made in this run without cache; the 28 live calls were not checked against the bill.
+- **Outcome / lesson:** one run, one labeler; differences of a few pairs are within the run-to-run variance measured before. Top-4 buys recall with more tentative noise, not with wrong actionables. Changing `TOP_K_PROJECTS_LIMIT` is the owner's decision.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -319,6 +334,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-19 | Cost estimate with cache hits and off-peak prices | Estimated cost of 118 triage calls, thinking off | about $0.12 (uncached, peak) | $0.024 (91% of input cached, off-peak) | `cost` in the result files above |
 | 2026-10-19 | DeepSeek spend, billed | Billed amount, all use before these two runs | not measured | $0.25 (first run alone $0.07) | owner's DeepSeek dashboard; not reproducible from the repo |
 | 2026-10-19 | Labels revised after reading thinking on's answers (7 pairs), all runs rescored | Connections found of 56 / extra, DeepSeek thinking off vs on | not measured | 46 / 19 vs 49 / 26 (macro-F1 0.77 vs 0.71) | `pnpm eval rescore evals/private`; `evals/REPORT.md` |
+| 2026-10-21 | 4 closest projects per article instead of 3 (DeepSeek thinking off, 28 new calls, the rest replayed) | Connections found of 56 / extra / false actionables / macro-F1 / LLM calls | 46 / 19 / 0 / 0.77 / 118 | 49 / 27 / 0 / 0.77 / 146 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top4.json --record`; `evals/SWEEP.md` |
 
 ## Dead ends and things that did not work
 
