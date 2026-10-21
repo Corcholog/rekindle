@@ -262,6 +262,13 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/backlog_top_k.test.ts` (fails on the previous code for the cutoff cases, passes for promotions on both).
 - **Outcome / lesson:** a cutoff has to hold on every path that reaches the model, not only the main one. How many calls this saves is **not measured**.
 
+### 2026-10-21 — The Consultor reads the closest items, not the whole library
+- **Context:** the Consultor put every ready library summary and a 1,800-character snippet of every note of every active project into one prompt, with no limit on the question either. The prompt, and its cost with a cloud key, grew with every saved article and note (F-16), and a large library could overflow the local model's context. The owner chose this after the oversized-input guards (previous entries).
+- **What happened:** the question (now at most 2,000 characters) is embedded locally and only the 15 closest ready items and the 15 closest notes are sent, comparing embeddings of the current model only; notes come from the latest snapshot of active projects. Summaries are cut to 2,000 characters, titles, sources and paths to 300. A `<SELECCION>` block tells the model how much it sees, and the UI shows "the 15 closest of N items and the 15 closest of M notes". If Ollama cannot embed the question, the endpoint answers `embedding_failed` without calling a model (`0e5ada7`, `94bacba`).
+- **Alternatives considered:** a distance cutoff (an inventory question with nothing close would send nothing, and the model could not say "nothing matches"); a character budget filled closest first (more code for the same bound, since each item already has a cut); keyword search next to embeddings for exact titles (left with the "chunking and hybrid retrieval" item).
+- **Evidence:** `tests/consult_budget.test.ts` (closest first, other embedding models, older snapshots and inactive projects left out, cuts, totals, 400 on a long question, `embedding_failed`); `tests/error_responses.test.ts`.
+- **Outcome / lesson:** the Consultor prompt has a fixed upper size: 62,528 characters with 15 items and 15 notes all longer than their cuts, one title longer than 300 and the longest question. The size of the old prompt on the owner's library and the effect on answer quality are **not measured**; `pnpm telemetry:report` shows the `consult` prompt tokens before and after on the real data.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -362,11 +369,12 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-21 | Same change | Prompt tokens per triage call (cached) / estimated cost of 118 calls / p50 latency | 2,170 (1,976) / $0.024 / 2.2 s | 3,825 (3,308) / $0.060 / 2.4 s | `cost` and `reliability` in the result files; estimate, not a billed amount |
 | 2026-10-21 | Same change (Qwen 2.5 7B, local) | Macro-F1 / connections found of 56 / actions off the closest note / p50 latency | 0.58 / 32 / not measured / 3.8 s | 0.57 / 30 / 1 of 11 / 7.2 s | `pnpm eval run evals/private --config evals/configs/qwen-local-top3-notes.json --record` |
 | 2026-10-21 | DeepSeek spend, billed | Dashboard total before the notes-context run | $0.25 (2026-10-19) | $0.35 for 2,797,447 tokens, 1,120 requests | owner's DeepSeek dashboard; not reproducible from the repo |
+| 2026-10-21 | Retrieval-first Consultor | Consultor prompt size, worst case (system + message) | grows with the library and the vault (no limit) | 62,528 characters (limit 63,000) | `pnpm vitest run tests/consult_budget.test.ts` (15 items and 15 notes over their cuts, a 2,000-character question) |
 
 ## Dead ends and things that did not work
 
 - **ONNX embeddings in Node (`@huggingface/transformers`, `paraphrase-multilingual-MiniLM-L12-v2`):** the Phase 0 spike recorded ≈665 MB RSS against a 500 MB budget, a NO-GO (ADR 002; this number was not re-measured). Loom moved to Ollama `bge-m3`. The spike code was removed in `7c1eb33`.
-- **"Ask My Library" (top-5 RAG with `[1]`, `[2]` citations):** replaced by the full-catalog Consultor, then removed in `07f0890`. Open question for Phase 3: the Consultor sends the whole catalog in one prompt, which will not scale.
+- **"Ask My Library" (top-5 RAG with `[1]`, `[2]` citations):** replaced by the full-catalog Consultor, then removed in `07f0890`. Open question for Phase 3: the Consultor sends the whole catalog in one prompt, which will not scale. Closed 2026-10-21: the Consultor is retrieval-first again (15 closest items and notes), now with the totals shown and fixed cuts.
 - **Recording an eval fixture with a throwaway script:** the first attempt (a top-level-await `.ts` file) failed on the CJS output format and went against the owner's rule that checks live in the project; the CLI's `--record` flag replaced it.
 - **Evaluating the production chain as one unit:** fallbacks hid which model had answered; evals use one provider per config.
 - **Bookmarklet clipper:** convenient, but it required an open CORS policy on `/api/ingest`. Removed in favor of the extension (`7be41b1`).

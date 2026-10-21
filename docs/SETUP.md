@@ -110,7 +110,7 @@ The language of the model's **instructions** is not a setting: it stays Spanish 
 |---|---|---|
 | `/api/ingest` | `POST` | Queue a URL (`202` new, `200` re-queued) |
 | `/api/contents`, `/api/contents/:id` | `GET` | Reading feed, status indicators, and content details |
-| `/api/library/consult` | `POST` | Full-catalog Archive & Obsidian Vault Research Partner |
+| `/api/library/consult` | `POST` | Research Partner over the library items and notes closest to the question |
 | `/api/projects` | `GET` | Projects list with counters and note metadata |
 | `/api/projects/synergies` | `GET` | Cross-project thematic synergies via note-to-note cosine distance |
 | `/api/projects/synergies/explore` | `POST` | AI synergy exploration (writes nothing) |

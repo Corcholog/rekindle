@@ -73,7 +73,7 @@ Embeddings are always computed locally. If `GEMINI_API_KEY` is set, the followin
 
 - the article text (up to 50,000 characters) for summarisation;
 - for each evaluation and re-evaluation, **up to 60,000 characters of your project notes** (and the path and title of every note in the project), plus the article summary;
-- for each Consultor question, **the summaries of every ready item in your library and a snippet of every active project note**;
+- for each Consultor question, your question plus **the summaries of the 15 library items and snippets of the 15 project notes closest to it** (under 63,000 characters in all);
 - for synergies, note snippets from both projects; for backlog synthesis, your accepted suggestions plus up to 60,000 characters of project notes.
 
 With a `DEEPSEEK_API_KEY` set (the default chain is `deepseek,gemini,ollama`), the same content goes to DeepSeek first (a China-hosted API) and to Gemini only if DeepSeek fails; without that key DeepSeek is skipped. Leave both keys empty and every LLM call runs on local Ollama. Rekindle still contacts the sites you ingest (and YouTube for transcripts). The web UI's fonts are bundled, so opening it contacts nothing outside your machine.
@@ -93,7 +93,7 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 - **`tentative` verdicts are weak** for every model tried (F1 0.28–0.48 on 21 pairs).
 - **Usefulness is not measured.** Only verdicts are scored, against one person's labels.
 - **A failed evaluation is invisible in the UI**: after three retries it waits until the project changes; `pnpm telemetry:report` shows it.
-- **The consultant sends your whole library in one prompt**, which can exceed a local model's context window.
+- **The Consultor reads only the 15 items and 15 notes closest to your question**, found by embedding similarity, so a question that needs the whole library ("how many articles do I have on X?") gets an answer about that selection. Answer quality is not measured.
 - **Idle time comes from file modification dates**, so copying or syncing a vault in a way that rewrites them resets it.
 
 ## Documentation

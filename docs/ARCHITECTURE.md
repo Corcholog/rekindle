@@ -21,7 +21,7 @@ The workflow centers on writer agency:
    - **Vector-gated staleness detection**: Detects when notes evolve in Obsidian and flags older suggestions as stale (`isStale`).
    - **Tentative promotions**: Automatically re-evaluates past tentative contents when project drafts expand or move closer.
    - **Cross-project thematic synergies**: Discovers conceptual bridges between separate projects via note-to-note cosine distance and generates bridge notes.
-   - **Archive & Vault Research Partner ("Consultor")**: Evaluates your entire saved library and all active Obsidian notes simultaneously to diagnose research questions, assess project viability, and provide cited references (`[C1]`, `[N1]`).
+   - **Archive & Vault Research Partner ("Consultor")**: Reads the library items and active Obsidian notes closest to a question to diagnose research questions, assess project viability, and provide cited references (`[C1]`, `[N1]`).
 
 ### Core Design Principles
 - **Obsidian is the primary source of truth**: The filesystem holds your creative writing. PostgreSQL holds derived vector index state, immutable snapshots, and triage history.
@@ -610,11 +610,14 @@ Rekindle discovers hidden connections across separate projects by calculating th
 Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM and returns it without writing anything. `POST /api/projects/:id/synthesis/save` (the **Guardar en Obsidian** button) writes it to the project folder as `research_brief.md`, or a timestamped name if that file exists. Saved briefs are sanitized, marked `rekindle_generated: true`, and excluded from the project's notes and embeddings.
 
 ### 11.3 Archive & Vault Research Partner ("Consultor" - `/api/library/consult`)
-A dedicated research consultant that reasons over your entire intellectual repository:
-- **Full-Catalog Direct Context**: Injects the catalog of all ready library items (`[C1]`, `[C2]`, ...) and all active Obsidian notes (`[N1]`, `[N2]`, ...) simultaneously.
+A research consultant that reasons over the part of your library and notes closest to the question:
+- **Retrieval first**: the question (at most `MAX_CONSULT_QUERY_CHARS`, 2,000 characters; longer is a 400) is embedded locally with Ollama (I3). The `CONSULT_TOP_CONTENTS` (15) ready library items and the `CONSULT_TOP_NOTES` (15) notes closest to it are selected by cosine distance, comparing only embeddings of the current `EMBED_MODEL` (I7). Notes come from the latest snapshot of each active project; a snapshot without note rows (older data) is one entry, its project text ranked by the project embedding. There is no distance cutoff: the closest are sent even when none is close, and the model says so.
+- **Fixed upper size**: summaries are cut to `CONSULT_SUMMARY_CHARS` (2,000), notes to `CONSULT_NOTE_CHARS` (1,800), and titles, sources and note paths to `CONSULT_LABEL_CHARS` (300), so system prompt plus message stay under 63,000 characters whatever the size of the library (`tests/consult_budget.test.ts`). Items appear closest first (`[C1]` is the closest item).
+- **Told it is a selection**: a `<SELECCION>` block gives how many items and notes were sent and how many exist; the instructions ask the model to say so when the question asks for a full inventory. The response carries `totalLibraryEvaluated`/`totalNotesEvaluated` (sent) and `totalLibrary`/`totalNotes` (all ready items; all notes of active projects), and the UI shows both.
+- **Embedding failure**: if Ollama cannot embed the question, the endpoint answers 500 with code `embedding_failed` and calls no model.
 - **Natural Language Dialogue**: Answers broad questions (e.g. *"¿Tenemos material sobre videojuegos narrativos?"*, *"¿Es viable armar un ensayo sobre atención y tecnología?"*).
 - **Cited Outputs**: Generates a diagnosis with inline references (`[C1]`, `[N1]`), an optional project viability assessment, and itemized connection cards (`whyItConnects`). The cards are resolved against the catalog and unknown references are dropped; inline references inside the diagnosis text are not verified.
-- **Scale:** the whole catalog is sent in a single prompt (no retrieval step), so large libraries can exceed the local model's 16k-token context window.
+- **Limits:** retrieval uses embeddings only (no keyword search), so an exact title the embedding misses is not found; whether the selection holds the right items is not measured.
 
 ---
 
@@ -634,8 +637,8 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 
 ### 2. Archive & Library Consultant
 - `POST /api/library/consult`
-  - Body: `{ query: string }`
-  - Returns: `{ query, diagnosis, projectViability, matchedContents: [...], matchedNotes: [...] }`
+  - Body: `{ query: string }` (2 to 2,000 characters)
+  - Returns: `{ query, diagnosis, projectViability, totalLibraryEvaluated, totalNotesEvaluated, totalLibrary, totalNotes, matchedContents: [...], matchedNotes: [...] }`; `500` with `code: 'embedding_failed'` or `'llm_failed'`
 
 ### 3. Projects & Synergies
 - `GET /api/projects`
@@ -786,7 +789,7 @@ The problem Rekindle exists for is a project left alone for weeks. Each snapshot
 | Area | Current Behavior | Future Consideration |
 |---|---|---|
 | **Authentication** | No auth token. The server only binds to loopback, rejects any `Host` other than `127.0.0.1`/`localhost`/`[::1]` (blocks DNS rebinding), and rejects state-changing requests from foreign origins; the extension origin may only call `/api/ingest` (`src/api/requestGuard.ts`). | A per-install token if LAN access is ever needed. |
-| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 60,000 chars, plus every note's path and title) plus the article summary per evaluation and re-evaluation; every ready content summary plus every active note snippet per Consultor query; note snippets for synergies; accepted suggestions plus project notes (same 60,000-char budget) for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
+| **Privacy with Cloud LLM** | When `GEMINI_API_KEY` is set, Google receives: raw article text (up to 50,000 chars) for summaries; project notes (up to 60,000 chars, plus every note's path and title) plus the article summary per evaluation and re-evaluation; the question plus the summaries of the 15 closest library items and snippets of the 15 closest notes per Consultor query (under 63,000 chars); note snippets for synergies; accepted suggestions plus project notes (same 60,000-char budget) for synthesis. | Leave `GEMINI_API_KEY` empty for strict data residency. |
 | **Virtual Evaluation State** | Accepting or discarding a tentative evaluation inserts its `action_suggestions` row (target: the note closest to the article at evaluation time, or `unknown`; `discarded` when discarded); the LLM verdict is left unchanged. A unique index on `evaluation_id` makes concurrent requests safe. | Separate user decision from model verdict. |
 | **Ingestion SSRF guard** | `fetchPublicPage` validates every resolved IP at connect time (private, loopback, link-local, CGNAT, reserved, IPv6 ULA and IPv4-mapped ranges are blocked), re-checks each redirect hop and streams the body with a 5 MB cap. | — |
 | **Prompt injection** | Untrusted text (pages, transcripts, summaries, notes, earlier suggestions, queries) is wrapped by `promptBlock` (`src/ai/promptSafety.ts`), which neutralizes tag-like sequences; `AiProvider` appends a rule to every system prompt that delimited content is data. Code-side limits (sanitized writes on accept only, validated target notes) are the real boundary. See `docs/THREAT_MODEL.md`. | Measure how often injected pages change verdicts (not measured). |
