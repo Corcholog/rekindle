@@ -409,16 +409,18 @@ Rekindle monitors two top-level directories: `Projects/` and `Proyectos/`.
 - Strips YAML frontmatter anchored at file start.
 - Strips fenced code blocks to prevent false-positive hashtag or title matches inside code snippets.
 - Extracts the first Markdown `# H1` heading outside code blocks as the note title.
-- Keeps the whole note text (up to 200,000 characters, a guard against pathological files). The reconciler embeds only the first 4,000 characters of each note, and builds the project thesis and `notes_content` from that same cut text, so embeddings do not change with note length; the whole text is stored in `project_note_snapshots.content_snippet` for prompts.
+- Does not read a file over 2 MB (`MAX_NOTE_BYTES`, an export or a dump, not a note), and leaves out a file with NUL bytes or mostly undecodable text; both are recorded as skipped. Replaces `data:` URIs and base64 runs of 1,000+ characters with `[datos binarios omitidos]` before anything else sees the text.
+- Keeps the whole note text (up to 200,000 characters, a guard against pathological files; longer notes are cut and recorded). The reconciler embeds only the first 4,000 characters of each note, and builds the project thesis and `notes_content` from that same cut text, so embeddings do not change with note length; the whole text is stored in `project_note_snapshots.content_snippet` for prompts.
 
 ### 7.3 Hash Engine (`hash.ts`)
 - Recursively traverses the project folder for all `.md` files (excluding `suggestions.md`).
 - Sorts relative paths deterministically to ensure platform-independent stability.
-- Computes SHA-256 by streaming file contents prefixed with `"filename:<relPath>:"`.
+- Computes SHA-256 by streaming file contents prefixed with `"filename:<relPath>:"`; a file over 2 MB, which the parser will not read, contributes its size and modification time instead of its contents. A snapshot format version is hashed first, so a change to what snapshots store reconciles every project once.
 - Changing a note's filename or content immediately alters the directory hash.
 
 ### 7.4 Reconciler (`reconciler.ts`)
 When file changes are detected:
+0. **Left-out notes**: notes the parser skipped, cut or cleaned are stored on the snapshot (`project_snapshots.note_issues`: path, reason, size) and listed under the project title in the UI; skipped notes get no note row, embedding or place in prompts.
 1. **In-Process Locking & Queued Passes**: If a reconciliation is already active for a project, the reconciler records the request in `pendingProjectReconciliations` and automatically runs a follow-up pass upon completion, eliminating lock-drop race conditions.
 2. **Change Verification**: Compares the new hash against `projects.current_hash`. If unchanged and the latest snapshot has a valid embedding, reconciliation terminates early.
 3. **Hierarchical Snapshot Generation**:
