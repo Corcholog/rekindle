@@ -18,7 +18,19 @@
   "prices": {
     "deepseek:deepseek-flash": {
       "inputPerM": 0.3,
-      "outputPerM": 1.2
+      "cachedInputPerM": 0.006,
+      "outputPerM": 1.2,
+      "peakHoursUtc": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "offPeakFactor": 0.5
     }
   },
   "maxProjects": 3
