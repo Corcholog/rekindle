@@ -69,6 +69,8 @@ export interface Suggestion {
   contentUri: string;
   actionType: string;
   targetFile: string;
+  /** The model proposes creating targetFile; it does not exist yet. */
+  targetIsNew?: boolean;
   observation: string;
   suggestedAction: string;
   status: 'pending' | 'tentative' | 'accepted' | 'discarded';

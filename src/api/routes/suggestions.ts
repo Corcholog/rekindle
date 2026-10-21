@@ -27,6 +27,8 @@ const SuggestionItemSchema = z.object({
   contentUri: z.string().nullable().optional(),
   actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
   targetFile: z.string(),
+  /** targetFile is a note the model proposes creating; it does not exist yet. */
+  targetIsNew: z.boolean().default(false).optional(),
   observation: z.string(),
   suggestedAction: z.string(),
   status: z.enum(['pending', 'accepted', 'discarded', 'tentative']),
@@ -123,6 +125,7 @@ export default async function (server: FastifyInstance) {
         contentUri: contents.uri,
         actionType: actionSuggestions.actionType,
         targetFile: actionSuggestions.targetFile,
+        targetIsNew: actionSuggestions.targetIsNew,
         observation: actionSuggestions.observation,
         suggestedAction: actionSuggestions.suggestedAction,
         status: actionSuggestions.status,
@@ -171,6 +174,7 @@ export default async function (server: FastifyInstance) {
         contentUri: string;
         actionType: any;
         targetFile: string;
+        targetIsNew?: boolean;
         observation: string;
         suggestedAction: string;
         status: any;
@@ -197,6 +201,7 @@ export default async function (server: FastifyInstance) {
           c.uri AS "contentUri",
           a.action_type::text AS "actionType",
           a.target_file::text AS "targetFile",
+          a.target_is_new AS "targetIsNew",
           a.observation,
           a.suggested_action AS "suggestedAction",
           a.status::text AS status,
@@ -289,6 +294,7 @@ export default async function (server: FastifyInstance) {
         contentUri: string;
         actionType: any;
         targetFile: string;
+        targetIsNew?: boolean;
         observation: string;
         suggestedAction: string;
         status: any;
@@ -400,6 +406,7 @@ export default async function (server: FastifyInstance) {
       contentUri: string;
       actionType: any;
       targetFile: string;
+      targetIsNew?: boolean;
       observation: string;
       suggestedAction: string;
       status: any;
@@ -442,6 +449,7 @@ export default async function (server: FastifyInstance) {
           c.uri AS "contentUri",
           a.action_type::text AS "actionType",
           a.target_file::text AS "targetFile",
+          a.target_is_new AS "targetIsNew",
           a.observation,
           a.suggested_action AS "suggestedAction",
           a.status::text AS status,
@@ -501,6 +509,7 @@ export default async function (server: FastifyInstance) {
           c.uri AS "contentUri",
           'other'::text AS "actionType",
           ${evalTarget}::text AS "targetFile",
+          false AS "targetIsNew",
           ${evalObs}::text AS observation,
           COALESCE(lpe."triageReasoning", ${evalDefaultAction})::text AS "suggestedAction",
           ${finalEvalStatus}::text AS status,
@@ -561,6 +570,7 @@ export default async function (server: FastifyInstance) {
       contentSummary: contents.summary,
       actionType: actionSuggestions.actionType,
       targetFile: actionSuggestions.targetFile,
+      targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
       status: actionSuggestions.status,
@@ -818,6 +828,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       contentUri: contents.uri,
       actionType: actionSuggestions.actionType,
       targetFile: actionSuggestions.targetFile,
+      targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
       status: actionSuggestions.status,
@@ -1130,6 +1141,7 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       contentUri: contents.uri,
       actionType: actionSuggestions.actionType,
       targetFile: actionSuggestions.targetFile,
+      targetIsNew: actionSuggestions.targetIsNew,
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
       status: actionSuggestions.status,

@@ -32,8 +32,9 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
     : s.status === 'discarded' ? (s.targetFile === 'discarded' ? t('sug.discardedByFilter') : t('sug.discarded'))
       : s.status === 'accepted' ? t('sug.accepted')
         : ACTION_TYPES.includes(s.actionType) ? t(`action.${s.actionType}`) : s.actionType;
-  // The note the model says this belongs in; tentative items have none. Accepting never edits it:
-  // the suggestion is appended to the project's suggestions.md, with a link to this note
+  // The note the model says this belongs in, or a new note it proposes; tentative items have none.
+  // Accepting never edits or creates it: the suggestion is appended to the project's suggestions.md,
+  // with a link to this note
   const note = s.targetFile && !['discarded', 'tentative', 'unknown', 'suggestions.md'].includes(s.targetFile) ? s.targetFile : null;
   // Verdicts differ by shape: actionable is a lit chip, tentative a smouldering outline
   const chipStyle = s.status === 'tentative' ? 'border border-dashed border-ember/70 text-ember'
@@ -121,7 +122,7 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
       <dl className="mt-4 grid gap-1 text-sm">
         {note && (
           <div className="flex flex-wrap items-center gap-2">
-            <dt className="text-ink-3">{t('sug.suggestedNote')}</dt>
+            <dt className="text-ink-3">{t(s.targetIsNew ? 'sug.suggestedNewNote' : 'sug.suggestedNote')}</dt>
             <dd className="suggested-note flex items-center gap-1 text-ink"><FileText size={14} aria-hidden="true" /><code>{note}</code></dd>
           </div>
         )}

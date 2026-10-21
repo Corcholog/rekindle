@@ -91,7 +91,7 @@ describe('Web UI renders untrusted text as text', () => {
       }).returning();
       await db.insert(schema.actionSuggestions).values({
         evaluationId: evaluation.id, projectId: snapshot.projectId, contentId: content.id, actionType: 'evidence_citation',
-        targetFile: `${XSS}${ATTR}`, observation: XSS, suggestedAction: XSS, userFeedback: XSS, status,
+        targetFile: `${XSS}${ATTR}`, targetIsNew: true, observation: XSS, suggestedAction: XSS, userFeedback: XSS, status,
         resolvedAt: status === 'accepted' ? new Date() : null,
       });
     }
@@ -186,6 +186,8 @@ describe('Web UI renders untrusted text as text', () => {
         // Each card names the suggested note (as text) and says accepting saves to suggestions.md, not into the note
         const card = doc().querySelector('.suggestion-card')!;
         expect(card.querySelector('.suggested-note')!.textContent).toContain('<img src=x');
+        // The seeded notes are new ones the model proposes
+        expect(card.querySelector('.suggested-note')!.previousElementSibling!.textContent).toBe(lang === 'en' ? 'Suggested new note:' : 'Nota nueva sugerida:');
         expect(card.querySelector('.saved-to')!.textContent).toContain('suggestions.md');
         // The javascript: URI never becomes a link
         const links = [...doc().querySelectorAll('.suggestion-card a')].map(a => a.getAttribute('href'));
