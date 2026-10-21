@@ -238,7 +238,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Results (against `deepseek-flash-top3`, same labels):** connections found 46 → 49 of 56 (the 3 extra connections that reach the model were all found), extra connections 19 → 27 (8 of the 25 non-connection pairs at rank 4), false actionables 0 → 0 (`actionable` recall 27 → 28 of 35), macro-F1 0.77 → 0.77, LLM calls 118 → 146 (+24%), p50 latency 2.2 s. Thinking on at top-3 found the same 49 with 26 extra and 8 false actionables, at twice the latency.
 - **Alternatives considered:** thinking on (same recall, false actionables, slower); a distance cutoff (loses connections faster than a rank cutoff, `evals/SWEEP.md`).
 - **Evidence:** `evals/results/2026-10-21T05-46-51-263Z-0305477-deepseek-flash-top4-private.json`, `evals/REPORT.md`, `evals/SWEEP.md`. The report's $0.137 prices all 146 calls as if made in this run without cache; the 28 live calls were not checked against the bill.
-- **Outcome / lesson:** one run, one labeler; differences of a few pairs are within the run-to-run variance measured before. Top-4 buys recall with more tentative noise, not with wrong actionables. Changing `TOP_K_PROJECTS_LIMIT` is the owner's decision.
+- **Outcome / lesson:** one run, one labeler; differences of a few pairs are within the run-to-run variance measured before. Top-4 buys recall with more tentative noise, not with wrong actionables. The owner kept `TOP_K_PROJECTS_LIMIT` at 3, so the README's figures for the default stay as they are.
 
 ## Bugs and vulnerabilities found
 
