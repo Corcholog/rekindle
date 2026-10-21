@@ -236,7 +236,7 @@ function EvaluationRow({ evaluation: ev, contentId }: { evaluation: NonNullable<
             <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
           </span>
           {(open || (preview && ev.triageReasoning)) && (
-            <span className={cn('evaluation-reasoning mt-0.5 block text-ink-2', !open && 'line-clamp-2')}>
+            <span className={cn('evaluation-reasoning mt-0.5 block whitespace-pre-line text-ink-2', !open && 'line-clamp-2')}>
               {ev.triageReasoning || t('sug.noReasoning')}
             </span>
           )}
@@ -294,7 +294,7 @@ export function ContentDetailDialog({ id, onClose }: { id: string | null; onClos
                       <strong className="text-sm text-ink">{ev.projectTitle}</strong>
                       <VerdictChip verdict={ev.verdict} score={ev.confidenceScore} />
                     </div>
-                    <p className="mt-1 text-sm text-ink-2">{ev.triageReasoning || t('sug.noReasoning')}</p>
+                    <p className="mt-1 whitespace-pre-line text-sm text-ink-2">{ev.triageReasoning || t('sug.noReasoning')}</p>
                   </li>
                 ))}
               </ul>

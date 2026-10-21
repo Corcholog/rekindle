@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Check, ExternalLink, FileText, Flame, RotateCcw } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import { api, ApiError, type DiscardReason, type Suggestion } from '@/lib/api';
+import { api, ApiError, type ActionStep, type DiscardReason, type Suggestion } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/field';
@@ -107,15 +107,34 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
       <div className="p-5 pt-4">
 
       {tentative ? (
-        // A tentative item has no action yet: lead with the article, the model's reasoning below
+        // A tentative item has no action yet: lead with the article, then the connection and what
+        // it lacks (older evaluations have only the reasoning as one text)
         <>
           <h4 className="prose-read text-lg leading-snug text-ink">{s.contentTitle || s.contentUri}</h4>
-          <p className="prose-read mt-2 line-clamp-4 text-[0.95rem] text-ink-2">{s.suggestedAction}</p>
+          {s.reasoningConnection ? (
+            <div className="tentative-reasoning prose-read mt-2 space-y-2 text-[0.95rem] text-ink-2">
+              <p><span className="font-semibold text-ink">{t('sug.connection')}:</span> {s.reasoningConnection}</p>
+              {s.reasoningGap && <p><span className="font-semibold text-ink">{t('sug.gap')}:</span> {s.reasoningGap}</p>}
+            </div>
+          ) : (
+            <p className="prose-read mt-2 line-clamp-4 text-[0.95rem] text-ink-2">{s.suggestedAction}</p>
+          )}
         </>
       ) : (
         <>
           <h4 className="prose-read text-lg leading-snug text-ink">{s.suggestedAction}</h4>
-          <p className="prose-read mt-2 text-[0.95rem] text-ink-2">{s.observation}</p>
+          {s.actionSteps?.length ? (
+            <>
+              <h5 className="mt-4 text-sm font-semibold text-ink">{t('sug.steps')}</h5>
+              <ol className="action-steps mt-2 space-y-3">
+                {s.actionSteps.map((step, i) => <Step key={i} step={step} index={i} />)}
+              </ol>
+              <h5 className="mt-4 text-sm font-semibold text-ink">{t('sug.why')}</h5>
+              <p className="prose-read mt-1 text-[0.95rem] text-ink-2">{s.observation}</p>
+            </>
+          ) : (
+            <p className="prose-read mt-2 text-[0.95rem] text-ink-2">{s.observation}</p>
+          )}
         </>
       )}
 
@@ -145,7 +164,7 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
         <summary className="cursor-pointer text-ink-2 hover:text-ink">{t('sug.showMore')}</summary>
         <div className="mt-2 rounded-md bg-surface-2 p-3">
           {score !== null && s.status !== 'discarded' && <p className="mb-1 text-xs text-ink-3">{t('sug.affinity')} {Math.round(score * 100)}%</p>}
-          <p className="text-ink-2">{reasoning ?? t('sug.loadingReasoning')}</p>
+          <p className="whitespace-pre-line text-ink-2">{reasoning ?? t('sug.loadingReasoning')}</p>
         </div>
       </details>
 
@@ -182,5 +201,26 @@ export function SuggestionCard({ suggestion: s, onResolved, projectIdleDays }: {
       )}
       </div>
     </article>
+  );
+}
+
+/** One step of an action: the note and the place in it, what to do, and the text to paste. Text only. */
+function Step({ step, index }: { step: ActionStep; index: number }) {
+  return (
+    <li className="action-step flex gap-3">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ember-soft text-xs font-semibold text-ember" aria-hidden="true">{index + 1}</span>
+      <div className="min-w-0 flex-1">
+        {(step.note || step.where) && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
+            {step.note && <span className="step-note inline-flex items-center gap-1 text-ink-2"><FileText size={12} aria-hidden="true" /><code>{step.note}</code></span>}
+            {step.where && <span className="step-where">{step.where}</span>}
+          </p>
+        )}
+        <p className="prose-read text-[0.95rem] text-ink">{step.change}</p>
+        {step.text && (
+          <blockquote className="step-text prose-read mt-1.5 whitespace-pre-line border-l-2 border-ember/50 pl-3 text-[0.95rem] italic text-ink-2">{step.text}</blockquote>
+        )}
+      </div>
+    </li>
   );
 }

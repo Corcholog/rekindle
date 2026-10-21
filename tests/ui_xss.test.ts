@@ -85,6 +85,12 @@ describe('Web UI renders untrusted text as text', () => {
     await db.insert(schema.contents).values({
       uri: 'https://example.com/fallo', title: XSS, ingestStatus: 'failed', ingestStatusReason: XSS,
     });
+    // A later tentative evaluation of the same article for Alfa, with the reasoning in two parts
+    await db.insert(schema.evaluations).values({
+      contentId: content.id, projectSnapshotId: a.snapshot.id, verdict: 'tentative', confidenceScore: 0.5,
+      triageReasoning: `${XSS}\n\n${XSS}`, reasoningConnection: XSS, reasoningGap: XSS, consumptionSeq: 2,
+      evaluatedAt: new Date(Date.now() + 60_000), // newer than the pending suggestion's evaluation
+    });
     for (const [status, snapshot] of [['pending', a.snapshot], ['accepted', b.snapshot]] as const) {
       const [evaluation] = await db.insert(schema.evaluations).values({
         contentId: content.id, projectSnapshotId: snapshot.id, verdict: 'actionable', confidenceScore: 0.9,
@@ -93,6 +99,7 @@ describe('Web UI renders untrusted text as text', () => {
       await db.insert(schema.actionSuggestions).values({
         evaluationId: evaluation.id, projectId: snapshot.projectId, contentId: content.id, actionType: 'evidence_citation',
         targetFile: `${XSS}${ATTR}`, targetIsNew: true, observation: XSS, suggestedAction: XSS, userFeedback: XSS, status,
+        actionSteps: [{ note: `${XSS}.md`, noteIsNew: false, where: `${XSS}${ATTR}`, change: XSS, text: `${XSS}\n${XSS}` }],
         resolvedAt: status === 'accepted' ? new Date() : null,
       });
     }
@@ -169,7 +176,7 @@ describe('Web UI renders untrusted text as text', () => {
 
         // "View suggestion" opens that project in Suggestions, on the right tab, and points at the card
         const viewLinks = [...doc().querySelectorAll('.view-suggestion')] as HTMLAnchorElement[];
-        expect(viewLinks.length).toBe(2);
+        expect(viewLinks.length).toBe(3); // pending, accepted and the tentative evaluation
         const accepted = viewLinks.find(l => l.getAttribute('href')!.includes('tab=accepted'))!;
         expect(accepted.getAttribute('href')).toBe(`#suggestions?project=${projectB.id}&content=${readyContentId}&tab=accepted`);
         accepted.click();
@@ -196,6 +203,19 @@ describe('Web UI renders untrusted text as text', () => {
         // The seeded notes are new ones the model proposes
         expect(card.querySelector('.suggested-note')!.previousElementSibling!.textContent).toBe(lang === 'en' ? 'Suggested new note:' : 'Nota nueva sugerida:');
         expect(card.querySelector('.saved-to')!.textContent).toContain('suggestions.md');
+        // The action as steps: note, place, change and the text to paste, all as text
+        const step = doc().querySelector('.action-steps .action-step')!;
+        expect(step.querySelector('.step-note')!.textContent).toContain('<img src=x');
+        expect(step.querySelector('.step-where')!.textContent).toContain('onmouseover');
+        expect(step.querySelector('.step-text')!.textContent).toContain('<svg onload');
+        expect(doc().querySelector('.action-steps')!.previousElementSibling!.textContent).toBe(lang === 'en' ? 'What to do' : 'Qué hacer');
+        // A tentative item leads with the connection, then what it lacks
+        dom.window.location.hash = `#suggestions?project=${projectA.id}&tab=tentative`;
+        await waitFor(() => !!doc().querySelector('.tentative-reasoning'), 'the tentative card');
+        const tentative = doc().querySelector('.tentative-reasoning')!;
+        expect([...tentative.querySelectorAll('span.font-semibold')].map(e => e.textContent)).toEqual(lang === 'en' ? ['Connection:', 'What it lacks:'] : ['Conexión:', 'Qué le falta:']);
+        expect(tentative.textContent).toContain('<b>negrita</b>');
+        expect(injected()).toEqual(clean);
         // The javascript: URI never becomes a link
         const links = [...doc().querySelectorAll('.suggestion-card a')].map(a => a.getAttribute('href'));
         expect(links.every(href => /^https?:/.test(href!))).toBe(true);

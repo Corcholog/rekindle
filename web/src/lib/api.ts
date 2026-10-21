@@ -86,8 +86,21 @@ export interface Suggestion {
   createdAt: string;
   confidenceScore?: number | null;
   triageReasoning?: string | null;
+  /** The reasoning in two parts, connection first; null on older evaluations. */
+  reasoningConnection?: string | null;
+  reasoningGap?: string | null;
+  /** The action as steps; null on older suggestions, whose suggestedAction holds all of it. */
+  actionSteps?: ActionStep[] | null;
   projectIdleDays?: number | null;
   isStale?: boolean;
+}
+
+export interface ActionStep {
+  note: string | null;
+  noteIsNew: boolean;
+  where: string | null;
+  change: string;
+  text: string | null;
 }
 
 export interface Synergy {
