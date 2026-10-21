@@ -10,7 +10,7 @@ import { JsonCache, RecordedCall, roundVector, sha256 } from './cache';
 import { buildChainFromSpecs } from './chainSpec';
 import { effectiveVerdict, loadDataset, validateLabels } from './dataset';
 import { estimateCostUsd, percentile } from './metrics';
-import { predictionsFromDetails, scoreRun, targetNoteStats } from './scoring';
+import { predictionsFromDetails, scoreRun, suggestionTextStats, targetNoteStats } from './scoring';
 
 export type RunMode = 'live' | 'record' | 'replay';
 
@@ -229,6 +229,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
     const evaluationRows = await db.select({
       contentId: schema.evaluations.contentId, verdict: schema.evaluations.verdict, snapshotId: schema.evaluations.projectSnapshotId,
       confidence: schema.evaluations.confidenceScore, reasoning: schema.evaluations.triageReasoning,
+      reasoningConnection: schema.evaluations.reasoningConnection, reasoningGap: schema.evaluations.reasoningGap,
     }).from(schema.evaluations).where(inArray(schema.evaluations.contentId, [...contentIdByArticle.values()]));
     const snapshotRows = await db.select({ id: schema.projectSnapshots.id, projectId: schema.projectSnapshots.projectId }).from(schema.projectSnapshots);
     const projectBySnapshot = new Map(snapshotRows.map(s => [s.id, s.projectId]));
@@ -236,7 +237,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
       contentId: schema.actionSuggestions.contentId, projectId: schema.actionSuggestions.projectId, targetFile: schema.actionSuggestions.targetFile,
       targetIsNew: schema.actionSuggestions.targetIsNew,
       actionType: schema.actionSuggestions.actionType, observation: schema.actionSuggestions.observation,
-      suggestedAction: schema.actionSuggestions.suggestedAction,
+      suggestedAction: schema.actionSuggestions.suggestedAction, actionSteps: schema.actionSuggestions.actionSteps,
     }).from(schema.actionSuggestions).where(inArray(schema.actionSuggestions.contentId, [...contentIdByArticle.values()]));
 
     const articleByContent = new Map([...contentIdByArticle].map(([articleId, contentId]) => [contentId, articleId]));
@@ -250,10 +251,12 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         verdict: row.verdict,
         confidence: row.confidence,
         reasoning: row.reasoning,
+        reasoningConnection: row.reasoningConnection,
+        reasoningGap: row.reasoningGap,
         action: suggestion
           ? {
             type: suggestion.actionType, observation: suggestion.observation, suggestedAction: suggestion.suggestedAction,
-            targetFile: suggestion.targetFile, targetIsNew: suggestion.targetIsNew,
+            targetFile: suggestion.targetFile, targetIsNew: suggestion.targetIsNew, steps: suggestion.actionSteps,
           }
           : null,
       };
@@ -296,7 +299,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         ...(config.languages ? { languages } : {}),
       },
       retrieval: { ...score.retrieval, threshold: config.threshold },
-      triage: { ...score.triage, targetNotes: targetNoteStats(details) },
+      triage: { ...score.triage, targetNotes: targetNoteStats(details), text: suggestionTextStats(details) },
       reliability: {
         llmCalls: triageEntries.length,
         attempts: triageEntries.reduce((s, e) => s + e.attempts.length, 0),

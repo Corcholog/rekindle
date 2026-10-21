@@ -99,3 +99,33 @@ describe('targetNoteStats', () => {
     expect(targetNoteStats(details as any)).toEqual({ actions: 3, notClosestNote: 2, newNotes: 1 });
   });
 });
+
+describe('suggestionTextStats', () => {
+  it('counts steps, text to paste, and tentatives that open with a summary', async () => {
+    const { suggestionTextStats } = await import('../evals/runner/scoring');
+    const step = (note: string | null, text: string | null) => ({ note, noteIsNew: false, where: 'Acto 2', change: 'Añadir.', text });
+    const details: any = {
+      articles: {
+        a1: {
+          pairs: {
+            'Projects/A': { verdict: 'actionable', reasoning: 'Conecta.', action: { suggestedAction: 'Titular', targetFile: 'a.md', steps: [step('a.md', 'Cita'), step('b.md', null)] } },
+            'Projects/B': { verdict: 'tentative', reasoning: 'El artículo trata de faros.\n\nNo aporta datos.', reasoningGap: 'No aporta datos.', action: null },
+          },
+        },
+        a2: {
+          pairs: {
+            // Recorded before steps: the whole action in one text, the reasoning in one text
+            'Projects/A': { verdict: 'actionable', reasoning: 'r', action: { suggestedAction: 'Una acción larga en un bloque', targetFile: 'a.md' } },
+            'Projects/B': { verdict: 'tentative', reasoning: 'Toca el Acto 1, pero sin datos.', action: null },
+          },
+        },
+      },
+    };
+    // Action text: 'Titular' (7) + 'Acto 2' 'Añadir.' 'Cita' (17) + 'Acto 2' 'Añadir.' (13) = 37, and 29;
+    // with two values the median is the upper one
+    expect(suggestionTextStats(details)).toEqual({
+      actions: 2, actionsWithSteps: 1, steps: 2, stepsWithText: 1, stepsOnOtherNote: 1, actionCharsP50: 37,
+      tentatives: 2, tentativesWithGap: 1, tentativeReasoningCharsP50: 45, tentativesOpeningWithSummary: 1,
+    });
+  });
+});

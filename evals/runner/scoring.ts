@@ -117,3 +117,49 @@ export function targetNoteStats(details: RunDetails): { actions: number; notClos
   }
   return { actions, notClosestNote, newNotes };
 }
+
+// A reasoning that opens by describing the article or the project instead of the connection
+const OPENS_WITH_SUMMARY = /^(el (artículo|proyecto|contenido|texto|resumen)|the (article|project|content|text|summary))\b/i;
+
+const median = (values: number[]): number | null => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+
+/**
+ * The shape of what the model wrote, without labels: how many actions came as steps, how many steps
+ * carry text to paste or point at another note than the target, the length of the action text
+ * (headline and steps), and for tentatives the length of the reasoning, whether it says what is
+ * missing, and how many still open by describing the article or the project.
+ */
+export function suggestionTextStats(details: RunDetails) {
+  let actions = 0, actionsWithSteps = 0, steps = 0, stepsWithText = 0, stepsOnOtherNote = 0;
+  let tentatives = 0, tentativesWithGap = 0, tentativesOpeningWithSummary = 0;
+  const actionChars: number[] = [];
+  const tentativeChars: number[] = [];
+  for (const article of Object.values(details.articles)) {
+    for (const pair of Object.values(article.pairs)) {
+      if (pair.action) {
+        actions++;
+        const actionSteps = pair.action.steps ?? [];
+        if (actionSteps.length) actionsWithSteps++;
+        steps += actionSteps.length;
+        stepsWithText += actionSteps.filter(s => s.text).length;
+        stepsOnOtherNote += actionSteps.filter(s => s.note && s.note !== pair.action!.targetFile).length;
+        actionChars.push(pair.action.suggestedAction.length + actionSteps.reduce((sum, s) => sum + (s.where?.length ?? 0) + s.change.length + (s.text?.length ?? 0), 0));
+      }
+      if (pair.verdict === 'tentative') {
+        tentatives++;
+        if (pair.reasoningGap) tentativesWithGap++;
+        const reasoning = pair.reasoning ?? '';
+        tentativeChars.push(reasoning.length);
+        if (OPENS_WITH_SUMMARY.test(reasoning.trim())) tentativesOpeningWithSummary++;
+      }
+    }
+  }
+  return {
+    actions, actionsWithSteps, steps, stepsWithText, stepsOnOtherNote, actionCharsP50: median(actionChars),
+    tentatives, tentativesWithGap, tentativeReasoningCharsP50: median(tentativeChars), tentativesOpeningWithSummary,
+  };
+}

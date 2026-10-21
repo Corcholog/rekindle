@@ -104,6 +104,9 @@ export const PairDetailSchema = z.object({
   verdict: VerdictSchema,
   confidence: z.number().nullable(),
   reasoning: z.string().nullable(),
+  /** The reasoning in two parts, connection first. Absent before 2026-10-21 (steps). */
+  reasoningConnection: z.string().nullable().optional(),
+  reasoningGap: z.string().nullable().optional(),
   action: z.object({
     type: z.string(),
     observation: z.string(),
@@ -111,6 +114,10 @@ export const PairDetailSchema = z.object({
     targetFile: z.string(),
     /** The model proposed a new note. Absent before 2026-10-21. */
     targetIsNew: z.boolean().optional(),
+    /** The action's steps (src/evaluator/actionSteps.ts). Absent before 2026-10-21 (steps). */
+    steps: z.array(z.object({
+      note: z.string().nullable(), noteIsNew: z.boolean(), where: z.string().nullable(), change: z.string(), text: z.string().nullable(),
+    })).nullable().optional(),
   }).nullable(),
 });
 
@@ -187,6 +194,13 @@ export const ResultSchema = z.object({
      * the closest one, or proposed a new note. Whether the note is the right one is not measured.
      */
     targetNotes: z.object({ actions: z.number(), notClosestNote: z.number(), newNotes: z.number() }).optional(),
+    /** Shape of the suggestion text, counted without labels (scoring.ts suggestionTextStats). Whether it reads better is not measured. */
+    text: z.object({
+      actions: z.number(), actionsWithSteps: z.number(), steps: z.number(), stepsWithText: z.number(),
+      stepsOnOtherNote: z.number(), actionCharsP50: z.number().nullable(),
+      tentatives: z.number(), tentativesWithGap: z.number(), tentativeReasoningCharsP50: z.number().nullable(),
+      tentativesOpeningWithSummary: z.number(),
+    }).optional(),
   }),
   reliability: z.object({
     llmCalls: z.number(),
