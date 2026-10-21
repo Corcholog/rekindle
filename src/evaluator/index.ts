@@ -5,7 +5,7 @@ import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
 import { projectNotesContext, retrieveWithStats, RetrievalOptions } from './retrieval';
-import { resolveTargetFile } from './targetFile';
+import { resolveTarget } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
 import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
 import { getLogger } from '../observability/logger';
@@ -202,8 +202,9 @@ async function runEvaluation(
           }).returning({ id: evaluations.id });
           if (!action || suppressedDiscard) return { evaluationId: evalRecord.id, suggestionId: null };
 
-          const notes = await tx.select({ notePath: projectNoteSnapshots.notePath })
+          const notes = await tx.select({ path: projectNoteSnapshots.notePath, title: projectNoteSnapshots.noteTitle })
             .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshotId));
+          const target = resolveTarget(action.targetFile, action.targetIsNew, notes, matchedNotePath);
 
           const [sugRecord] = await tx.insert(actionSuggestions).values({
             evaluationId: evalRecord.id,
@@ -212,7 +213,8 @@ async function runEvaluation(
             actionType: action.actionType,
             observation: action.observation,
             suggestedAction: action.suggestedAction,
-            targetFile: resolveTargetFile(action.targetFile, notes.map(n => n.notePath), matchedNotePath),
+            targetFile: target.path,
+            targetIsNew: target.isNew,
             status: 'pending',
           }).returning({ id: actionSuggestions.id });
           return { evaluationId: evalRecord.id, suggestionId: sugRecord.id };

@@ -126,6 +126,9 @@ export const evaluations = pgTable('evaluations', {
   // Whole days the project's notes had been untouched when this evaluation ran (null: unknown).
   // Kept on the evaluation, so "rekindles a project idle for N days" stays true after later edits.
   projectIdleDays: integer('project_idle_days'),
+  // The note closest to the content at evaluation time (relative to the project), so accepting a
+  // tentative evaluation can point at it. Null for project-level matches and older rows.
+  matchedNotePath: text('matched_note_path'),
 }, (table) => [
   unique('evaluations_idempotency_idx').on(table.contentId, table.projectSnapshotId, table.consumptionSeq)
 ]);
@@ -138,6 +141,8 @@ export const actionSuggestions = pgTable('action_suggestions', {
   contentId: uuid('content_id').references(() => contents.id, { onDelete: 'cascade' }).notNull(),
   actionType: actionTypeEnum('action_type').notNull(),
   targetFile: text('target_file').notNull(),
+  // The model proposes creating target_file; Rekindle never creates it (I1), the callout links to it
+  targetIsNew: boolean('target_is_new').default(false).notNull(),
   observation: text('observation').notNull(),
   suggestedAction: text('suggested_action').notNull(),
   status: suggestionStatusEnum('status').default('pending').notNull(),

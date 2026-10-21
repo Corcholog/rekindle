@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNotesContext, ContextNote } from '../src/evaluator/notesContext';
 
-const note = (path: string, text: string, distance?: number): ContextNote => ({ path, title: path.replace(/\.md$/, ''), text, distance });
+const note = (path: string, text: string, distance?: number | null): ContextNote => ({ path, title: path.replace(/\.md$/, ''), text, distance });
 
 describe('notes context', () => {
   it('sends every note whole, in path order, when the project fits the budget', () => {

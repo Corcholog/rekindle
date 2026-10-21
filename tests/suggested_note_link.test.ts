@@ -25,4 +25,13 @@ describe('suggested note link in accepted callouts', () => {
     expect(formatAcceptedCallout({ ...base, targetFile: 'ideas.md', folderPath: 'Projects/Faro' }, new Date(), 'en')).toContain('> **Suggested note:** [[Projects/Faro/ideas|ideas]]');
     expect(formatAcceptedCallout({ ...base, targetFile: 'tentative', folderPath: 'Projects/Faro' }, new Date(), 'en')).not.toContain('Suggested note');
   });
+
+  it('labels a proposed new note, whose link creates it in Obsidian when clicked', async () => {
+    const { formatAcceptedCallout } = await import('../src/vault/updater');
+    const base = { id: 'x', actionType: 'evidence_citation', observation: 'o', suggestedAction: 'a', userFeedback: null, sourceUri: null, sourceTitle: null };
+    const sug = { ...base, targetFile: 'research/contraargumentos.md', targetIsNew: true, folderPath: 'Projects/Faro' };
+    expect(formatAcceptedCallout(sug, new Date(), 'es')).toContain('> **Nota nueva sugerida:** [[Projects/Faro/research/contraargumentos|contraargumentos]]');
+    expect(formatAcceptedCallout(sug, new Date(), 'en')).toContain('> **Suggested new note:** [[Projects/Faro/research/contraargumentos|contraargumentos]]');
+    expect(formatAcceptedCallout({ ...sug, targetIsNew: false }, new Date(), 'es')).toContain('> **Nota sugerida:**');
+  });
 });

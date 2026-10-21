@@ -25,6 +25,8 @@ type WritableSuggestion = {
   sourceTitle: string | null;
   /** The note the suggestion is for, relative to the project folder (validated when the suggestion was made). */
   targetFile?: string | null;
+  /** The note does not exist yet: the link lets the owner create it in Obsidian with one click. */
+  targetIsNew?: boolean | null;
   /** The project's folder, relative to the vault, so the link resolves to that exact note. */
   folderPath?: string | null;
 };
@@ -79,7 +81,7 @@ export function formatAcceptedCallout(sug: WritableSuggestion, date = new Date()
   callout += prefixLines(text.calloutAction, sug.suggestedAction);
   callout += prefixLines(text.calloutObservation, sug.observation);
   const noteLink = suggestedNoteLink(sug.targetFile, sug.folderPath);
-  if (noteLink) callout += `> **${text.calloutNote}:** ${noteLink}\n`;
+  if (noteLink) callout += `> **${sug.targetIsNew ? text.calloutNewNote : text.calloutNote}:** ${noteLink}\n`;
   callout += `> **${text.calloutSource}:** ${link}\n`;
   if (sug.userFeedback) {
     callout += prefixLines(text.calloutFeedback, sug.userFeedback);
@@ -111,6 +113,7 @@ const writableSelection = {
   suggestedAction: actionSuggestions.suggestedAction,
   userFeedback: actionSuggestions.userFeedback,
   targetFile: actionSuggestions.targetFile,
+  targetIsNew: actionSuggestions.targetIsNew,
   sourceUri: contents.uri,
   sourceTitle: contents.title,
 };

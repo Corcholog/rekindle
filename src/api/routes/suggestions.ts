@@ -7,7 +7,7 @@ import { writeAcceptedSuggestionToVault } from '../../vault/updater';
 import { boss, SYNC_JOB_OPTIONS } from '../../queue';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { newTraceId } from '../../observability/pipeline';
-import { resolveTargetFile } from '../../evaluator/targetFile';
+import { resolveTarget } from '../../evaluator/targetFile';
 import { projectNotesContext } from '../../evaluator/retrieval';
 import { STALE_DRIFT_THRESHOLD } from '../../config';
 import { promptBlock } from '../../ai/promptSafety';
@@ -52,7 +52,8 @@ const reevaluationSchema = (lang: Language) => z.object({
     actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
     observation: z.string(),
     suggestedAction: z.string(),
-    targetFile: z.string().nullish(),
+    targetFile: z.string().nullish().describe("Ruta de una nota existente del proyecto, o el nombre de una nota nueva con 'targetIsNew' en true."),
+    targetIsNew: z.boolean().nullish(),
   }).nullish().describe("Acción refinada obligatoria si resolution es 'keep_or_refine'. Debe ser null si resolution es 'already_addressed' o 'obsolete'."),
 });
 
@@ -666,6 +667,7 @@ export default async function (server: FastifyInstance) {
       observation: actionSuggestions.observation,
       suggestedAction: actionSuggestions.suggestedAction,
       targetFile: actionSuggestions.targetFile,
+      targetIsNew: actionSuggestions.targetIsNew,
       status: actionSuggestions.status,
     })
     .from(actionSuggestions)
@@ -712,7 +714,7 @@ REGLAS DE RESOLUCIÓN:
 3. 'obsolete': El proyecto cambió de enfoque, eliminó la sección relevante o la sugerencia ya no tiene sentido con la dirección actual. 'refinedAction' debe ser null.`;
 
     const userMessage = `${promptBlock('PREVIOUS_SUGGESTION', `- Tipo de acción: ${sug.actionType}
-- Archivo objetivo original: ${sug.targetFile}
+- Archivo objetivo original: ${sug.targetFile}${sug.targetIsNew ? ' (nota nueva, aún no existe)' : ''}
 - Observación previa: ${sug.observation}
 - Acción sugerida previa: ${sug.suggestedAction}`)}
 
@@ -754,14 +756,19 @@ Determina con precisión si la sugerencia debe mantenerse/refinarse, si ya fue a
       newEvaluationId = insertedEval.id;
 
       const refinedAction = evalResult.refinedAction;
-      const latestNotes = await db.select({ notePath: projectNoteSnapshots.notePath })
+      const latestNotes = await db.select({ path: projectNoteSnapshots.notePath, title: projectNoteSnapshots.noteTitle })
         .from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, latestSnapshot.id));
+      // Without a new target the suggestion keeps its own, including a proposed new note
+      const target = refinedAction?.targetFile
+        ? resolveTarget(refinedAction.targetFile, refinedAction.targetIsNew, latestNotes, sug.targetIsNew ? null : sug.targetFile)
+        : { path: sug.targetFile, isNew: sug.targetIsNew };
       await db.update(actionSuggestions).set({
         ...(await evaluationLink(newEvaluationId, sug.id)),
         actionType: refinedAction?.actionType || sug.actionType,
         observation: refinedAction?.observation || sug.observation,
         suggestedAction: refinedAction?.suggestedAction || sug.suggestedAction,
-        targetFile: resolveTargetFile(refinedAction?.targetFile, latestNotes.map(n => n.notePath), sug.targetFile),
+        targetFile: target.path,
+        targetIsNew: target.isNew,
       }).where(eq(actionSuggestions.id, sug.id));
 
     } else {

@@ -3,13 +3,21 @@ import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { resolveTargetFile } from '../src/evaluator/targetFile';
+import { resolveTarget } from '../src/evaluator/targetFile';
 import { fakeEmbedding, installFakeAi, FakeAi } from './helpers/fakeAi';
 
 // Audit failure scenario 8 (F-13): the LLM supplies a target path outside the project.
 
-describe('resolveTargetFile', () => {
-  const notes = ['ideas.md', 'research/mechanics.md', 'capitulos/uno.md', 'otros/uno.md'];
+describe('resolveTarget', () => {
+  const notes = [
+    { path: 'ideas.md', title: 'Ideas sueltas' },
+    { path: 'research/mechanics.md', title: 'Mecánicas' },
+    { path: 'capitulos/uno.md', title: 'Capítulo uno' },
+    { path: 'otros/uno.md', title: 'Otro uno' },
+    { path: 'a.md', title: 'Repetido' },
+    { path: 'b.md', title: 'Repetido' },
+  ];
+  const existing = (path: string) => ({ path, isNew: false });
 
   it.each([
     ['ideas.md', 'ideas.md'],
@@ -17,21 +25,45 @@ describe('resolveTargetFile', () => {
     ['research/mechanics', 'research/mechanics.md'],
     ['./ideas.md', 'ideas.md'],
     ['research\\mechanics.md', 'research/mechanics.md'],
+    ['Research/Mechanics.md', 'research/mechanics.md'], // case differs
     ['mechanics.md', 'research/mechanics.md'], // unique file name
+    ['Mecánicas', 'research/mechanics.md'], // a title from the index
+    ['capítulo uno', 'capitulos/uno.md'],
     ['uno.md', 'fallback.md'], // two notes share the name
+    ['Repetido', 'fallback.md'], // two notes share the title
     ['../../Personal/diario.md', 'fallback.md'],
     ['research/../../../.env', 'fallback.md'],
     ['/etc/passwd', 'fallback.md'],
     ['research/%', 'fallback.md'],
-    ['inventada.md', 'fallback.md'],
+    ['inventada.md', 'fallback.md'], // not in the project and not proposed as new
     ['', 'fallback.md'],
     [null, 'fallback.md'],
-  ])('%j -> %s', (proposed, expected) => {
-    expect(resolveTargetFile(proposed, notes, 'fallback.md')).toBe(expected);
+  ])('existing %j -> %s', (proposed, expected) => {
+    expect(resolveTarget(proposed, false, notes, 'fallback.md')).toEqual(existing(expected));
   });
 
-  it('falls back to ideas.md when retrieval matched no note', () => {
-    expect(resolveTargetFile('../x.md', notes, null)).toBe('ideas.md');
+  it.each([
+    ['contraargumentos.md', 'contraargumentos.md'],
+    ['contraargumentos', 'contraargumentos.md'],
+    ['research/fuentes nuevas', 'research/fuentes nuevas.md'], // a folder that already holds notes
+    ['Ideas.md', null], // an existing note, whatever the flag says
+    ['Ideas sueltas', null],
+  ])('new %j -> %s', (proposed, expected) => {
+    const target = resolveTarget(proposed, true, notes, 'fallback.md');
+    if (expected) expect(target).toEqual({ path: expected, isNew: true });
+    else expect(target.isNew).toBe(false);
+  });
+
+  it.each([
+    '../fuera.md', '/absoluta.md', 'C:/windows.md', 'carpeta-nueva/nota.md', '.oculta.md', 'research/.oculta.md',
+    'con [[corchetes]].md', 'con|barra.md', 'con#almohadilla.md', 'con^circunflejo.md', 'linea\nnueva.md',
+    `${'x'.repeat(130)}.md`, 'research//doble.md', 'research/ espacio.md',
+  ])('rejects the new note %j', proposed => {
+    expect(resolveTarget(proposed, true, notes, 'fallback.md')).toEqual(existing('fallback.md'));
+  });
+
+  it('points at no note when retrieval matched no note', () => {
+    expect(resolveTarget('../x.md', false, notes, null)).toEqual(existing('unknown'));
   });
 });
 
@@ -65,14 +97,14 @@ describe('Failure scenario 8: target paths from the model', () => {
     vi.unstubAllEnvs();
   });
 
-  async function seedProject(folder: string, notes: Array<{ notePath: string; text: string }>) {
+  async function seedProject(folder: string, notes: Array<{ notePath: string; text: string; title?: string }>) {
     const [project] = await db.insert(schema.projects).values({ folderPath: folder, title: folder }).returning();
     const vector = fakeEmbedding(notes.map(n => n.text).join(' '));
     const [snapshot] = await db.insert(schema.projectSnapshots).values({
       projectId: project.id, treeHash: folder, thesisText: 'Tesis', embedding: vector, embeddingModel: 'bge-m3',
     }).returning();
     const noteRows = await db.insert(schema.projectNoteSnapshots).values(notes.map(n => ({
-      projectSnapshotId: snapshot.id, projectId: project.id, notePath: n.notePath, noteTitle: n.notePath,
+      projectSnapshotId: snapshot.id, projectId: project.id, notePath: n.notePath, noteTitle: n.title ?? n.notePath,
       contentSnippet: n.text, embedding: fakeEmbedding(n.text), embeddingModel: 'bge-m3',
     }))).returning();
     return { project, snapshot, noteRows };
@@ -115,6 +147,65 @@ describe('Failure scenario 8: target paths from the model', () => {
     await walk(vault);
     expect(files).toEqual([path.join('Projects', 'Faro', 'suggestions.md')]);
     await expect(fs.access(path.join(vault, '..', 'Personal'))).rejects.toThrow();
+  });
+
+  it('shows the model every note, and stores the note it names by title even when it is not the closest', async () => {
+    const { project, noteRows } = await seedProject('Projects/Ensayo', [
+      { notePath: 'borrador.md', text: 'atencion distraccion pantallas borrador ensayo', title: 'Borrador' },
+      { notePath: 'research/ejemplos.md', text: 'ejemplos casos estudios', title: 'Ejemplos para el ensayo' },
+    ]);
+    const [content] = await db.insert(schema.contents).values({
+      uri: 'https://example.com/atencion', summary: 'Resumen', ingestStatus: 'ready',
+      embedding: noteRows[0].embedding, embeddingModel: 'bge-m3',
+    }).returning();
+    fake.answerNext({
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Relacionado.',
+      action: { actionType: 'evidence_citation', observation: 'Dato.', suggestedAction: 'Añadir un ejemplo.', targetFile: 'Ejemplos para el ensayo', targetIsNew: false },
+    });
+
+    const { evaluateContentMatch } = await import('../src/evaluator');
+    await evaluateContentMatch(content.id, project.id);
+
+    const user = fake.calls.filter(c => c.kind === 'triage').at(-1)!.user;
+    expect(user).toContain('- borrador.md — "Borrador"');
+    expect(user).toContain('- research/ejemplos.md — "Ejemplos para el ensayo"');
+    expect(user).toContain('NOTA MÁS CERCANA AL ARTÍCULO (orientativa, no obligatoria): borrador.md');
+    const { eq } = await import('drizzle-orm');
+    const [suggestion] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.contentId, content.id));
+    expect(suggestion).toMatchObject({ targetFile: 'research/ejemplos.md', targetIsNew: false });
+  });
+
+  it('stores a proposed new note without creating it, and accepting links to it from suggestions.md', async () => {
+    const { project, noteRows } = await seedProject('Projects/Nueva', [
+      { notePath: 'borrador.md', text: 'inteligencia artificial agentes modelos', title: 'Borrador' },
+    ]);
+    const [content] = await db.insert(schema.contents).values({
+      uri: 'https://example.com/criticas', title: 'Críticas', summary: 'Resumen', ingestStatus: 'ready',
+      embedding: noteRows[0].embedding, embeddingModel: 'bge-m3',
+    }).returning();
+    fake.answerNext({
+      verdict: 'actionable', confidenceScore: 0.9, triageReasoning: 'Aporta críticas.',
+      action: { actionType: 'counter_argument', observation: 'Críticas.', suggestedAction: 'Abrir una nota de críticas.', targetFile: 'Críticas a la IA', targetIsNew: true },
+    });
+
+    const { evaluateContentMatch } = await import('../src/evaluator');
+    await evaluateContentMatch(content.id, project.id);
+
+    const { eq } = await import('drizzle-orm');
+    const [suggestion] = await db.select().from(schema.actionSuggestions).where(eq(schema.actionSuggestions.contentId, content.id));
+    expect(suggestion).toMatchObject({ targetFile: 'Críticas a la IA.md', targetIsNew: true });
+
+    const projectDir = path.join(vault, 'Projects', 'Nueva');
+    await fs.mkdir(projectDir, { recursive: true });
+    await db.update(schema.actionSuggestions).set({ status: 'accepted', resolvedAt: new Date() }).where(eq(schema.actionSuggestions.id, suggestion.id));
+    const { writeAcceptedSuggestionToVault } = await import('../src/vault/updater');
+    await writeAcceptedSuggestionToVault(suggestion.id, vault);
+    await writeAcceptedSuggestionToVault(suggestion.id, vault); // a retry adds nothing (I5)
+
+    expect(await fs.readdir(projectDir)).toEqual(['suggestions.md']);
+    const written = await fs.readFile(path.join(projectDir, 'suggestions.md'), 'utf-8');
+    expect(written.match(/\[\[Projects\/Nueva\/Críticas a la IA\|Críticas a la IA\]\]/g)).toHaveLength(1);
+    expect(written).toMatch(/Nota nueva sugerida|Suggested new note/);
   });
 
   it('a stored target file with LIKE wildcards does not match unrelated notes in the staleness check', async () => {
