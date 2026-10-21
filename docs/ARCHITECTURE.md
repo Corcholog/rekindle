@@ -428,7 +428,7 @@ When file changes are detected:
    - Generates an aggregate 1024-d embedding for the overall project.
    - In a single database transaction, updates `projects` and inserts `project_snapshots` + `project_note_snapshots`.
 4. **Automatic Backlog & Promotion Enqueueing**:
-   - Triggers `findBacklogUnevaluatedContents(projectId)` to find unevaluated library contents or tentative contents qualifying for promotion, queueing them for evaluation.
+   - Triggers `findBacklogUnevaluatedContents(projectId)` to find unevaluated library contents that rank the project among their 3 closest, or tentative contents qualifying for promotion, queueing them for evaluation.
 
 ### 7.5 Watcher & Auto-Mounting (`watcher.ts` & `config.ts`)
 - Chokidar monitors project directories with a 3-second per-project debounce timer.
@@ -554,7 +554,7 @@ For each candidate project under the 0.6 cutoff:
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
 When a project's notes change:
-- `findBacklogUnevaluatedContents`: Evaluates ready contents that were never checked against the project.
+- `findBacklogUnevaluatedContents`: Evaluates ready contents that were never checked against the project, within the 0.6 threshold, **only if the project is among the content's `TOP_K_PROJECTS_LIMIT` (3) closest projects**, checked with the same `retrieveCandidates` call as ingestion. Without that check every note edit sent the project's rank-4+ pairs to the model. At most 100 contents per snapshot; 500 candidates are read before the check.
 - **Tentative Promotion Engine**: If a past evaluation was `tentative`, Rekindle automatically checks if:
   - The project moved closer to the content by at least `PROMOTION_DELTA_THRESHOLD` (`0.08`), OR
   - A new or updated note in the project has strong affinity (`< 0.50` distance).

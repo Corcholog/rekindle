@@ -255,6 +255,13 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/parser.test.ts`, `tests/full_notes.test.ts`, `tests/article_limits.test.ts`, `tests/ui_xss.test.ts`; a replay of `deepseek-flash-top3-notes` hit the cache on all 118 calls with the same macro-F1 (0.75), so the labeled data's prompts did not change.
 - **Outcome / lesson:** every path from outside text to a paid model now has a cut enforced in code, and the owner can see which notes the model does not read. How often the guards fire on the owner's real vault is **not measured**.
 
+### 2026-10-21 — Backlog evaluations follow the top-3 cutoff
+- **Context:** while explaining the one-time re-snapshot, the agent found that every new snapshot (a note edit, a new or reactivated project) queued up to 100 evaluations of saved articles within 0.6 of the project that had never been evaluated for it. Those are mostly articles where the project ranked 4th or lower and the top-3 cutoff had skipped it at clip time (in the labeled set, 24 of the 28 rank-4 pairs are irrelevant). So the cutoff held at ingestion and leaked on every edit. The owner had already restarted with the re-snapshot, so that burst has run; its size and cost on the real vault were not measured by the agent (the dev database is off limits).
+- **What happened:** an unevaluated article is kept only if the project is among its 3 closest, checked with the same `retrieveCandidates` call as ingestion; tentative promotions (already evaluated for the project, now clearly closer) are unchanged. 500 candidates are read and at most 100 queued.
+- **Alternatives considered:** a rank computed inside the SQL query (faster, but a second copy of the retrieval logic that could drift from ingestion); applying the cutoff to promotions too (it would stop a project that moved closer from rekindling a tentative article, which is the point of promotions).
+- **Evidence:** `tests/backlog_top_k.test.ts` (fails on the previous code for the cutoff cases, passes for promotions on both).
+- **Outcome / lesson:** a cutoff has to hold on every path that reaches the model, not only the main one. How many calls this saves is **not measured**.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
