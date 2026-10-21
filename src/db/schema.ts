@@ -16,6 +16,11 @@ import {
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
+import type { NoteIssueReason } from '../vault/parser';
+
+/** A note the reconciler left out or changed; see project_snapshots.note_issues. */
+export interface NoteIssue { path: string; reason: NoteIssueReason; bytes: number }
+
 // Custom type para el vector de pgvector
 const vector = customType<{ data: number[]; driverData: string }>({
   dataType() {
@@ -88,6 +93,9 @@ export const projectSnapshots = pgTable('project_snapshots', {
   // Newest modification time of the project's own notes (Rekindle's files excluded). With a time
   // zone, so it compares correctly with Node's clock; null on snapshots taken before it existed.
   notesModifiedAt: timestamp('notes_modified_at', { withTimezone: true }),
+  // Notes left out of this snapshot (too large, not text) or changed on the way in (cut, binary
+  // data removed), for the owner to see. Null on snapshots taken before it existed.
+  noteIssues: jsonb('note_issues').$type<NoteIssue[]>(),
 }, (table) => [
   index('project_snapshots_embedding_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
   index('project_snapshots_proj_captured_idx').on(table.projectId, table.capturedAt)

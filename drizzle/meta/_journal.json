@@ -71,6 +71,13 @@
       "when": 1792563671344,
       "tag": "0009_target_note",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792612312324,
+      "tag": "0010_note_issues",
+      "breakpoints": true
     }
   ]
 }

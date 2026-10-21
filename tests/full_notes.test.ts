@@ -94,4 +94,35 @@ describe('Full note text in snapshots', () => {
     const bodyChars = ctx.text.length - ctx.text.indexOf('### ');
     expect(bodyChars).toBeLessThan(NOTES_CONTEXT_CHARS + 500);
   }, 30000);
+  it('leaves oversized and binary notes out of the snapshot and records why', async () => {
+    const { MAX_NOTE_BYTES } = await import('../src/vault/parser');
+    const projectDir = path.join(vault, 'Projects', 'Raro');
+    await fs.mkdir(path.join(projectDir, 'adjuntos'), { recursive: true });
+    await fs.writeFile(path.join(projectDir, 'borrador.md'), '# Borrador\n\nUna nota normal sobre faros.');
+    await fs.writeFile(path.join(projectDir, 'volcado.md'), `# Volcado\n${'z'.repeat(MAX_NOTE_BYTES)}`);
+    await fs.writeFile(path.join(projectDir, 'adjuntos', 'imagen.md'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]));
+    await fs.writeFile(path.join(projectDir, 'pegado.md'), `# Pegado\nTexto ![x](data:image/png;base64,${'QUJD'.repeat(400)}) fin.`);
+
+    const embedded: string[] = [];
+    const { sharedAiProvider } = await import('../src/ai/aiProvider');
+    sharedAiProvider.setOverrides({ embed: async (text: string) => { embedded.push(text); return fakeEmbedding(text); } });
+    const { reconcileProject } = await import('../src/vault/reconciler');
+    await reconcileProject(projectDir, vault);
+
+    const { eq } = await import('drizzle-orm');
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.folderPath, 'Projects/Raro'));
+    const [snapshot] = await db.select().from(schema.projectSnapshots).where(eq(schema.projectSnapshots.projectId, project.id));
+    const notes = await db.select().from(schema.projectNoteSnapshots).where(eq(schema.projectNoteSnapshots.projectSnapshotId, snapshot.id));
+    expect(notes.map((n: any) => n.notePath).sort()).toEqual(['borrador.md', 'pegado.md']);
+    expect(snapshot.noteIssues).toEqual(expect.arrayContaining([
+      { path: 'volcado.md', reason: 'too_large', bytes: MAX_NOTE_BYTES + 10 },
+      { path: 'adjuntos/imagen.md', reason: 'binary', bytes: 6 },
+      { path: 'pegado.md', reason: 'binary_removed', bytes: expect.any(Number) },
+    ]));
+    expect(snapshot.noteIssues).toHaveLength(3);
+    expect(snapshot.noteTitles).not.toContain('Volcado');
+    // Nothing of the left-out notes or the pasted image reaches an embedding
+    expect(embedded.join('\n')).not.toMatch(/zzzz|QUJDQUJD/);
+  }, 30000);
 });
+

@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { db } from '../db';
-import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
+import { projects, projectSnapshots, projectNoteSnapshots, NoteIssue } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getDirectoryHash } from './hash';
 import { parseMarkdownFile, EMBED_NOTE_CHARS } from './parser';
@@ -110,6 +110,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       contentSnippet: string;
     }[] = [];
     
+    const noteIssues: NoteIssue[] = [];
     let notesModifiedAt: Date | null = null;
     try {
       const mdFiles = await getProjectMarkdownFiles(projectPath);
@@ -117,7 +118,13 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
 
       for (const file of mdFiles) {
         const parsed = await parseMarkdownFile(file.fullPath);
+        if (parsed?.skipped) {
+          // Never read into prompts or embeddings: an export, a dump or a binary file
+          noteIssues.push({ path: file.relPath, reason: parsed.skipped, bytes: parsed.bytes });
+          continue;
+        }
         if (parsed) {
+          for (const reason of parsed.issues) noteIssues.push({ path: file.relPath, reason, bytes: parsed.bytes });
           noteTitles.push(parsed.title);
 
           // Embedding inputs and the thesis keep the cut text, so vectors do not move (I7, staleness)
@@ -225,6 +232,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         embedding,
         embeddingModel: env.EMBED_MODEL,
         notesModifiedAt,
+        noteIssues,
       }).returning({ id: projectSnapshots.id });
 
       // Insert hierarchical note-level snapshots

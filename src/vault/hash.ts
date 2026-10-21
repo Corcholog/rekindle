@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { isGeneratedNote } from './generatedNotes';
+import { MAX_NOTE_BYTES } from './parser';
 
 /**
  * Calculates SHA256 hash of a file's contents via streaming.
@@ -20,8 +21,9 @@ export async function getFileHash(filePath: string): Promise<string> {
 /**
  * Changes when what a snapshot stores changes, so every project is reconciled once after an upgrade.
  * v2: notes are stored in full, not cut at 4,000 characters.
+ * v3: oversized and binary notes are left out and recorded; embedded binary data is removed.
  */
-const SNAPSHOT_FORMAT = 'snapshot-format:2:';
+const SNAPSHOT_FORMAT = 'snapshot-format:3:';
 
 /**
  * Calculates deterministic hash of a project directory.
@@ -66,8 +68,9 @@ export async function getDirectoryHash(dirPath: string): Promise<string> {
   for (const file of mdFiles) {
     finalHash.update(`filename:${file.relPath}:`);
     try {
-      const fileHash = await getFileHash(file.fullPath);
-      finalHash.update(fileHash);
+      // A file the parser will not read is identified by size and time, not by streaming it whole
+      const stat = await fsp.stat(file.fullPath);
+      finalHash.update(stat.size > MAX_NOTE_BYTES ? `large:${stat.size}:${stat.mtimeMs}` : await getFileHash(file.fullPath));
     } catch {
       // If a file cannot be read, continue
     }
