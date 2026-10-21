@@ -4,10 +4,10 @@ import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
 import { boss, EVALUATE_JOB_OPTIONS } from '../queue';
-import { projectNotesContext, retrieveWithStats, RetrievalOptions } from './retrieval';
+import { projectNotesContext, retrieveCandidates, retrieveWithStats, RetrievalOptions } from './retrieval';
 import { resolveTarget } from './targetFile';
 import { newTraceId, recordStage, errorKindOf } from '../observability/pipeline';
-import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, env } from '../config';
+import { VECTOR_DISTANCE_THRESHOLD, PROMOTION_DELTA_THRESHOLD, NOTE_PROMOTION_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, env } from '../config';
 import { getLogger } from '../observability/logger';
 import { outputLanguage, promptLanguage } from '../ai/language';
 import { serverText } from '../i18n/serverText';
@@ -251,7 +251,9 @@ async function runEvaluation(
 }
 
 /**
- * Finds unevaluated ready contents whose embeddings match the project's thesis or any of its notes (< 0.6 distance).
+ * Finds unevaluated ready contents whose embeddings match the project's thesis or any of its notes
+ * (< 0.6 distance) and that rank the project among their closest TOP_K_PROJECTS_LIMIT, plus tentative
+ * evaluations the project's latest snapshot moved closer to.
  */
 export async function findBacklogUnevaluatedContents(projectId: string, limit = 100): Promise<string[]> {
   const [latestSnapshot] = await db.select({
@@ -352,16 +354,35 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
           )
         )
     )
-    SELECT id FROM (
-      SELECT id, consumed_at FROM unevaluated_matches
-      UNION
-      SELECT id, consumed_at FROM tentative_promotions
+    SELECT id, bool_or(promotion) AS promotion, max(consumed_at) AS consumed_at FROM (
+      SELECT id, consumed_at, false AS promotion FROM unevaluated_matches
+      UNION ALL
+      SELECT id, consumed_at, true AS promotion FROM tentative_promotions
     ) combined_candidates
+    GROUP BY id
     ORDER BY consumed_at DESC
-    LIMIT ${limit}
+    LIMIT ${limit * BACKLOG_CANDIDATE_FACTOR}
   `);
 
-  return result.rows.map(r => r.id as string);
+  // An article never evaluated for this project goes to the model only if the project is among the
+  // article's closest TOP_K_PROJECTS_LIMIT, the same cutoff as when it was clipped. Tentative
+  // promotions were evaluated for this project already and moved closer, so they always qualify.
+  const kept: string[] = [];
+  for (const row of result.rows as unknown as { id: string; promotion: boolean }[]) {
+    if (kept.length >= limit) break;
+    if (row.promotion || await projectInTopK(row.id, projectId, embedModel)) kept.push(row.id);
+  }
+  return kept;
+}
+
+/** More candidates are read than enqueued, since the top-K check drops most of them. */
+const BACKLOG_CANDIDATE_FACTOR = 5;
+
+async function projectInTopK(contentId: string, projectId: string, embedModel: string): Promise<boolean> {
+  const [content] = await db.select({ embedding: contents.embedding }).from(contents).where(eq(contents.id, contentId));
+  if (!content?.embedding) return false;
+  const closest = await retrieveCandidates(content.embedding, { limit: TOP_K_PROJECTS_LIMIT, embedModel });
+  return closest.some(c => c.projectId === projectId);
 }
 
 /**
