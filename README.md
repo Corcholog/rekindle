@@ -56,12 +56,14 @@ I labeled 47 articles × 8 of my projects (376 pairs) by hand and ran Rekindle's
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (default) | DeepSeek Flash, thinking on | Qwen 2.5 7B (local) |
 |---|---|---|---|---|
-| `actionable` precision / recall | 64% / 91% | **100% / 77%** | 79% / 89% | 100% / 34% |
-| Connections found (of 56) / extra | 49 / 25 | 46 / 19 | 49 / 26 | 32 / 9 |
-| Triage macro-F1 | 0.69 | **0.77** | 0.71 | 0.58 |
-| Latency p50 | 4.4 s | **2.3 s** | 4.1 s | 3.8 s |
+| `actionable` precision / recall | 64% / 91%* | **96% / 77%** | 79% / 89%* | 100% / 31% |
+| Connections found (of 56) / extra | 49 / 25* | 45 / 17 | 49 / 26* | 30 / 9 |
+| Triage macro-F1 | 0.69* | **0.75** | 0.71* | 0.57 |
+| Latency p50 | 4.4 s* | **2.4 s** | 4.1 s* | 7.2 s |
 
-![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 46 of 56 and proposes 19 extra; with thinking on 49 and 26; Gemini 3.1 Flash Lite 49 and 25; local Qwen 2.5 7B 32 and 9](docs/images/eval-connections.svg)
+\* Measured with the previous prompt (2026-10-19). On 2026-10-21 the prompt started showing the model every note of the project instead of one, so it can point a suggestion at the right note or propose a new one; the default and Qwen were measured again. With the previous prompt the default found 46 connections with 19 extra, and every pair it called actionable was right (100% / 77%); with the current one, 1 of its 28 actionable pairs is labeled otherwise. That difference is within the run-to-run variance measured so far.
+
+![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 45 of 56 and proposes 17 extra; with thinking on 49 and 26 (previous prompt); Gemini 3.1 Flash Lite 49 and 25 (previous prompt); local Qwen 2.5 7B 30 and 9](docs/images/eval-connections.svg)
 
 What counts as a connection is partly subjective: a model can force links, and it can also find ones I had missed (after reading the thinking-on answers I changed 7 labels, which favors it). *Extra* means a pair I labeled irrelevant that the model connected. This is one labeler and a small dataset, so gaps of a few points are noise. Method, caveats, costs and the language experiments: [docs/EVALUATION.md](docs/EVALUATION.md).
 
