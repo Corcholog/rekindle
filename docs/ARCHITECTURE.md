@@ -1,7 +1,7 @@
 # Rekindle — Architecture & Technical Reference
 
 > **Audience:** Engineers, contributors, and LLM reviewers who need to understand, audit, or extend Rekindle.  
-> **State described:** git `master` after Phase 2 (security and integrity fixes). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
+> **State described:** branch `main` as of 2026-10-23 (after the structured suggestion text, chunking of long notes, the reasoning-first answer, pasted article text and the fixes for audit findings F-14, F-15, F-21, F-28 and F-29). Behaviors marked **Known issue** are documented as they are today and are not fixed yet.  
 > **Verification:** run `pnpm typecheck`, `pnpm lint` and `pnpm test`; per-phase results are recorded in `docs/JOURNEY.md`.
 
 ---
@@ -548,10 +548,11 @@ For each candidate project under the 0.6 cutoff:
 2. **Single Structured LLM Call**:
    ```ts
    const unifiedEvaluationSchema = z.object({
+     // The reasoning comes before the verdict, which is decided from it (no relation: 'irrelevant')
+     connection: z.string(),              // what links the article to the project, first; no summary of either
+     gap: z.string().nullish(),           // what it lacks to be actionable; null when it lacks nothing
      verdict: z.enum(['actionable', 'tentative', 'irrelevant']),
      confidenceScore: z.number().min(0).max(1),
-     connection: z.string(),              // what links the article to the project, first; no summary of either
-     gap: z.string().nullish(),           // what it lacks to be actionable; null when actionable
      action: z.object({
        actionType: z.enum(['counter_argument', 'unblocker', 'evidence_citation', 'narrative_bridge', 'other']),
        observation: z.string(),           // why, in 1 to 3 sentences
@@ -621,7 +622,7 @@ Rekindle discovers hidden connections across separate projects by calculating th
 - `GET /api/projects/synergies`: Returns high-affinity project pairs, closest matching notes, and semantic similarity scores.
 - `POST /api/projects/synergies/explore`: Prompts the LLM to analyze the overlap between both projects and returns a bridge note (shared problems, mutual benefits, markdown). It does **not** write to the vault. If a bridge note already exists on disk, it is returned instead of calling the LLM (`forceRegenerate` skips that).
 - `POST /api/projects/synergies/save` (the **Guardar en Obsidian** button): writes the note shown in the UI as `synergy_<A>_<B>.md` in project A's projects directory (`Projects/` or `Proyectos/`), sanitized and marked `rekindle_generated: true`. An existing file is never overwritten; a timestamped name is used instead.
-- **Known issue:** the note-to-note comparison and the notes sent to the LLM are taken from all historical snapshots, not just the latest one, so deleted notes can still appear.
+- The note-to-note comparison and the notes sent to the LLM come from each project's latest snapshot only, so edited and deleted notes never appear (F-14, fixed 2026-10-23).
 
 ### 11.2 Project Backlog Synthesis (`/api/projects/:id/synthesize`)
 Compiles the project's **accepted** suggestions and latest notes into a Research Brief via the LLM and returns it without writing anything. `POST /api/projects/:id/synthesis/save` (the **Guardar en Obsidian** button) writes it to the project folder as `research_brief.md`, or a timestamped name if that file exists. Saved briefs are sanitized, marked `rekindle_generated: true`, and excluded from the project's notes and embeddings.
@@ -712,7 +713,7 @@ A React 19 + TypeScript single-page app, built by Vite into `web/dist` and serve
 - **Styling**: Tailwind CSS v4 with the design tokens as CSS variables (`web/src/styles.css`): a warm stone light theme and a warm "coal" dark theme, switched by a `.dark` class from the system setting or the choice in Settings. The palette is a hearth: stone or coal, ink, ash and ember, with flame (`--ember-hot`) only where something burns; red is only for errors and Discard. A project's only colour is its heat (`heatOf` in `web/src/lib/dormancy.ts`): burning when edited in the last 7 days, embers until 14, ash once dormant, with a spark on ash that has suggestions to review. It shows as the coal in the sidebar and as the left edge of each suggestion card. Verdicts differ by shape, not hue: actionable is a lit chip, tentative a dashed outline. The "rekindles a project idle for N days" badge and the Integrate button are the only ember-gradient elements. Text tokens reach WCAG AA, and card edges and the spark reach 3:1 (`tests/ui_contrast.test.ts`).
 - **Components**: Radix primitives in the shadcn/ui style, copied into `web/src/components/ui/` (Dialog, Tabs) plus native selects; icons from lucide-react; toasts from sonner.
 - **Views** (`web/src/views/`), addressed by the URL hash (`#reading`, `#suggestions`, `#consultant`, `#settings`):
-  1. **Reading** (*Consumo*): clip a URL, first-run guidance pointing at the demo articles, the reading feed with per-project verdicts (each opens in place to show the model's full reasoning, and actionable or tentative ones link to their suggestion: `#suggestions?project=<id>&content=<id>&tab=<status>` opens that project and tab and outlines the card), and the content detail dialog. `/api/contents` gives each verdict its `projectId` and its suggestion's status for this.
+  1. **Reading** (*Consumo*): clip a URL, first-run guidance pointing at the demo articles, the reading feed with per-project verdicts (each opens in place to show the model's full reasoning, and actionable or tentative ones link to their suggestion: `#suggestions?project=<id>&content=<id>&tab=<status>` opens that project and tab and outlines the card), and the content detail dialog. `/api/contents` gives each verdict its `projectId` and its suggestion's status for this. A failed item explains its `ingestFailureKind` in the interface language, keeps the raw error as a small technical detail, and offers **Paste the text** (an inline box, at most 50,000 characters) and, where a retry can help, **Retry**; the add-link form has the same paste box behind "Page can't be read? Paste the text", and pasted items carry a "Pasted text" tag.
   2. **Suggestions** (*Sugerencias*): project sidebar sorted by `sortProjects` (dormant projects with something to review first) with an ember meter per project, status tabs, collapsible synergies, and `SuggestionCard`: the action's headline first in Literata, then **What to do** (numbered steps: note and place, the change, the text to paste in a quote box) and **Why** (the observation), or the older single text when there are no steps; a tentative item shows the article, then **Connection** and **What it lacks**. A "rekindles a project idle for N days" badge, reasoning folded, accept / discard with a reason / re-evaluate. All model text is rendered as text.
   3. **Consultant** (*Consultor*): question, example chips, the answer with `[C1]`/`[N1]` references turned into jump links by splitting the text (never markup), and the cited cards.
   4. **Settings** (*Configuración*): vault path, projects with their last edit, languages, theme.

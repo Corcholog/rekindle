@@ -17,7 +17,7 @@ Rekindle runs in **English or Spanish** (interface, suggestions and what it writ
 ![How Rekindle works: you clip an article or a YouTube video; Rekindle reads the page text or the video transcript, summarizes it and embeds it locally, and compares it with snapshots of your projects; the 3 closest projects go to an LLM for a verdict; you review each suggestion, and only an accepted one is saved to the project's suggestions.md; the vault is watched and changed notes are re-embedded locally](docs/images/architecture.svg)
 
 - **Clip anything you read**: paste a link in the web UI or use the browser extension (`extension/`), which queues clips while Rekindle is offline. Web pages are read with Readability; YouTube videos through their transcripts.
-- **Two-step matching**: local embeddings (`bge-m3` on Ollama) and pgvector find the 3 closest projects and notes; an LLM then judges each pair as actionable, tentative or irrelevant and proposes an action for a specific note. Providers are tried in order: DeepSeek, Gemini, then local `qwen2.5:7b-instruct`; without API keys everything runs locally.
+- **Two-step matching**: local embeddings (`bge-m3` on Ollama) and pgvector find the 3 closest projects and notes (long notes are matched section by section); an LLM then judges each pair as actionable, tentative or irrelevant and proposes an action for a specific note. Providers are tried in order: DeepSeek, Gemini, then local `qwen2.5:7b-instruct`; without API keys everything runs locally.
 - **Projects cool down**: each project burns while you work on it, cools to embers after a week and turns to ash once dormant; dormant projects with new suggestions come first.
 - **You decide**: accepting appends an Obsidian callout to `<project>/suggestions.md`, linking to the suggested note (an existing one, or a new one Obsidian creates when you click the link). Pending, tentative and discarded suggestions never touch the vault.
 - **Beyond single suggestions**: connections between your own projects, a research consultant that answers questions across your library and notes, and briefs compiled from accepted suggestions, all saved only when you ask.
@@ -89,8 +89,8 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 
 ## Known limitations
 
-- **Retrieval barely filters.** 94% of unrelated articles still retrieve a project at the 0.6 distance threshold, so only the 3 closest projects reach the LLM; that cutoff drops 7 of the 56 labeled connections before any model sees them.
-- **`tentative` verdicts are weak** for every model tried (F1 0.28–0.48 on 21 pairs).
+- **Retrieval barely filters.** Every unrelated article in the labeled set still retrieves a project at the 0.6 distance threshold (94% before long notes were matched section by section), so only the 3 closest projects reach the LLM; that cutoff drops 8 of the 56 labeled connections before any model sees them.
+- **`tentative` verdicts are weak** for every model tried (F1 0.21–0.48 on 21 pairs; the current default, which reasons before deciding, is the strictest and rejects most of them).
 - **Usefulness is not measured.** Only verdicts are scored, against one person's labels.
 - **A failed evaluation is invisible in the UI**: after three retries it waits until the project changes; `pnpm telemetry:report` shows it.
 - **The Consultor reads only the 15 items and 15 notes closest to your question**, found by embedding similarity, so a question that needs the whole library ("how many articles do I have on X?") gets an answer about that selection. Answer quality is not measured.

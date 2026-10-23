@@ -1,6 +1,6 @@
 # Rekindle — Agent Instructions
 
-Rekindle is a local-first, human-in-the-loop research assistant. It connects web content (articles, YouTube) to the owner's writing projects in an Obsidian vault using local embeddings (Ollama `bge-m3`, pgvector) and LLM-proposed actions (Gemini with a local `qwen2.5:7b-instruct` fallback). Nothing is written to the vault until the owner accepts a suggestion.
+Rekindle is a local-first, human-in-the-loop research assistant. It connects web content (articles, YouTube) to the owner's writing projects in an Obsidian vault using local embeddings (Ollama `bge-m3`, pgvector) and LLM-proposed actions (DeepSeek, then Gemini, then a local `qwen2.5:7b-instruct` fallback; `LLM_PROVIDERS`). Nothing is written to the vault until the owner accepts a suggestion.
 
 Stack: TypeScript (strict), Node 22, Fastify 5 + Zod, PostgreSQL 16 + pgvector, Drizzle, pg-boss, chokidar, Manifest V3 extension, React + Vite + Tailwind web UI (`web/`). The project was called Loom until 2026-10-19; vault markers from that time (`%% loom:<id> %%`, `loom_generated`) must stay recognized.
 
