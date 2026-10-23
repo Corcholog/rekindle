@@ -293,6 +293,14 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/chunking.test.ts`, `tests/full_notes.test.ts`; result file `*-deepseek-flash-top3-chunks-private.json`.
 - **Outcome / lesson:** on this dataset chunking found no new labeled connection for the long note and added a few extra ones; the labels were not written with sections in mind, so what the owner expects from it (connections to sections deep in the draft, and a hint naming the section) is **not measured**. Kept at the owner's request.
 
+### 2026-10-23 — The reasoning before the verdict
+- **Context:** the owner found a tentative suggestion whose own text said the article had no relation to the project. The verdict was the first field of the answer, so the model committed to it before reasoning; in the latest labeled run 14 of 39 tentatives scored under 0.3, the band the prompt reserves for irrelevant (10 of them labeled irrelevant, 4 real connections). No other verdict ever fell outside its band.
+- **What happened:** the answer now lists `connection` and `gap` before `verdict` and `confidenceScore`, the verdict is described as decided from them ("if the connection says there is no relation, the verdict is irrelevant"), and `tentative` as a real but tangential or doubtful connection (`ef522a7`).
+- **Measured (DeepSeek top-3, all 121 calls live):** no tentative scores under 0.45 (17 tentatives, all 0.45 to 0.55); connections found 35 of 56 against 44, extra 4 against 22, `actionable` 95% / 60% against 89% / 69%, macro-F1 0.64 against 0.70; 0 invalid answers, 1 repaired. Of the 21 pairs labeled tentative it rejects 17 (9 before).
+- **Alternatives considered:** treating tentatives under 0.3 as irrelevant in code (rescored for free: 40 connections, 12 extra); keeping them with a "weak connection" mark (nothing lost, contradiction kept); only reordering, without the added rule (one more paid run). The owner chose reasoning first as measured, knowing it loses 9 connections.
+- **Evidence:** `tests/language.test.ts` (field order and the rule, both languages); result file `*-deepseek-flash-top3-reason-first-private.json`.
+- **Outcome / lesson:** the order of an answer's fields is part of the prompt: reasoning first made the model consistent and much stricter. The README and EVALUATION tables now show this as the default.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
@@ -398,6 +406,7 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 | 2026-10-21 | Repeat of the previous prompt (run of the reverted second call) | Same | 0.75 / 45 / 27 / 0 | 0.72 / 44 / 25 / 0 | `evals/configs/deepseek-flash-top3-structured.json` |
 | 2026-10-21 | Structured suggestion text | Actions as steps / tentatives saying what they lack / median tentative reasoning | 0 of 28 / no such field / 860 chars | 24 of 24 / 37 of 37 / 505 chars | the shipped run, `triage.text` in the result file |
 | 2026-10-23 | Chunking long notes by their headings | Macro-F1 / connections found of 56 / extra / `actionable` precision and recall (DeepSeek top-3) | 0.69 / 42 / 19 / 92% and 63% | 0.70 / 44 / 22 / 89% and 69% (the 2 extra connections are pairs that failed before) | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3-chunks.json --record` |
+| 2026-10-23 | Reasoning before the verdict | Tentatives under 0.3 / connections found of 56 / extra / `actionable` precision and recall / macro-F1 (DeepSeek top-3) | 14 of 39 / 44 / 22 / 89% and 69% / 0.70 | 0 of 17 / 35 / 4 / 95% and 60% / 0.64 | `pnpm eval run evals/private --config evals/configs/deepseek-flash-top3-reason-first.json --record` |
 
 ## Dead ends and things that did not work
 
