@@ -22,8 +22,9 @@ export async function getFileHash(filePath: string): Promise<string> {
  * Changes when what a snapshot stores changes, so every project is reconciled once after an upgrade.
  * v2: notes are stored in full, not cut at 4,000 characters.
  * v3: oversized and binary notes are left out and recorded; embedded binary data is removed.
+ * v4: long notes are also stored as pieces with their own embeddings (chunker.ts).
  */
-const SNAPSHOT_FORMAT = 'snapshot-format:3:';
+const SNAPSHOT_FORMAT = 'snapshot-format:4:';
 
 /**
  * Calculates deterministic hash of a project directory.

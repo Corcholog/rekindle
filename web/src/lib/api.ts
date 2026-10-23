@@ -142,7 +142,8 @@ export interface ConsultAnswer {
   totalLibrary: number;
   totalNotes: number;
   matchedContents: { refId: string; id: string; uri: string; title: string | null; channelOrDomain?: string | null; whyItConnects: string }[];
-  matchedNotes: { refId: string; projectTitle: string; noteTitle: string; notePath: string; contentSnippet: string | null; whyItConnects: string }[];
+  /** `section`: the closest section of a long note, when that section stands for it; contentSnippet is then its text. */
+  matchedNotes: { refId: string; projectTitle: string; noteTitle: string; notePath: string; section?: string | null; contentSnippet: string | null; whyItConnects: string }[];
 }
 
 export interface VaultSettings {

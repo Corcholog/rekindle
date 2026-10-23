@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { contents, projectSnapshots, projectNoteSnapshots, evaluations, actionSuggestions } from '../db/schema';
+import { contents, projectSnapshots, projectNoteSnapshots, projectNoteChunks, evaluations, actionSuggestions } from '../db/schema';
 import { linkTelemetryToSuggestion } from '../observability/llmTelemetry';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { sharedAiProvider } from '../ai/aiProvider';
@@ -134,6 +134,7 @@ async function runEvaluation(
     const thesisText = candidate.thesisText;
     const matchedNotePath = candidate.notePath;
     const matchedNoteTitle = candidate.noteTitle;
+    const matchedNoteSection = candidate.noteSection;
 
     // Idempotency: Check if evaluation already exists before invoking LLM
     const [existing] = await db.select({ id: evaluations.id })
@@ -158,7 +159,7 @@ async function runEvaluation(
     const systemPrompt = triageSystemPrompt(languages);
     const notesContext = await projectNotesContext(snapshotId, content.embedding, candidate.notesContent, languages.prompt, embedModel);
     const userMessage = triageUserMessage(languages.prompt, {
-      matchedNotePath, matchedNoteTitle, thesisText,
+      matchedNotePath, matchedNoteTitle, matchedNoteSection, thesisText,
       projectNotes: notesContext.text,
       summary: (content.summary || '').substring(0, 10000),
     });
@@ -312,6 +313,13 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
               AND pns.embedding IS NOT NULL
               AND pns.embedding_model = ${embedModel}
               AND (c.embedding <=> pns.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM ${projectNoteChunks} pnc
+            WHERE pnc.project_snapshot_id = ls.id
+              AND pnc.embedding_model = ${embedModel}
+              AND (c.embedding <=> pnc.embedding) < ${VECTOR_DISTANCE_THRESHOLD}
           )
         )
         AND NOT EXISTS (

@@ -120,6 +120,27 @@ export const projectNoteSnapshots = pgTable('project_note_snapshots', {
   index('project_note_snapshots_proj_idx').on(table.projectId)
 ]);
 
+// 3.2 Pieces of long notes (src/vault/chunker.ts): retrieval matches an article against every
+// section of a note longer than EMBED_NOTE_CHARS, not just its start
+export const projectNoteChunks = pgTable('project_note_chunks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  noteSnapshotId: uuid('note_snapshot_id').references(() => projectNoteSnapshots.id, { onDelete: 'cascade' }).notNull(),
+  projectSnapshotId: uuid('project_snapshot_id').references(() => projectSnapshots.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  chunkIndex: integer('chunk_index').notNull(),
+  /** Heading path of the section, outermost first ("Acto 2 › La saturación"); null before the first heading. */
+  heading: text('heading'),
+  content: text('content').notNull(),
+  /** sha256 of the embedding input: an unchanged piece reuses its embedding in the next snapshot. */
+  contentHash: text('content_hash').notNull(),
+  embedding: vector('embedding').notNull(),
+  embeddingModel: text('embedding_model').notNull(),
+}, (table) => [
+  index('project_note_chunks_note_idx').on(table.noteSnapshotId),
+  index('project_note_chunks_snap_idx').on(table.projectSnapshotId),
+  index('project_note_chunks_hash_idx').on(table.projectId, table.contentHash),
+]);
+
 // 4. Evaluations Table
 export const evaluations = pgTable('evaluations', {
   id: uuid('id').defaultRandom().primaryKey(),

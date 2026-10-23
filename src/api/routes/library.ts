@@ -61,6 +61,8 @@ export default async function (server: FastifyInstance) {
             noteTitle: z.string(),
             notePath: z.string(),
             contentSnippet: z.string().nullable(),
+            /** The closest section of a long note, when that section stands for it. */
+            section: z.string().nullable(),
             whyItConnects: z.string(),
           })),
         }),
@@ -142,20 +144,32 @@ export default async function (server: FastifyInstance) {
       ranked AS (
         SELECT
           pns.id AS note_id, ls.project_id, ls.project_title, pns.note_title, pns.note_path,
-          pns.content_snippet, (pns.embedding <=> ${targetVector}::vector) AS distance
+          pns.content_snippet, NULL::text AS section, (pns.embedding <=> ${targetVector}::vector) AS distance
         FROM latest_snaps ls
         INNER JOIN project_note_snapshots pns ON pns.project_snapshot_id = ls.snapshot_id
         WHERE pns.embedding IS NOT NULL AND pns.embedding_model = ${embedModel}
         UNION ALL
+        -- A section of a long note (chunker.ts) stands for its note with its own text
+        SELECT
+          pns.id, ls.project_id, ls.project_title, pns.note_title, pns.note_path,
+          c.content, COALESCE(c.heading, ''), (c.embedding <=> ${targetVector}::vector)
+        FROM latest_snaps ls
+        INNER JOIN project_note_chunks c ON c.project_snapshot_id = ls.snapshot_id
+        INNER JOIN project_note_snapshots pns ON pns.id = c.note_snapshot_id
+        WHERE c.embedding_model = ${embedModel}
+        UNION ALL
         SELECT
           ls.snapshot_id, ls.project_id, ls.project_title, NULL, NULL,
-          ls.project_text, (ls.embedding <=> ${targetVector}::vector)
+          ls.project_text, NULL, (ls.embedding <=> ${targetVector}::vector)
         FROM latest_snaps ls
         WHERE NOT EXISTS (SELECT 1 FROM project_note_snapshots x WHERE x.project_snapshot_id = ls.snapshot_id)
           AND ls.project_text IS NOT NULL
           AND ls.embedding IS NOT NULL AND ls.embedding_model = ${embedModel}
+      ),
+      best AS (
+        SELECT DISTINCT ON (note_id) * FROM ranked ORDER BY note_id, distance ASC
       )
-      SELECT * FROM ranked
+      SELECT * FROM best
       ORDER BY distance ASC
       LIMIT ${CONSULT_TOP_NOTES}
     `);
@@ -170,6 +184,8 @@ export default async function (server: FastifyInstance) {
         noteTitle: isNote ? ((row.note_title as string) || serverText().untitledNote) : `${row.project_title} (Resumen de Proyecto)`,
         notePath: isNote ? (row.note_path as string) : `${row.project_title}.md`,
         contentSnippet: (row.content_snippet as string) || null,
+        // Set when the note's closest section stands for it ('' = the text before its first heading)
+        section: row.section === null || row.section === undefined ? null : (row.section as string),
       };
     });
 
@@ -222,7 +238,8 @@ export default async function (server: FastifyInstance) {
           const snippet = (note.contentSnippet || '').substring(0, CONSULT_NOTE_CHARS);
           const project = note.projectTitle.substring(0, CONSULT_LABEL_CHARS);
           const file = (note.notePath || note.noteTitle).substring(0, CONSULT_LABEL_CHARS);
-          return `[${note.refId}] Proyecto: "${project}" | Archivo de Nota: "${file}"\nContenido de la nota:\n${snippet}`;
+          const section = note.section ? ` | Sección: "${note.section}"` : note.section === '' ? ' | Sección: inicio de la nota' : '';
+          return `[${note.refId}] Proyecto: "${project}" | Archivo de Nota: "${file}"${section}\nContenido de la nota:\n${snippet}`;
         }).join('\n\n---\n\n')
       : 'No hay notas de proyectos activas en el Vault de Obsidian.';
 
@@ -294,7 +311,8 @@ ${promptBlock('CONSULTA_DEL_USUARIO', query)}`;
             projectTitle: note.projectTitle,
             noteTitle: note.noteTitle,
             notePath: note.notePath,
-            // Notes are stored in full; the UI previews the start only
+            section: note.section || null,
+            // Notes are stored in full; the UI previews the start only (or the section that matched)
             contentSnippet: note.contentSnippet?.substring(0, 4000) ?? null,
             whyItConnects: mn.whyItConnects,
           });

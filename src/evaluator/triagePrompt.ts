@@ -109,6 +109,8 @@ export interface TriageContext {
   /** The note closest to the article, a hint for the model; it may choose another. */
   matchedNotePath?: string | null;
   matchedNoteTitle?: string | null;
+  /** The closest section of that note, when a piece of a long note matched best. */
+  matchedNoteSection?: string | null;
   /** The notes context (notesContext.ts): every note's path and the notes' text within the budget. */
   projectNotes: string;
   thesisText?: string | null;
@@ -125,9 +127,11 @@ export function triageUserMessage(prompt: Language, c: TriageContext): string {
   let closestNote = '';
   if (c.matchedNotePath) {
     const title = c.matchedNoteTitle ? ` ("${c.matchedNoteTitle}")` : '';
+    // Without a section the hint is byte-identical to the measured prompt
+    const section = c.matchedNoteSection ? (en ? `, section "${c.matchedNoteSection}"` : `, sección «${c.matchedNoteSection}»`) : '';
     closestNote = en
-      ? `\n\nNOTE CLOSEST TO THE ARTICLE (a hint, not a requirement): ${c.matchedNotePath}${title}`
-      : `\n\nNOTA MÁS CERCANA AL ARTÍCULO (orientativa, no obligatoria): ${c.matchedNotePath}${title}`;
+      ? `\n\nNOTE CLOSEST TO THE ARTICLE (a hint, not a requirement): ${c.matchedNotePath}${title}${section}`
+      : `\n\nNOTA MÁS CERCANA AL ARTÍCULO (orientativa, no obligatoria): ${c.matchedNotePath}${title}${section}`;
   }
   const closing = en
     ? 'Please critically evaluate the affinity and the constructive proposal following the structured rules.'

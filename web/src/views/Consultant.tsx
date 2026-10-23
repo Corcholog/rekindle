@@ -154,6 +154,7 @@ export function Consultant() {
                       <span className="font-semibold text-ember">[{note.refId}]</span>
                       <span className="font-medium text-ink-2">{note.projectTitle}</span>
                       <code>{note.notePath || note.noteTitle}</code>
+                      {note.section && <span className="consult-note-section text-ink-2">§ {note.section}</span>}
                     </div>
                     <p className="mt-1 font-serif text-ink">{note.noteTitle || note.notePath}</p>
                     <p className="mt-1 text-sm text-ink-2">{note.whyItConnects}</p>

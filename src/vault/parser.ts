@@ -10,6 +10,8 @@ export interface ProjectMarkdown {
   hasProjectTag: boolean;
   title: string;
   thesis: string;
+  /** The same text with its Markdown headings kept, for chunking long notes (chunker.ts). */
+  structured: string;
   rawContent: string;
   /** Size of the file on disk. */
   bytes: number;
@@ -54,7 +56,7 @@ export async function parseMarkdownFile(filePath: string): Promise<ProjectMarkdo
   try {
     const { size: bytes } = await fs.stat(filePath);
     const skippedNote = (skipped: 'too_large' | 'binary'): ProjectMarkdown => ({
-      hasProjectTag: false, title: fileTitle(filePath), thesis: '', rawContent: '', bytes, skipped, issues: [],
+      hasProjectTag: false, title: fileTitle(filePath), thesis: '', structured: '', rawContent: '', bytes, skipped, issues: [],
     });
     if (bytes > MAX_NOTE_BYTES) return skippedNote('too_large');
 
@@ -91,11 +93,13 @@ export async function parseMarkdownFile(filePath: string): Promise<ProjectMarkdo
 
     // The whole note is kept for the model's context; only the embedding input is cut (reconciler)
     const thesis = cleaned.substring(0, MAX_NOTE_CHARS);
+    const structured = removeBinaryData(contentWithoutCode.replace(INLINE_PROJECT_TAG, '$1').trim()).text.substring(0, MAX_NOTE_CHARS);
 
     return {
       hasProjectTag,
       title,
       thesis,
+      structured,
       rawContent,
       bytes,
       issues,

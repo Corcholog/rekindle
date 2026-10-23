@@ -63,7 +63,11 @@ describe('Full note text in snapshots', () => {
     const legacyNotes = `### Nota: Borrador\n${cut}\n\n### Nota: Fuentes\nLibros sobre atención.\n\n`;
     expect(snapshot.notesContent).toBe(legacyNotes);
     expect(embedded).toContain(`Proyecto: Ensayo\n\n${legacyNotes}`.substring(0, 6000));
-    expect(embedded.join('\n')).not.toContain('FINAL-DE-LA-NOTA');
+    // The note's own embedding and the project's still see only the start; since chunking
+    // (chunker.ts) the note's pieces cover the rest, the end included
+    const pieces = embedded.filter(t => t.startsWith('Nota: Borrador\nSección:'));
+    expect(embedded.filter(t => !pieces.includes(t)).join('\n')).not.toContain('FINAL-DE-LA-NOTA');
+    expect(pieces.some(t => t.includes('FINAL-DE-LA-NOTA'))).toBe(true);
   }, 30000);
 
   it('sends a project over the budget closest notes first, and lists every note', async () => {

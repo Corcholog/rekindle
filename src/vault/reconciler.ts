@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { db } from '../db';
-import { projects, projectSnapshots, projectNoteSnapshots, NoteIssue } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { projects, projectSnapshots, projectNoteSnapshots, projectNoteChunks, NoteIssue } from '../db/schema';
+import { eq, desc, and, inArray } from 'drizzle-orm';
+import { chunkNote, chunkEmbeddingInput, NoteChunk } from './chunker';
 import { getDirectoryHash } from './hash';
 import { parseMarkdownFile, EMBED_NOTE_CHARS } from './parser';
 import { sharedAiProvider } from '../ai/aiProvider';
@@ -108,6 +109,8 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       notePath: string;
       noteTitle: string;
       contentSnippet: string;
+      /** The note with its headings, for chunking a long note. */
+      structured: string;
     }[] = [];
     
     const noteIssues: NoteIssue[] = [];
@@ -142,6 +145,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
             notePath: file.relPath,
             noteTitle: parsed.title,
             contentSnippet: parsed.thesis || '',
+            structured: parsed.structured || '',
           });
         }
       }
@@ -185,6 +189,39 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
         }
       } catch (err) {
         log.warn({ err, project: pathKey(normalizedPath), note: pathKey(note.notePath) }, 'Note embedding failed');
+      }
+    }
+
+    // Long notes are also embedded section by section (chunker.ts). A piece whose text is unchanged
+    // since an earlier snapshot of the project reuses that embedding, so an edit re-embeds only the
+    // pieces it touched. Embeddings stay local (I3) and of one model (I7).
+    const chunksByNote = new Map<string, (NoteChunk & { embedding: number[] })[]>();
+    const pending = parsedNotes.map(note => ({ note, chunks: chunkNote(note.noteTitle, note.structured, EMBED_NOTE_CHARS) })).filter(n => n.chunks.length > 0);
+    if (pending.length > 0) {
+      const hashes = pending.flatMap(n => n.chunks.map(c => c.hash));
+      const known = new Map<string, number[]>();
+      if (existingProject) {
+        const rows = await db.select({ hash: projectNoteChunks.contentHash, embedding: projectNoteChunks.embedding })
+          .from(projectNoteChunks)
+          .where(and(eq(projectNoteChunks.projectId, existingProject.id), eq(projectNoteChunks.embeddingModel, env.EMBED_MODEL), inArray(projectNoteChunks.contentHash, hashes)));
+        for (const row of rows) known.set(row.hash, row.embedding as number[]);
+      }
+      for (const { note, chunks } of pending) {
+        const embedded: (NoteChunk & { embedding: number[] })[] = [];
+        for (const chunk of chunks) {
+          let embedding = known.get(chunk.hash);
+          if (!embedding) {
+            try {
+              embedding = await ollama.getEmbedding(chunkEmbeddingInput(note.noteTitle, chunk));
+              known.set(chunk.hash, embedding);
+            } catch (err) {
+              log.warn({ err, project: pathKey(normalizedPath), note: pathKey(note.notePath) }, 'Embedding a note section failed');
+              continue;
+            }
+          }
+          if (embedding.length > 0) embedded.push({ ...chunk, embedding });
+        }
+        chunksByNote.set(note.notePath, embedded);
       }
     }
 
@@ -237,7 +274,7 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
 
       // Insert hierarchical note-level snapshots
       if (noteSnapshotsData.length > 0) {
-        await tx.insert(projectNoteSnapshots).values(
+        const noteRows = await tx.insert(projectNoteSnapshots).values(
           noteSnapshotsData.map(nd => ({
             projectSnapshotId: snap.id,
             projectId: pid,
@@ -247,7 +284,20 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
             embedding: nd.embedding,
             embeddingModel: env.EMBED_MODEL,
           }))
-        );
+        ).returning({ id: projectNoteSnapshots.id, notePath: projectNoteSnapshots.notePath });
+
+        const chunkRows = noteRows.flatMap(row => (chunksByNote.get(row.notePath) ?? []).map(chunk => ({
+          noteSnapshotId: row.id,
+          projectSnapshotId: snap.id,
+          projectId: pid,
+          chunkIndex: chunk.index,
+          heading: chunk.heading,
+          content: chunk.text,
+          contentHash: chunk.hash,
+          embedding: chunk.embedding,
+          embeddingModel: env.EMBED_MODEL,
+        })));
+        if (chunkRows.length > 0) await tx.insert(projectNoteChunks).values(chunkRows);
       }
 
       return pid;

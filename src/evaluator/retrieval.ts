@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { projects, projectSnapshots, projectNoteSnapshots } from '../db/schema';
+import { projects, projectSnapshots, projectNoteSnapshots, projectNoteChunks } from '../db/schema';
 import { VECTOR_DISTANCE_THRESHOLD, TOP_K_PROJECTS_LIMIT, NOTES_CONTEXT_CHARS, env } from '../config';
 import { Language } from '../ai/language';
 import { buildNotesContext, ContextNote, NotesContext, notesTextChars } from './notesContext';
@@ -15,6 +15,8 @@ export interface RetrievalCandidate {
   notePath: string | null;
   noteTitle: string | null;
   noteSnippet: string | null;
+  /** Heading path of the note's closest section, when a piece of a long note matched best. */
+  noteSection: string | null;
   /** Cosine distance of the best match: the note's if one matched, otherwise the project's. */
   distance: number;
   level: 'note' | 'project';
@@ -64,20 +66,26 @@ export async function retrieveWithStats(
       FROM ${projectSnapshots}
       ORDER BY project_id, captured_at DESC
     ),
-    matching_notes AS (
-      SELECT DISTINCT ON (pns.project_id)
-        pns.project_id,
-        pns.id AS note_snapshot_id,
-        pns.note_path,
-        pns.note_title,
-        pns.content_snippet,
-        (pns.embedding <=> ${targetVector}::vector) AS note_distance
+    -- A note's distance is the best of its own embedding and its pieces (long notes, chunker.ts)
+    note_distances AS (
+      SELECT pns.project_id, pns.id AS note_snapshot_id, pns.note_path, pns.note_title, pns.content_snippet,
+        NULL::text AS section, (pns.embedding <=> ${targetVector}::vector) AS note_distance
       FROM ${projectNoteSnapshots} pns
       JOIN latest_snapshots ls ON pns.project_snapshot_id = ls.id
-      WHERE pns.embedding IS NOT NULL
-        AND pns.embedding_model = ${embedModel}
-        AND (pns.embedding <=> ${targetVector}::vector) < ${threshold}
-      ORDER BY pns.project_id, (pns.embedding <=> ${targetVector}::vector) ASC
+      WHERE pns.embedding IS NOT NULL AND pns.embedding_model = ${embedModel}
+      UNION ALL
+      SELECT pns.project_id, pns.id, pns.note_path, pns.note_title, pns.content_snippet,
+        c.heading, (c.embedding <=> ${targetVector}::vector)
+      FROM ${projectNoteChunks} c
+      JOIN ${projectNoteSnapshots} pns ON c.note_snapshot_id = pns.id
+      JOIN latest_snapshots ls ON c.project_snapshot_id = ls.id
+      WHERE c.embedding_model = ${embedModel}
+    ),
+    matching_notes AS (
+      SELECT DISTINCT ON (project_id) project_id, note_snapshot_id, note_path, note_title, content_snippet, section, note_distance
+      FROM note_distances
+      WHERE note_distance < ${threshold}
+      ORDER BY project_id, note_distance ASC
     )
     SELECT
       ls.id AS snapshot_id,
@@ -88,6 +96,7 @@ export async function retrieveWithStats(
       mn.note_path AS matched_note_path,
       mn.note_title AS matched_note_title,
       mn.content_snippet AS matched_note_snippet,
+      mn.section AS matched_note_section,
       COALESCE(mn.note_distance, (ls.embedding <=> ${targetVector}::vector)) AS best_distance,
       COUNT(*) OVER () AS within_threshold
     FROM latest_snapshots ls
@@ -112,6 +121,7 @@ export async function retrieveWithStats(
     notePath: (row.matched_note_path as string) || null,
     noteTitle: (row.matched_note_title as string) || null,
     noteSnippet: (row.matched_note_snippet as string) || null,
+    noteSection: (row.matched_note_section as string) || null,
     distance: Number(row.best_distance),
     level: row.matched_note_path ? 'note' : 'project',
   }));
@@ -139,12 +149,18 @@ export async function rankSnapshotNotes(
   embedModel: string = env.EMBED_MODEL,
 ): Promise<Map<string, number>> {
   const targetVector = `[${contentEmbedding.join(',')}]`;
+  // A long note ranks by its closest section
   const result = await db.execute(sql`
-    SELECT note_path, (embedding <=> ${targetVector}::vector) AS distance
-    FROM ${projectNoteSnapshots}
-    WHERE project_snapshot_id = ${projectSnapshotId}
-      AND embedding IS NOT NULL
-      AND embedding_model = ${embedModel}
+    SELECT note_path, MIN(distance) AS distance FROM (
+      SELECT note_path, (embedding <=> ${targetVector}::vector) AS distance
+      FROM ${projectNoteSnapshots}
+      WHERE project_snapshot_id = ${projectSnapshotId} AND embedding IS NOT NULL AND embedding_model = ${embedModel}
+      UNION ALL
+      SELECT pns.note_path, (c.embedding <=> ${targetVector}::vector)
+      FROM ${projectNoteChunks} c JOIN ${projectNoteSnapshots} pns ON c.note_snapshot_id = pns.id
+      WHERE c.project_snapshot_id = ${projectSnapshotId} AND c.embedding_model = ${embedModel}
+    ) d
+    GROUP BY note_path
   `);
   return new Map(result.rows.map((r: any) => [r.note_path as string, Number(r.distance)]));
 }
