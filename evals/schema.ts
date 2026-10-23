@@ -208,6 +208,8 @@ export const ResultSchema = z.object({
     malformedOutputs: z.number(),
     /** Malformed answers by parse error / character at the error / finish reason. Absent before 2026-10-23. */
     malformedKinds: z.record(z.string(), z.number()).optional(),
+    /** Answers that were not valid JSON but parsed after the narrow repair (src/ai/types.ts). Absent before 2026-10-23. */
+    repairedOutputs: z.number().optional(),
     fallbacks: z.number(),
     failures: z.number(),
     /** Attempts answered with HTTP 429, and the total time spent waiting because of them. */

@@ -56,14 +56,15 @@ export class GeminiProvider implements ChatProvider {
     }
 
     let data: z.infer<S>;
+    let repaired: string[] | undefined;
     try {
-      data = parseModelJson(res.text, schema, { finishReason: res.candidates?.[0]?.finishReason ?? undefined });
+      data = parseModelJson(res.text, schema, { finishReason: res.candidates?.[0]?.finishReason ?? undefined, onRepair: r => { repaired = r; } });
     } catch (err) {
       await dumpFailedAnswer('gemini', this.model, err, res.text);
       throw err;
     }
     const meta = res.usageMetadata;
     const usage = meta ? { promptTokens: meta.promptTokenCount, completionTokens: meta.candidatesTokenCount } : undefined;
-    return { data, usage };
+    return { data, usage, ...(repaired ? { repaired } : {}) };
   }
 }

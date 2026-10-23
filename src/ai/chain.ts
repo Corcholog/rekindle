@@ -68,9 +68,10 @@ export async function runChain<S extends z.ZodTypeAny>(
     for (;;) {
       const started = Date.now();
       try {
-        const { data, usage } = await provider.complete(system, user, schema, options);
+        const { data, usage, repaired } = await provider.complete(system, user, schema, options);
         const latencyMs = Date.now() - started;
-        attempts.push({ provider: provider.name, model: provider.model, ok: true, usage, latencyMs, startedAt: new Date(started).toISOString() });
+        attempts.push({ provider: provider.name, model: provider.model, ok: true, usage, latencyMs, startedAt: new Date(started).toISOString(), ...(repaired ? { repaired } : {}) });
+        if (repaired) log.warn({ provider: provider.name, model: provider.model, repaired }, 'LLM answer was not valid JSON; repaired');
         return { data, model: `${provider.name}:${provider.model}`, usage, latencyMs, attempts };
       } catch (err) {
         const kind: ErrorKind = err instanceof ProviderError ? err.kind : 'other';

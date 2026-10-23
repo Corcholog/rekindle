@@ -63,6 +63,8 @@ export interface CompletionOptions {
 export interface Completion<T> {
   data: T;
   usage?: Usage;
+  /** The answer was not valid JSON but was repaired (repairModelJson): what was fixed. */
+  repaired?: string[];
 }
 
 export interface ChatProvider {
@@ -90,6 +92,8 @@ export interface Attempt {
   waitedMs?: number;
   /** invalid_json: what was wrong with the answer, text-free. */
   malformed?: MalformedAnswer;
+  /** An answer that parsed only after a repair: what was fixed. */
+  repaired?: string[];
 }
 
 export interface JsonSchemaLike {
@@ -142,11 +146,57 @@ export function describeMalformed(text: string, error: unknown, finishReason?: s
   };
 }
 
+/** The object schema behind optional/nullable wrappers, or null. */
+function objectShape(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
+  let current: any = schema;
+  for (let i = 0; i < 4 && current; i++) {
+    if (current.shape && typeof current.shape === 'object') return current.shape;
+    current = typeof current.unwrap === 'function' ? current.unwrap() : null;
+  }
+  return null;
+}
+
+/**
+ * One slip DeepSeek makes with a nested list: it closes an inner object early, writes that object's
+ * remaining fields at the top level and then the brace it skipped, so the answer ends with one "}"
+ * too many (all 6 failures in a diagnostic run, docs/JOURNEY.md). Only that shape is repaired: the
+ * text must parse once a single trailing "}" is dropped, and a top-level field moves back into an
+ * inner object only if the schema has it there, not at the top, and the inner object lacks it.
+ * The result still goes through the schema; anything else stays invalid.
+ */
+export function repairModelJson(text: string, schema: z.ZodTypeAny): { value: unknown; repaired: string[] } | null {
+  const trimmed = text.trimEnd();
+  if (!trimmed.endsWith('}')) return null;
+  let value: any;
+  try {
+    value = JSON.parse(trimmed.slice(0, -1));
+  } catch {
+    return null;
+  }
+  const repaired = ['extra_closing_brace'];
+  const shape = objectShape(schema);
+  if (shape && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const key of Object.keys(value)) {
+      if (key in shape) continue;
+      const home = Object.entries(shape).find(([name, child]) => {
+        const inner = value[name];
+        const childShape = objectShape(child);
+        return childShape && key in childShape && inner && typeof inner === 'object' && !Array.isArray(inner) && !(key in inner);
+      });
+      if (!home) continue;
+      value[home[0]][key] = value[key];
+      delete value[key];
+      repaired.push(`moved:${home[0]}.${key}`);
+    }
+  }
+  return { value, repaired };
+}
+
 /** Parses model text as JSON (tolerating a code fence) and validates it against the schema. */
 export function parseModelJson<S extends z.ZodTypeAny>(
   text: string | null | undefined,
   schema: S,
-  info: { finishReason?: string } = {},
+  info: { finishReason?: string; onRepair?: (repaired: string[]) => void } = {},
 ): z.infer<S> {
   const trimmed = (text ?? '').trim();
   if (!trimmed) throw new ProviderError('empty', 'La respuesta del modelo llegó vacía');
@@ -156,7 +206,14 @@ export function parseModelJson<S extends z.ZodTypeAny>(
   try {
     parsed = JSON.parse(unfenced);
   } catch (error) {
-    throw new ProviderError('invalid_json', 'La respuesta del modelo no es JSON válido', { malformed: describeMalformed(unfenced, error, info.finishReason) });
+    const malformed = describeMalformed(unfenced, error, info.finishReason);
+    const fixed = malformed.parseError === 'unexpected_token' ? repairModelJson(unfenced, schema) : null;
+    const checked = fixed ? schema.safeParse(fixed.value) : null;
+    if (fixed && checked?.success) {
+      info.onRepair?.(fixed.repaired);
+      return checked.data;
+    }
+    throw new ProviderError('invalid_json', 'La respuesta del modelo no es JSON válido', { malformed });
   }
 
   const result = schema.safeParse(parsed);

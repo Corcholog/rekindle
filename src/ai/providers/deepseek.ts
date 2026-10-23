@@ -87,13 +87,17 @@ export class DeepSeekProvider implements ChatProvider {
     const payload: any = await response.json().catch(() => null);
     const choice = payload?.choices?.[0];
     let data: z.infer<S>;
+    let repaired: string[] | undefined;
     try {
-      data = parseModelJson(choice?.message?.content, schema, { finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined });
+      data = parseModelJson(choice?.message?.content, schema, {
+        finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
+        onRepair: r => { repaired = r; },
+      });
     } catch (err) {
       await dumpFailedAnswer('deepseek', this.model, err, choice?.message?.content);
       throw err;
     }
-    return { data, usage: deepSeekUsage(payload?.usage) };
+    return { data, usage: deepSeekUsage(payload?.usage), ...(repaired ? { repaired } : {}) };
   }
 }
 

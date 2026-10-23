@@ -14,9 +14,11 @@ How well Rekindle finds connections, measured against one person's labels. The h
 | Latency p50 / p95 | 4.4 / 11.7 s* | **1.8 / 3.9 s** | 4.1 / 8.4 s* | 7.2 / 10.1 s† |
 | Tokens per triage call: input (cached) / output (thinking) | not measured | 4,199 (3,738) / 208 (0) | 2,195 (1,600) / 638 (259)* | not measured |
 | Estimated cost of the 118 calls | free tier | $0.024 | $0.056* | $0 |
-| Answers that were not valid JSON (pairs lost after the retry) | 0* | 9 (2) | 0* | 0† |
+| Answers that were not valid JSON (pairs lost after the retry) | 0* | 9 (2)‡ | 0* | 0† |
 
 ![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 42 of 56 and proposes 19 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](images/eval-connections.svg)
+
+‡ Measured before the repair of 2026-10-23: in a diagnostic run every invalid answer (6 of 30 calls on the two articles that had failed) closed the action early and ended with one brace too many, which Rekindle now repairs. The 9 answers of this run were not saved, so their shape is **not verified**, and the scores were not re-measured.
 
 **Structured suggestion text (2026-10-21).** The answer now gives an action as a one-sentence headline and 1 to 4 steps (note, place, change, text to paste), and its reasoning as the connection first and then what is missing, so the card and the callout can lay them out. The prompt just before it scored macro-F1 0.75 and 0.72 in two runs (45 and 44 connections, `actionable` 96% / 77% and 96% / 71%, 0 invalid answers); the structured one 0.69, 42 connections, 92% / 63%, and 9 answers that were not valid JSON (2 pairs lost after the retry; in the app the next provider takes over). The same prompt run twice changes 11 or 12 of the 118 verdicts, always to or from `tentative`, so part of this gap is run-to-run variance; the structured prompt changed 17. Getting the structure from a second call left the verdicts untouched but costs about one extra call per actionable or tentative answer; the owner chose one call. Estimated cost depends on the hour of the run and is not comparable between these runs.
 

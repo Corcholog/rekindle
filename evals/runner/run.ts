@@ -310,6 +310,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         llmCalls: triageEntries.length,
         attempts: triageEntries.reduce((s, e) => s + e.attempts.length, 0),
         malformedOutputs: triageEntries.flatMap(e => e.attempts).filter(a => !a.ok && a.errorKind && MALFORMED.has(a.errorKind)).length,
+        repairedOutputs: triageEntries.flatMap(e => e.attempts).filter(a => a.repaired).length,
         malformedKinds: countBy(triageEntries.flatMap(e => e.attempts).filter(a => a.malformed).map(a => `${a.malformed!.parseError}/${a.malformed!.errorChar ?? '?'}/${a.malformed!.finishReason ?? '?'}`)),
         fallbacks: triageEntries.filter(e => e.ok && e.attempts.at(-1)!.provider !== firstProvider).length,
         failures: triageEntries.filter(e => !e.ok).length,

@@ -109,3 +109,58 @@ describe('LLM_DEBUG_DIR', () => {
     expect(await fs.readdir(dir)).toHaveLength(1);
   });
 });
+
+describe('repairing the early-closed object', () => {
+  // The shape DeepSeek wrote in all 6 failures of a diagnostic run (made-up text): the action closes
+  // right after its steps, its last two fields land at the top level, and one "}" too many follows
+  const broken = JSON.stringify({
+    verdict: 'actionable', confidenceScore: 0.85, connection: 'Conecta con el capítulo 3.', gap: null,
+    action: { actionType: 'evidence_citation', observation: 'Aporta datos.', suggestedAction: 'Sumar los datos', steps: [{ note: 'a.md', where: null, change: 'Añadir.', text: 'Cita "con comillas".' }] },
+    targetFile: 'a.md', targetIsNew: false,
+  }) + '}';
+  const actionSchema = z.object({
+    verdict: z.string(), confidenceScore: z.number(), connection: z.string(), gap: z.string().nullish(),
+    action: z.object({
+      actionType: z.string(), observation: z.string(), suggestedAction: z.string(),
+      steps: z.array(z.object({ note: z.string().nullish(), where: z.string().nullish(), change: z.string(), text: z.string().nullish() })).nullish(),
+      targetFile: z.string().nullish(), targetIsNew: z.boolean().nullish(),
+    }).nullable(),
+  });
+
+  it('drops the extra brace and moves the fields back into the action', async () => {
+    const { parseModelJson } = await import('../src/ai/types');
+    let repaired: string[] = [];
+    const data = parseModelJson(broken, actionSchema, { onRepair: r => { repaired = r; } });
+    expect(data.action).toMatchObject({ targetFile: 'a.md', targetIsNew: false, steps: [{ text: 'Cita "con comillas".' }] });
+    expect(data).not.toHaveProperty('targetFile');
+    expect(repaired).toEqual(['extra_closing_brace', 'moved:action.targetFile', 'moved:action.targetIsNew']);
+  });
+
+  it('repairs nothing else', async () => {
+    const { parseModelJson } = await import('../src/ai/types');
+    const fails = (text: string) => expect(() => parseModelJson(text, actionSchema)).toThrow(expect.objectContaining({ kind: 'invalid_json' }));
+    fails(broken + '}');                          // two extra braces
+    fails(broken.slice(0, -1) + ' fin');           // trailing text, not a brace
+    fails(broken.replace('"targetFile":"a.md"', '"targetFile":"a.md","otro":1').slice(0, 40) + '}'); // cut off
+    // A field the schema has nowhere is not moved, and the answer must still pass the schema
+    const stray = JSON.stringify({ verdict: 'x', confidenceScore: 'alta', connection: 'c', action: null }) + '}';
+    fails(stray);
+    // A field the inner object already has is not overwritten
+    const both = JSON.stringify({ ...JSON.parse(broken.slice(0, -1)), action: { ...JSON.parse(broken.slice(0, -1)).action, targetFile: 'b.md' } }) + '}';
+    expect(parseModelJson(both, actionSchema).action?.targetFile).toBe('b.md');
+  });
+
+  it('the chain records the repair on the attempt, and the triage schema accepts it', async () => {
+    const { runChain } = await import('../src/ai/chain');
+    const { parseModelJson } = await import('../src/ai/types');
+    const { triageSchema } = await import('../src/evaluator/triagePrompt');
+    const schemaEs = triageSchema({ prompt: 'es', output: 'es' });
+    const provider = {
+      name: 'deepseek', model: 'm',
+      complete: async () => { let repaired: string[] | undefined; const data = parseModelJson(broken, schemaEs, { onRepair: r => { repaired = r; } }); return { data, repaired }; },
+    } as any;
+    const result = await runChain([provider], 's', 'u', schemaEs);
+    expect(result.data.action?.targetFile).toBe('a.md');
+    expect(result.attempts).toEqual([expect.objectContaining({ ok: true, repaired: ['extra_closing_brace', 'moved:action.targetFile', 'moved:action.targetIsNew'] })]);
+  });
+});
