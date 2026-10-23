@@ -81,8 +81,6 @@ These are known and accepted for a single-user local tool, or not fixed yet:
 - **Prompt injection can still steer what the model says.** The defenses keep the prompt structure intact and keep the model's output inside code-enforced limits, but an injected page can still bias a verdict or the wording of a suggestion. The owner's review before accepting is the control. How often injection succeeds against each model is **not measured**.
 - **Cloud providers see notes when a key is set.** With `DEEPSEEK_API_KEY` or `GEMINI_API_KEY`, article text, summaries and up to 60,000 characters of project notes per evaluation leave the machine (README, Privacy note). Leaving both keys empty keeps every model call local.
 - **The Consultor sends a selection per question** (F-16, closed 2026-10-21): the 15 closest library summaries and 15 closest note snippets leave the machine when a cloud key is set. The size is fixed (T17), but those items are still sent on every question.
-- **Synergies may use notes from older snapshots** (F-14), including deleted notes.
-- **Unmounting the vault drive can trigger a burst of backlog jobs** on remount (F-15).
-- **The extension can send a queued clip twice** (F-21). Re-ingesting is harmless (I6).
-- **Unicode normalization and platform path differences** in vault sync (F-28) and regex denial of service in the parser were not tested.
+- **Fixed 2026-10-23:** synergies read only each project's latest notes (F-14); a project folder that comes back unchanged after the vault's drive was unmounted is active again, with no new snapshot (F-15); the extension's offline queue has one sender, so a clip is neither sent twice nor overwritten (F-21); accented note names match in either Unicode form (F-28). Project folders are still identified by their name on disk, so a vault copied between file systems that store accents differently is seen as new projects.
+- **Regex denial of service in the parser** was not tested.
 - **Development dependencies** are not audited in CI (only production ones are).

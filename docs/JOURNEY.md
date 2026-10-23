@@ -308,6 +308,17 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/paste_text.test.ts` (every failure code, a PDF then its pasted text with no second fetch, too little text, a selection as the article, text on a new link, 409 for an item already read, the 50,000-character cut), `tests/ui_xss.test.ts` (the explanation in both languages and the paste box, hostile reason text shown as text), `tests/article_limits.test.ts`.
 - **Outcome / lesson:** how often each failure happens on the owner's clips is **not measured**; the 500-character threshold was checked only against the eval set's real articles.
 
+### 2026-10-23 — Audit leftovers: synergies, the brief, the extension queue, remounts, accents
+- **Context:** five findings from the Phase 0 audit were still open, plus the research brief having no limit.
+- **What happened:**
+  - F-14: synergy pairs and bridge notes read a project's notes from any snapshot, so edited and deleted notes could be matched and quoted; both now read the latest snapshot (`f0e5924`).
+  - The research brief sends the 40 most recent accepted suggestions, each cut at 3,000 characters and 40,000 in all, and says when it is a selection (`f0e5924`).
+  - F-21: the extension's background worker and popup each read the queue, sent it and wrote back the rest. Against the real `background.js`, three overlapping flushes sent every clip three times, and a clip queued mid-flush could be overwritten. The worker is now the only sender and merges instead of overwriting (`4b6dad7`).
+  - F-15: the expected burst on remount does not happen (a missing folder hashes as empty, and an unchanged folder makes no snapshot), but the unmount left every project inactive until a restart, because the unchanged hash returned before reactivating it. It is reactivated now (`129c98f`).
+  - F-28: a model writes accented names composed (NFC) while macOS often stores them decomposed (NFD), so a named target note fell back to the closest one; names are compared in NFC and the stored path is kept (`ab35190`).
+- **Evidence:** `tests/synergy_synthesis_limits.test.ts`, `tests/extension_queue.test.ts`, `tests/vault_remount.test.ts`, `tests/failure_target_path.test.ts`; each new test fails on the code before its fix.
+- **Outcome / lesson:** F-29 (backlog jobs racing the watcher) was investigated and reported to the owner before any change (below).
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |
