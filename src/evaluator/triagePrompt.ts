@@ -26,10 +26,10 @@ export function triageSchema({ prompt, output }: TriageLanguages) {
       stepText: 'Texto exacto para pegar en la nota: una cita del artículo o una frase ya redactada. null si el paso no agrega texto.',
       targetFile: "Ruta de la nota del ÍNDICE DE NOTAS a la que apunta la acción, tal como aparece en el índice (ej. borrador.md o research/fuentes.md). Si ninguna nota existente encaja, el nombre de una nota NUEVA a crear (ej. contraargumentos.md) con 'targetIsNew' en true.",
       targetIsNew: "true solo si 'targetFile' es una nota nueva que no está en el índice; false si es una nota existente.",
-      verdict: "Veredicto: 'actionable' si aporta ideas, citas o argumentos concretos para enriquecer el borrador; 'tentative' si es tangencial o dudoso; 'irrelevant' si no aporta nada o está fuera de foco.",
+      verdict: "Veredicto, decidido a partir de 'connection' y 'gap': 'actionable' si aporta ideas, citas o argumentos concretos para enriquecer el borrador; 'tentative' si hay una conexión real pero tangencial o dudosa; 'irrelevant' si no aporta nada o está fuera de foco. Si 'connection' dice que no hay relación con el proyecto, el veredicto es 'irrelevant'.",
       confidenceScore: 'Puntaje decimal entre 0.0 y 1.0 que mide el grado de afinidad temática y relevancia con el proyecto: 0.0-0.3 si es irrelevant, 0.4-0.6 si es tentative, 0.7-1.0 si es actionable.',
       connection: `Conexión, en ${languageName(output).lower}: qué vincula el artículo con el proyecto, en 1 o 2 oraciones, nombrando la nota o sección. Si no hay conexión, dilo. Empieza directamente por la conexión: no resumas el artículo ni el proyecto.`,
-      gap: `Qué le falta, en ${languageName(output).lower}, para ser 'actionable', o por qué no aplica al proyecto, en 1 o 2 oraciones. null si es 'actionable'.`,
+      gap: `Qué le falta, en ${languageName(output).lower}, para ser 'actionable', o por qué no aplica al proyecto, en 1 o 2 oraciones. null si no le falta nada.`,
       action: "Propuesta de acción concreta. REQUERIDO si verdict es 'actionable'. Debe ser null si verdict es 'tentative' o 'irrelevant'.",
     }
     : {
@@ -43,10 +43,10 @@ export function triageSchema({ prompt, output }: TriageLanguages) {
       stepText: 'Exact text to paste into the note: a quote from the article or a ready-written sentence. null if the step adds no text.',
       targetFile: "Path of the note from the NOTE INDEX the action points to, exactly as listed (e.g. draft.md or research/sources.md). If no existing note fits, the name of a NEW note to create (e.g. counterarguments.md) with 'targetIsNew' set to true.",
       targetIsNew: "true only if 'targetFile' is a new note that is not in the index; false for an existing note.",
-      verdict: "Verdict: 'actionable' if it brings concrete ideas, quotes or arguments that enrich the draft; 'tentative' if it is tangential or doubtful; 'irrelevant' if it adds nothing or is off topic.",
+      verdict: "Verdict, decided from 'connection' and 'gap': 'actionable' if it brings concrete ideas, quotes or arguments that enrich the draft; 'tentative' if there is a real but tangential or doubtful connection; 'irrelevant' if it adds nothing or is off topic. If 'connection' says there is no relation to the project, the verdict is 'irrelevant'.",
       confidenceScore: 'Decimal score between 0.0 and 1.0 measuring thematic affinity and relevance to the project: 0.0-0.3 if irrelevant, 0.4-0.6 if tentative, 0.7-1.0 if actionable.',
       connection: `Connection, in ${languageName(output, 'en').lower}: what links the article to the project, in 1 or 2 sentences, naming the note or section. If nothing does, say so. Start with the connection itself: do not summarize the article or the project.`,
-      gap: `What it lacks, in ${languageName(output, 'en').lower}, to be 'actionable', or why it does not apply to the project, in 1 or 2 sentences. null if it is 'actionable'.`,
+      gap: `What it lacks, in ${languageName(output, 'en').lower}, to be 'actionable', or why it does not apply to the project, in 1 or 2 sentences. null if it lacks nothing.`,
       action: "Concrete action proposal. REQUIRED if verdict is 'actionable'. Must be null if verdict is 'tentative' or 'irrelevant'.",
     };
 
@@ -64,11 +64,13 @@ export function triageSchema({ prompt, output }: TriageLanguages) {
     targetFile: z.string().nullish().describe(d.targetFile),
     targetIsNew: z.boolean().nullish().describe(d.targetIsNew),
   });
+  // The reasoning comes before the verdict: the model writes its answer in this order, and with the
+  // verdict first it sometimes chose 'tentative' and then wrote that nothing connects (docs/JOURNEY.md)
   return z.object({
-    verdict: z.enum(['actionable', 'tentative', 'irrelevant']).describe(d.verdict),
-    confidenceScore: z.number().min(0).max(1).describe(d.confidenceScore),
     connection: z.string().describe(d.connection),
     gap: z.string().nullish().describe(d.gap),
+    verdict: z.enum(['actionable', 'tentative', 'irrelevant']).describe(d.verdict),
+    confidenceScore: z.number().min(0).max(1).describe(d.confidenceScore),
     action: actionSchema.nullable().describe(d.action),
   });
 }

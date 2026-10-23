@@ -117,3 +117,16 @@ describe('saved synergy notes', () => {
     }
   });
 });
+
+describe('triage answer order', () => {
+  it('asks for the reasoning before the verdict, and ties the verdict to it', async () => {
+    const { triageSchema } = await import('../src/evaluator/triagePrompt');
+    const { toJsonSchema } = await import('../src/ai/types');
+    for (const prompt of ['es', 'en'] as const) {
+      const schema = triageSchema({ prompt, output: prompt });
+      // Providers are shown the JSON schema, whose property order is the order the model writes in
+      expect(Object.keys((toJsonSchema(schema) as any).properties)).toEqual(['connection', 'gap', 'verdict', 'confidenceScore', 'action']);
+      expect(schema.shape.verdict.description).toMatch(prompt === 'es' ? /'connection' dice que no hay relación.*'irrelevant'/ : /'connection' says there is no relation.*'irrelevant'/);
+    }
+  });
+});
