@@ -23,6 +23,8 @@ export interface RunOptions {
   resultsDir?: string;
   /** Where the per-config detail file goes (default: <dataset>/runs, inside the git-ignored dataset). */
   detailsDir?: string;
+  /** Run only these article ids (a diagnostic run; its scores cover those articles alone). */
+  only?: string[];
   log?: (message: string) => void;
 }
 
@@ -61,7 +63,11 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
   const problems = validateLabels(dataset, { strict: options.strict ?? false });
   if (problems.length > 0) throw new Error(`Etiquetas inválidas:\n- ${problems.join('\n- ')}`);
   const labels = dataset.labels!;
-  const cases = labels.cases.filter(c => dataset.projects.some(p => effectiveVerdict(c, p.folderPath) !== null));
+  const cases = labels.cases.filter(c => dataset.projects.some(p => effectiveVerdict(c, p.folderPath) !== null))
+    .filter(c => !options.only?.length || options.only.includes(c.article));
+  if (options.only?.length && cases.length !== options.only.length) {
+    throw new Error(`--only: no hay casos etiquetados para ${options.only.filter(id => !cases.some(c => c.article === id)).join(', ')}`);
+  }
   if (cases.length === 0) throw new Error('No hay ningún caso etiquetado: rellena labels.yaml');
 
   const embeddingCache = await new JsonCache<number[]>(path.join(dataset.dir, 'cache', 'embeddings.json')).load();
@@ -304,6 +310,7 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
         llmCalls: triageEntries.length,
         attempts: triageEntries.reduce((s, e) => s + e.attempts.length, 0),
         malformedOutputs: triageEntries.flatMap(e => e.attempts).filter(a => !a.ok && a.errorKind && MALFORMED.has(a.errorKind)).length,
+        malformedKinds: countBy(triageEntries.flatMap(e => e.attempts).filter(a => a.malformed).map(a => `${a.malformed!.parseError}/${a.malformed!.errorChar ?? '?'}/${a.malformed!.finishReason ?? '?'}`)),
         fallbacks: triageEntries.filter(e => e.ok && e.attempts.at(-1)!.provider !== firstProvider).length,
         failures: triageEntries.filter(e => !e.ok).length,
         rateLimitHits: triageEntries.flatMap(e => e.attempts).filter(a => a.errorKind === 'rate_limit').length,
@@ -355,3 +362,10 @@ export async function runEval(options: RunOptions): Promise<{ result: EvalResult
   }
 }
 
+
+/** How many times each value occurs, for the result file. */
+function countBy(values: string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const v of values) counts[v] = (counts[v] ?? 0) + 1;
+  return counts;
+}

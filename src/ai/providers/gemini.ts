@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { ChatProvider, Completion, ProviderError, parseModelJson, toJsonSchema } from '../types';
+import { dumpFailedAnswer } from '../debugDump';
 
 export interface GeminiOptions {
   apiKey: string;
@@ -54,7 +55,13 @@ export class GeminiProvider implements ChatProvider {
         : `Gemini devolvió un error (HTTP ${err?.status ?? '?'}): ${message.slice(0, 300)}`);
     }
 
-    const data = parseModelJson(res.text, schema);
+    let data: z.infer<S>;
+    try {
+      data = parseModelJson(res.text, schema, { finishReason: res.candidates?.[0]?.finishReason ?? undefined });
+    } catch (err) {
+      await dumpFailedAnswer('gemini', this.model, err, res.text);
+      throw err;
+    }
     const meta = res.usageMetadata;
     const usage = meta ? { promptTokens: meta.promptTokenCount, completionTokens: meta.candidatesTokenCount } : undefined;
     return { data, usage };

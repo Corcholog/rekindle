@@ -92,6 +92,18 @@ describe('eval harness replay', () => {
     }
   }, 180000);
 
+  it('runs only the articles asked for (--only), and refuses an unknown one', async () => {
+    vi.resetModules();
+    const { runEval } = await import('../evals/runner/run');
+    const resultsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rekindle-evalonly-'));
+    dirs.push(resultsDir);
+    const { result } = await runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', resultsDir, detailsDir: resultsDir, only: ['muerte-anime'] });
+    expect(result.meta.cases).toBe(1);
+    vi.resetModules();
+    const again = await import('../evals/runner/run');
+    await expect(again.runEval({ datasetDir: DATASET, configPath: CONFIG, mode: 'replay', resultsDir, detailsDir: resultsDir, only: ['no-existe'] })).rejects.toThrow(/no-existe/);
+  }, 180000);
+
   it('refuses to replay when the cache lacks an entry', async () => {
     vi.resetModules();
     const { runEval } = await import('../evals/runner/run');

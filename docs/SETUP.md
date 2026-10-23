@@ -34,7 +34,8 @@ cp .env.example .env
 | `EMBED_MODEL` | `bge-m3` | Embedding model. The DB column is `vector(1024)`, so the model must output 1024 dims. |
 | `CHAT_MODEL` | `gemini-3.1-flash-lite` | **Gemini** model name. (The Ollama chat model is fixed to `qwen2.5:7b-instruct`.) |
 | `GEMINI_MODEL` | – | Optional override of `CHAT_MODEL`. |
-| `LLM_PROVIDERS` | `deepseek,gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. |
+| `LLM_PROVIDERS` | `deepseek,gemini,ollama` | Order in which LLM providers are tried (`deepseek`, `gemini`, `ollama`). Providers without a key are skipped; malformed output is retried once, then the next provider is used. Each malformed answer is logged with a description that holds none of its text (parse error, where it failed, the provider's finish reason). |
+| `LLM_DEBUG_DIR` | – | Debugging only: DeepSeek and Gemini answers that are not valid JSON are saved whole to this folder. They contain text derived from your notes and articles; use a git-ignored folder (`evals/private/debug`). Off when empty. |
 | `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | – / `deepseek-flash` | Enables DeepSeek when listed in `LLM_PROVIDERS`. Thinking mode is requested off. |
 | `GEMINI_API_KEY` | – | Enables Gemini. Leave empty for 100% local operation. |
 | `VAULT_PATH` | `./demo_vault_en` or `./demo_vault` (via `pnpm start/dev`, by notes language) | Obsidian vault root. Can also be changed in the UI (it rewrites this line in `.env`). |

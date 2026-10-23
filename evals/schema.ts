@@ -206,6 +206,8 @@ export const ResultSchema = z.object({
     llmCalls: z.number(),
     attempts: z.number(),
     malformedOutputs: z.number(),
+    /** Malformed answers by parse error / character at the error / finish reason. Absent before 2026-10-23. */
+    malformedKinds: z.record(z.string(), z.number()).optional(),
     fallbacks: z.number(),
     failures: z.number(),
     /** Attempts answered with HTTP 429, and the total time spent waiting because of them. */

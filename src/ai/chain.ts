@@ -74,9 +74,13 @@ export async function runChain<S extends z.ZodTypeAny>(
         return { data, model: `${provider.name}:${provider.model}`, usage, latencyMs, attempts };
       } catch (err) {
         const kind: ErrorKind = err instanceof ProviderError ? err.kind : 'other';
-        const attempt: Attempt = { provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started, startedAt: new Date(started).toISOString() };
+        const malformed = err instanceof ProviderError ? err.malformed : undefined;
+        const attempt: Attempt = {
+          provider: provider.name, model: provider.model, ok: false, errorKind: kind, latencyMs: Date.now() - started, startedAt: new Date(started).toISOString(),
+          ...(malformed ? { malformed } : {}),
+        };
         attempts.push(attempt);
-        log.warn({ provider: provider.name, model: provider.model, errorKind: kind, attempt: attempts.length, err }, 'LLM provider attempt failed');
+        log.warn({ provider: provider.name, model: provider.model, errorKind: kind, attempt: attempts.length, malformed, err }, 'LLM provider attempt failed');
 
         if ((kind === 'rate_limit' || kind === 'unavailable') && policy?.onRateLimit === 'wait') {
           const quotaExhausted = err instanceof ProviderError && err.quotaExhausted === true;

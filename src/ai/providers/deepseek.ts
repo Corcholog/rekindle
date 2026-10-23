@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ChatProvider, Completion, CompletionOptions, ProviderError, Usage, parseModelJson, toJsonSchema } from '../types';
+import { dumpFailedAnswer } from '../debugDump';
 
 export interface DeepSeekOptions {
   apiKey: string;
@@ -84,7 +85,14 @@ export class DeepSeekProvider implements ChatProvider {
     }
 
     const payload: any = await response.json().catch(() => null);
-    const data = parseModelJson(payload?.choices?.[0]?.message?.content, schema);
+    const choice = payload?.choices?.[0];
+    let data: z.infer<S>;
+    try {
+      data = parseModelJson(choice?.message?.content, schema, { finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined });
+    } catch (err) {
+      await dumpFailedAnswer('deepseek', this.model, err, choice?.message?.content);
+      throw err;
+    }
     return { data, usage: deepSeekUsage(payload?.usage) };
   }
 }
