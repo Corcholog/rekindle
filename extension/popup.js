@@ -74,6 +74,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function enqueueDirectly(item) {
+    // The background worker queues it in order with its own sends; the storage is written here
+    // only if the worker cannot be reached
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'ENQUEUE_ITEM', payload: item });
+      if (res && typeof res.count === 'number') return res.count;
+    } catch {}
+
     const queue = await getLocalQueue();
     
     // Avoid duplicate rapid enqueues
@@ -111,65 +118,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return queue.length;
   }
 
-  async function flushDirectly() {
-    const queue = await getLocalQueue();
-    if (queue.length === 0) {
-      await updateBadgeDirectly(0);
-      return { success: true, flushed: 0, remaining: 0 };
+  // The background worker owns the queue (F-21): the popup asks it to send the queue and never
+  // rewrites the queue itself, so two senders cannot send a clip twice or overwrite a new one
+  async function requestSync() {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' });
+      return res || { success: false };
+    } catch {
+      return { success: false };
     }
-
-    const remaining = [];
-    let flushedCount = 0;
-
-    for (const item of queue) {
-      try {
-        const res = await fetch(`${SERVER_URL}/api/ingest`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            url: item.url,
-            title: item.title,
-            selection: item.selection
-          }),
-          signal: AbortSignal.timeout(6000)
-        });
-
-        if (res.ok) {
-          flushedCount++;
-        } else if (res.status >= 400 && res.status < 500) {
-          if ((item.retries || 0) < 3) {
-            remaining.push({ ...item, retries: (item.retries || 0) + 1 });
-          }
-        } else {
-          remaining.push(item);
-          break;
-        }
-      } catch {
-        remaining.push(item);
-        break;
-      }
-    }
-
-    await chrome.storage.local.set({ [STORAGE_QUEUE_KEY]: remaining });
-
-    if (remaining.length === 0) {
-      try {
-        await chrome.action.setBadgeBackgroundColor({ color: '#10b981' });
-        await chrome.action.setBadgeText({ text: '✓' });
-        setTimeout(async () => {
-          try {
-            const latest = await getLocalQueue();
-            if (latest.length === 0) await chrome.action.setBadgeText({ text: '' });
-          } catch {}
-        }, 3000);
-      } catch {}
-    } else {
-      await updateBadgeDirectly(remaining.length);
-    }
-
-    return { success: true, flushed: flushedCount, remaining: remaining.length };
   }
 
   // --- Connectivity Check ---
@@ -214,7 +171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnSyncQueue.disabled = true;
     btnSyncQueue.textContent = msg('sending');
     try {
-      const res = await flushDirectly();
+      const res = await requestSync();
       if (res && res.success) {
         queueMsg.textContent = msg('sent', res.flushed);
         setTimeout(async () => {
@@ -303,7 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnText.textContent = msg('saved');
 
         // Also flush any items that were queued previously
-        flushDirectly().catch(() => {});
+        requestSync().catch(() => {});
 
         setTimeout(() => {
           window.close();

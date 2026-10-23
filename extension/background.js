@@ -41,32 +41,42 @@ async function updateBadge(queueLength) {
   }
 }
 
+// Every change to the stored queue runs through this chain, one at a time, so a flush that ends
+// while a clip is being queued never overwrites it, and two flushes never send the same clip (F-21)
+let queueChain = Promise.resolve();
+function withQueue(fn) {
+  const run = queueChain.then(fn, fn);
+  queueChain = run.then(() => {}, () => {});
+  return run;
+}
+
 async function enqueueItem(item) {
-  const queue = await getOfflineQueue();
-  
-  // Avoid duplicate clicks within short time frame
-  const isDuplicate = queue.some(
-    q => q.url === item.url && q.selection === (item.selection || '') && (Date.now() - q.timestamp < 30000)
-  );
+  const length = await withQueue(async () => {
+    const queue = await getOfflineQueue();
 
-  if (isDuplicate) {
-    console.log('[Rekindle Clipper SW] Skipping duplicate enqueue for:', item.url);
+    // Avoid duplicate clicks within short time frame
+    const isDuplicate = queue.some(
+      q => q.url === item.url && q.selection === (item.selection || '') && (Date.now() - q.timestamp < 30000)
+    );
+
+    if (isDuplicate) {
+      console.log('[Rekindle Clipper SW] Skipping duplicate enqueue for:', item.url);
+      return queue.length;
+    }
+
+    queue.push({
+      id: typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      url: item.url,
+      title: item.title || '',
+      selection: (item.selection || '').slice(0, MAX_SELECTION_CHARS),
+      timestamp: Date.now(),
+      retries: 0
+    });
+    await setOfflineQueue(queue);
     return queue.length;
-  }
-
-  const newItem = {
-    id: typeof crypto.randomUUID === 'function' 
-      ? crypto.randomUUID() 
-      : `clip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-    url: item.url,
-    title: item.title || '',
-    selection: (item.selection || '').slice(0, MAX_SELECTION_CHARS),
-    timestamp: Date.now(),
-    retries: 0
-  };
-
-  queue.push(newItem);
-  await setOfflineQueue(queue);
+  });
 
   // Ensure periodic background sync alarm is active
   await chrome.alarms.create(SYNC_ALARM_NAME, { periodInMinutes: 1 });
@@ -74,12 +84,19 @@ async function enqueueItem(item) {
   // Attempt immediate flush in case server is ready
   tryFlushQueue().catch(() => {});
 
-  return queue.length;
+  return length;
 }
 
 // --- Queue Flush / Sync Engine ---
 
-async function tryFlushQueue() {
+// At most one flush at a time: a second request while one runs gets the same result
+let flushInFlight = null;
+function tryFlushQueue() {
+  if (!flushInFlight) flushInFlight = flushQueueOnce().finally(() => { flushInFlight = null; });
+  return flushInFlight;
+}
+
+async function flushQueueOnce() {
   const queue = await getOfflineQueue();
   if (queue.length === 0) {
     await updateBadge(0);
@@ -105,8 +122,10 @@ async function tryFlushQueue() {
     return { success: false, reason: 'offline', remaining: queue.length };
   }
 
-  // 2. Rekindle is reachable: process queue items sequentially
-  const remaining = [];
+  // 2. Rekindle is reachable: process queue items sequentially. What happened to each clip is
+  // recorded by id and applied to the queue as it is at the end, so clips queued meanwhile stay
+  const done = new Set();
+  const retried = new Map();
   let flushedCount = 0;
 
   for (const item of queue) {
@@ -126,26 +145,33 @@ async function tryFlushQueue() {
 
       if (res.ok) {
         flushedCount++;
+        done.add(item.id);
       } else if (res.status >= 400 && res.status < 500) {
         // Bad request / invalid input: increment retry or discard if corrupted
         if ((item.retries || 0) < 3) {
-          remaining.push({ ...item, retries: (item.retries || 0) + 1 });
+          retried.set(item.id, (item.retries || 0) + 1);
         } else {
           console.warn('[Rekindle Clipper SW] Dropping permanently failed item:', item.url);
+          done.add(item.id);
         }
       } else {
         // Server 5xx or temporary failure: retain item and stop current batch
-        remaining.push(item);
         break;
       }
     } catch (err) {
       console.warn('[Rekindle Clipper SW] Network error sending queued item:', err);
-      remaining.push(item);
       break;
     }
   }
 
-  await setOfflineQueue(remaining);
+  const remaining = await withQueue(async () => {
+    const latest = await getOfflineQueue();
+    const kept = latest
+      .filter(item => !done.has(item.id))
+      .map(item => (retried.has(item.id) ? { ...item, retries: retried.get(item.id) } : item));
+    await setOfflineQueue(kept);
+    return kept;
+  });
 
   if (remaining.length === 0) {
     // All items synced! Show temporary green badge
