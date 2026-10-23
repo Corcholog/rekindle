@@ -86,6 +86,13 @@ export async function reconcileProject(projectPath: string, vaultPath: string, f
       .limit(1);
 
       if (latestSnapshot && latestSnapshot.embedding !== null) {
+        // The folder is back with the same notes, e.g. after the vault's drive was unmounted and
+        // mounted again (the watcher marks a removed folder inactive): active again, no new snapshot,
+        // so nothing is re-evaluated (F-15)
+        if (!existingProject.isActive) {
+          await db.update(projects).set({ isActive: true, updatedAt: new Date() }).where(eq(projects.id, existingProject.id));
+          log.info({ project: pathKey(normalizedPath) }, 'Project folder is back unchanged; marked active');
+        }
         // Truly up to date. Snapshots from before dormancy tracking get their date filled in once.
         if (!latestSnapshot.notesModifiedAt) {
           const notesModifiedAt = await newestModification((await getProjectMarkdownFiles(projectPath)).map(f => f.fullPath));
