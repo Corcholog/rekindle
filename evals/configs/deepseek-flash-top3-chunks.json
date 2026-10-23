@@ -1,0 +1,37 @@
+{
+  "name": "deepseek-flash-top3-chunks",
+  "description": "Same prompt and answer format as deepseek-flash-top3-steps, after chunking (2026-10-23): long notes are split by their headings, retrieval matches every section, and the closest-note hint names the section when a piece matched best. Pairs whose prompt did not change replay from the cache.",
+  "providers": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "summaryProviders": [
+    {
+      "name": "deepseek",
+      "thinking": false
+    }
+  ],
+  "k": 3,
+  "threshold": 0.6,
+  "prices": {
+    "deepseek:deepseek-flash": {
+      "inputPerM": 0.3,
+      "cachedInputPerM": 0.006,
+      "outputPerM": 1.2,
+      "peakHoursUtc": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "offPeakFactor": 0.5
+    }
+  },
+  "maxProjects": 3
+}

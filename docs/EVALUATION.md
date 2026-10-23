@@ -8,15 +8,17 @@ How well Rekindle finds connections, measured against one person's labels. The h
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (thinking off) | DeepSeek Flash (thinking on) | Qwen 2.5 7B (local) |
 |---|---|---|---|---|
-| Triage macro-F1 | 0.69* | **0.69** | 0.71* | 0.57† |
-| `actionable` precision / recall | 64% / 91%* | **92% / 63%** | 79% / 89%* | 100% / 31%† |
-| Connections found (of 56) / extra | 49 / 25* | 42 / 19 | 49 / 26* | 30 / 9† |
+| Triage macro-F1 | 0.69* | **0.70** | 0.71* | 0.57† |
+| `actionable` precision / recall | 64% / 91%* | **89% / 69%** | 79% / 89%* | 100% / 31%† |
+| Connections found (of 56) / extra | 49 / 25* | 44 / 22 | 49 / 26* | 30 / 9† |
 | Latency p50 / p95 | 4.4 / 11.7 s* | **1.8 / 3.9 s** | 4.1 / 8.4 s* | 7.2 / 10.1 s† |
-| Tokens per triage call: input (cached) / output (thinking) | not measured | 4,199 (3,738) / 208 (0) | 2,195 (1,600) / 638 (259)* | not measured |
-| Estimated cost of the 118 calls | free tier | $0.024 | $0.056* | $0 |
+| Tokens per triage call: input (cached) / output (thinking) | not measured | 4,466 (4,065) / 214 (0) | 2,195 (1,600) / 638 (259)* | not measured |
+| Estimated cost of the calls (118; 121 for the default) | free tier | $0.024 | $0.056* | $0 |
 | Answers that were not valid JSON (pairs lost after the retry) | 0* | 9 (2)‡ | 0* | 0† |
 
-![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 42 of 56 and proposes 19 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](images/eval-connections.svg)
+![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 44 of 56 and proposes 22 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](images/eval-connections.svg)
+
+The default column is the run with chunking (2026-10-23, `deepseek-flash-top3-chunks`): 33 of its 121 calls were new and the rest replayed from the structured-prompt run, so latency and the invalid-answer row describe that earlier run (9 invalid, 2 pairs lost); in the new calls no answer was lost. Without chunking the structured prompt scored 0.69, 42 / 19 and 92% / 63%. Its 2 extra connections are the 2 pairs lost in the earlier run; on the one project with a long note, 11 of its 12 labeled connections were found with and without chunking, and the pieces added 3 extra tentative connections and 1 false actionable there (docs/JOURNEY.md).
 
 ‡ Measured before the repair of 2026-10-23: in a diagnostic run every invalid answer (6 of 30 calls on the two articles that had failed) closed the action early and ended with one brace too many, which Rekindle now repairs. The 9 answers of this run were not saved, so their shape is **not verified**, and the scores were not re-measured.
 

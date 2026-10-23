@@ -382,6 +382,10 @@ erDiagram
    - Stores granular 1024-d embeddings for **individual Markdown notes** inside project directories and subdirectories.
    - Enables fine-grained targeting: Rekindle matches content directly to specific notes (`research/combat.md`, `ideas.md`) instead of diluting them into an aggregate project blob.
    - Indexes: HNSW cosine index `project_note_snapshots_embedding_idx`; foreign key indexes on `project_snapshot_id` and `project_id`.
+4b. **`project_note_chunks` (sections of long notes, `src/vault/chunker.ts`)**:
+   - A note longer than `EMBED_NOTE_CHARS` (4,000) is split where its Markdown headings split it, then at paragraphs (then sentences, then words), into pieces of at most `CHUNK_CHARS` (1,500) with `CHUNK_OVERLAP` (200) carried into the next piece of a cut section; at most 200 pieces per note. Each row holds the heading path (`Acto 2 › La saturación`, at most 200 characters), the piece's text, a sha256 of its embedding input (`Nota: <title>\nSección: <heading path>\n\n<text>`), and the embedding with its model. The parser keeps a copy of the note with headings (`structured`) for this; the note's own text and embedding inputs are unchanged.
+   - An unchanged piece reuses the embedding of the same hash from an earlier snapshot of the project (same model), so editing a note re-embeds only the pieces it touched. Embeddings are local (I3).
+   - Used by retrieval, the backlog check and the ranking of large projects (a note's distance is the best of its own and its pieces'), by the closest-note hint (the section is named when a piece matched best), and by the Consultor (a long note can be represented by its closest section). Staleness, tentative promotions and synergies still use the note's own embedding.
 5. **`evaluations`**:
    - The verdict (`actionable`, `tentative`, `irrelevant`) and reasoning of the LLM for a given `(content_id, project_snapshot_id)`. The reasoning comes in two parts, `reasoning_connection` (what links the article to the project) and `reasoning_gap` (what it lacks to be actionable); `triage_reasoning` holds both joined, connection first, for every reader that wants plain text. Evaluations from before 2026-10-21 and re-evaluations have only `triage_reasoning`.
    - Unique composite index on `(content_id, project_snapshot_id, consumption_seq)` prevents redundant LLM evaluations.
@@ -411,7 +415,7 @@ Rekindle monitors two top-level directories: `Projects/` and `Proyectos/`.
 - Strips fenced code blocks to prevent false-positive hashtag or title matches inside code snippets.
 - Extracts the first Markdown `# H1` heading outside code blocks as the note title.
 - Does not read a file over 2 MB (`MAX_NOTE_BYTES`, an export or a dump, not a note), and leaves out a file with NUL bytes or mostly undecodable text; both are recorded as skipped. Replaces `data:` URIs and base64 runs of 1,000+ characters with `[datos binarios omitidos]` before anything else sees the text.
-- Keeps the whole note text (up to 200,000 characters, a guard against pathological files; longer notes are cut and recorded). The reconciler embeds only the first 4,000 characters of each note, and builds the project thesis and `notes_content` from that same cut text, so embeddings do not change with note length; the whole text is stored in `project_note_snapshots.content_snippet` for prompts.
+- Keeps the whole note text (up to 200,000 characters, a guard against pathological files; longer notes are cut and recorded). The reconciler embeds only the first 4,000 characters of each note, and builds the project thesis and `notes_content` from that same cut text, so embeddings do not change with note length; the whole text is stored in `project_note_snapshots.content_snippet` for prompts. Longer notes are also embedded section by section (`project_note_chunks`, above). Snapshot format v4 (`src/vault/hash.ts`) reconciles every project once so their pieces exist.
 
 ### 7.3 Hash Engine (`hash.ts`)
 - Recursively traverses the project folder for all `.md` files (excluding `suggestions.md`).
@@ -505,7 +509,7 @@ Rekindle includes a full Manifest V3 browser extension for 1-click clipping from
 Evaluation is triggered by the `evaluate_content` queue (either for newly ingested content or during project backlog reconciliation).
 
 ### Step 1: Spatial Semantic Pre-filter (PostgreSQL pgvector)
-Rekindle performs a combined vector search querying both project-level and note-level embeddings:
+Rekindle performs a combined vector search querying both project-level and note-level embeddings. Since 2026-10-23 a note's distance is the smallest of its own embedding's and its pieces' (`note_distances` in `retrieval.ts`, section 4b), and the candidate carries the heading of the piece that matched (`noteSection`). The query below shows the shape before that change:
 ```sql
 WITH latest_snapshots AS (
   SELECT DISTINCT ON (project_id) id, project_id, thesis_text, notes_content, embedding, captured_at

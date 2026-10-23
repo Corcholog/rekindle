@@ -56,14 +56,14 @@ I labeled 47 articles × 8 of my projects (376 pairs) by hand and ran Rekindle's
 
 | | Gemini 3.1 Flash Lite | **DeepSeek Flash** (default) | DeepSeek Flash, thinking on | Qwen 2.5 7B (local) |
 |---|---|---|---|---|
-| `actionable` precision / recall | 64% / 91%* | **92% / 63%** | 79% / 89%* | 100% / 31%† |
-| Connections found (of 56) / extra | 49 / 25* | 42 / 19 | 49 / 26* | 30 / 9† |
-| Triage macro-F1 | 0.69* | **0.69** | 0.71* | 0.57† |
+| `actionable` precision / recall | 64% / 91%* | **89% / 69%** | 79% / 89%* | 100% / 31%† |
+| Connections found (of 56) / extra | 49 / 25* | 44 / 22 | 49 / 26* | 30 / 9† |
+| Triage macro-F1 | 0.69* | **0.70** | 0.71* | 0.57† |
 | Latency p50 | 4.4 s* | **1.8 s** | 4.1 s* | 7.2 s† |
 
-The default column is the current prompt: since 2026-10-21 the model sees every note of the project and writes each suggestion as a headline with steps, and its reasoning as the connection first and then what is missing. \* Measured with the prompt of 2026-10-19. † Measured with the prompt before the structured text (2026-10-21), not repeated. The prompt just before the structured text scored macro-F1 0.75 and 0.72 in two runs (45 and 44 connections, `actionable` 96% / 77% and 96% / 71%); the same prompt run twice changes the verdict of 11 or 12 of the 118 pairs, so a gap of 0.03 is within noise. The structured prompt also returned 9 answers that were not valid JSON, 2 of them on both tries (in the app those fall back to the next provider). The shape found in a later diagnostic run, an action closed too early and one brace too many (6 of 6 failures there), is now repaired; whether the 9 had that shape is not verified.
+The default column is the current setup: since 2026-10-21 the model sees every note of the project and writes each suggestion as a headline with steps, and its reasoning as the connection first and then what is missing; since 2026-10-23 long notes are matched section by section (chunking), and 2 of its 44 connections are pairs whose answers failed in the run before. Without chunking the same prompt found 42 connections with 19 extra (92% / 63%, macro-F1 0.69). \* Measured with the prompt of 2026-10-19. † Measured with the prompt before the structured text (2026-10-21), not repeated. The prompt just before the structured text scored macro-F1 0.75 and 0.72 in two runs (45 and 44 connections, `actionable` 96% / 77% and 96% / 71%); the same prompt run twice changes the verdict of 11 or 12 of the 118 pairs, so a gap of 0.03 is within noise. The structured prompt also returned 9 answers that were not valid JSON, 2 of them on both tries (in the app those fall back to the next provider). The shape found in a later diagnostic run, an action closed too early and one brace too many (6 of 6 failures there), is now repaired; whether the 9 had that shape is not verified.
 
-![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 42 of 56 and proposes 19 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](docs/images/eval-connections.svg)
+![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 44 of 56 and proposes 22 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](docs/images/eval-connections.svg)
 
 What counts as a connection is partly subjective: a model can force links, and it can also find ones I had missed (after reading the thinking-on answers I changed 7 labels, which favors it). *Extra* means a pair I labeled irrelevant that the model connected. This is one labeler and a small dataset, so gaps of a few points are noise. Method, caveats, costs and the language experiments: [docs/EVALUATION.md](docs/EVALUATION.md).
 
