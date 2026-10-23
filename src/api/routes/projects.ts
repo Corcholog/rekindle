@@ -6,7 +6,7 @@ import { db } from '../../db';
 import { projects, projectSnapshots, projectNoteSnapshots, actionSuggestions, evaluations, contents, NoteIssue } from '../../db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { getCurrentVaultPath } from '../../vault/config';
-import { env } from '../../config';
+import { env, SYNTHESIS_MAX_SUGGESTIONS, SYNTHESIS_SUGGESTION_CHARS, SYNTHESIS_SUGGESTIONS_CHARS } from '../../config';
 import { writeGeneratedNote, formatResearchBrief, formatSynergyNote } from '../../vault/generatedNotes';
 import { sharedAiProvider } from '../../ai/aiProvider';
 import { languageName, outputLanguage } from '../../ai/language';
@@ -410,7 +410,7 @@ export default async function (server: FastifyInstance) {
             nb.note_path as "noteBPath",
             (na.embedding <=> nb.embedding)::float as distance
           FROM project_note_snapshots na
-          INNER JOIN project_note_snapshots nb ON na.project_id = ${pA.id}::uuid AND nb.project_id = ${pB.id}::uuid
+          INNER JOIN project_note_snapshots nb ON na.project_snapshot_id = ${snapA?.id ?? null}::uuid AND nb.project_snapshot_id = ${snapB?.id ?? null}::uuid
           WHERE na.embedding IS NOT NULL AND nb.embedding IS NOT NULL
             AND na.embedding_model = ${env.EMBED_MODEL} AND nb.embedding_model = ${env.EMBED_MODEL}
           ORDER BY distance ASC
@@ -582,8 +582,12 @@ export default async function (server: FastifyInstance) {
     const [snapA] = await db.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projA.id)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
     const [snapB] = await db.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projB.id)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
 
-    const notesA = await db.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectId, projA.id)).limit(10);
-    const notesB = await db.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectId, projB.id)).limit(10);
+    // Only each project's current notes (F-14): older snapshots hold edited and deleted notes
+    const currentNotes = (snapshotId: string | undefined) => snapshotId
+      ? db.select().from(projectNoteSnapshots).where(eq(projectNoteSnapshots.projectSnapshotId, snapshotId)).limit(10)
+      : Promise.resolve([]);
+    const notesA = await currentNotes(snapA?.id);
+    const notesB = await currentNotes(snapB?.id);
 
     const synergySynthesisSchema = z.object({
       bridgeTitle: z.string().describe('Título sugerido para la nota de puente conceptual entre ambos proyectos'),
@@ -750,7 +754,8 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
     .where(and(
       eq(actionSuggestions.projectId, id),
       eq(actionSuggestions.status, 'accepted')
-    ));
+    ))
+    .orderBy(desc(actionSuggestions.resolvedAt));
 
     if (acceptedList.length === 0) {
       return reply.status(400).send({
@@ -772,14 +777,21 @@ Propón un puente de investigación unificado entre ambos proyectos.`;
       ? (await projectNotesContext(latestSnapshot.id, null, projectFallback, 'es')).text
       : projectFallback;
 
-    // 3. Format accepted suggestions list for LLM
-    const suggestionsPrompt = acceptedList.map((s, idx) => {
-      return `[Sugerencia ${idx + 1} - ${s.actionType.toUpperCase()}]
+    // 3. Format accepted suggestions list for LLM: the most recent first, up to SYNTHESIS_MAX_SUGGESTIONS
+    // and SYNTHESIS_SUGGESTIONS_CHARS, so a project with many accepted suggestions has a bounded prompt
+    const blocks: string[] = [];
+    let blockChars = 0;
+    for (const s of acceptedList.slice(0, SYNTHESIS_MAX_SUGGESTIONS)) {
+      const block = `[Sugerencia ${blocks.length + 1} - ${s.actionType.toUpperCase()}]
 - Nota destino: ${s.targetFile || 'general'}
 - Acción propuesta: ${actionPlainText(s.suggestedAction, s.actionSteps, 'es')}
 - Observación/Aporte: ${s.observation}
-- Fuente: "${s.sourceTitle || 'Fuente web'}" (${s.sourceUri || 'N/A'})${s.userFeedback ? `\n- Feedback del usuario: ${s.userFeedback}` : ''}`;
-    }).join('\n\n---\n\n');
+- Fuente: "${s.sourceTitle || 'Fuente web'}" (${s.sourceUri || 'N/A'})${s.userFeedback ? `\n- Feedback del usuario: ${s.userFeedback}` : ''}`.substring(0, SYNTHESIS_SUGGESTION_CHARS);
+      if (blocks.length > 0 && blockChars + block.length > SYNTHESIS_SUGGESTIONS_CHARS) break;
+      blocks.push(block);
+      blockChars += block.length;
+    }
+    const suggestionsPrompt = blocks.join('\n\n---\n\n');
 
     const systemPrompt = `Eres un editor jefe y sintetizador de investigación para Obsidian.
 Tu objetivo es compilar y unificar todas las sugerencias aceptadas en un informe de investigación estructurado y coherente (Research Brief).
@@ -793,7 +805,7 @@ REGLAS:
 Notas y Borradores Actuales:
 ${projectContext}`)}
 
-${promptBlock('SUGERENCIAS_ACEPTADAS_A_SINTETIZAR', `Total de sugerencias aceptadas: ${acceptedList.length}
+${promptBlock('SUGERENCIAS_ACEPTADAS_A_SINTETIZAR', `Total de sugerencias aceptadas: ${acceptedList.length}${blocks.length < acceptedList.length ? ` (se incluyen las ${blocks.length} más recientes)` : ''}
 
 ${suggestionsPrompt}`)}`;
 

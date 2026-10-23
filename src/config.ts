@@ -66,6 +66,11 @@ export const CONSULT_SUMMARY_CHARS = 2_000;
 export const CONSULT_NOTE_CHARS = 1_800;
 export const CONSULT_LABEL_CHARS = 300;
 export const MAX_CONSULT_QUERY_CHARS = 2_000;
+// Research brief: the most recent accepted suggestions, each cut, so the prompt has an upper size
+// (plus the project's notes, NOTES_CONTEXT_CHARS) however many suggestions were accepted
+export const SYNTHESIS_MAX_SUGGESTIONS = 40;
+export const SYNTHESIS_SUGGESTION_CHARS = 3_000;
+export const SYNTHESIS_SUGGESTIONS_CHARS = 40_000;
 export const STALE_DRIFT_THRESHOLD = 0.04;
 export const PROMOTION_DELTA_THRESHOLD = 0.08;
 export const NOTE_PROMOTION_DISTANCE_THRESHOLD = 0.50;
