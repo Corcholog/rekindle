@@ -29,7 +29,14 @@ export interface EvaluationTrace {
   traceId?: string;
   /** pg-boss attempt of the job (1 = first run). */
   attempt?: number;
+  /**
+   * Why a backlog job was queued: an article never evaluated for the project, or a tentative one the
+   * project moved closer to. Jobs from before this field have none and are treated as before.
+   */
+  backlog?: BacklogReason;
 }
+
+export type BacklogReason = 'unevaluated' | 'promotion';
 
 export interface EvaluationStats {
   traceId: string;
@@ -56,7 +63,7 @@ export async function evaluateContentMatch(
     return { origin, targetProjectId, ...counts };
   };
   try {
-    await runEvaluation(contentId, targetProjectId, retrieval, traceId, stats);
+    await runEvaluation(contentId, targetProjectId, retrieval, traceId, stats, trace.backlog);
   } catch (err) {
     await recordStage({
       traceId, stage: 'evaluate_job', contentId, durationMs: Date.now() - started, ok: false,
@@ -78,6 +85,7 @@ async function runEvaluation(
   retrieval: RetrievalOptions,
   traceId: string,
   stats: EvaluationStats,
+  backlog?: BacklogReason,
 ): Promise<void> {
   log.info({ traceId, contentId, targetProjectId }, 'Evaluation started');
   
@@ -150,6 +158,22 @@ async function runEvaluation(
       log.info({ traceId, contentId, snapshotId }, 'Already evaluated; skipping');
       stats.alreadyEvaluated++;
       continue;
+    }
+
+    // F-29: a job queued because the article was never evaluated for this project can run after
+    // another job evaluated it against an earlier snapshot. That pair is done: a second call would
+    // pay again and add a second suggestion. Promotions are re-evaluations by design and go on.
+    if (backlog === 'unevaluated') {
+      const [earlier] = await db.select({ id: evaluations.id })
+        .from(evaluations)
+        .innerJoin(projectSnapshots, eq(evaluations.projectSnapshotId, projectSnapshots.id))
+        .where(and(eq(evaluations.contentId, contentId), eq(projectSnapshots.projectId, projectId), eq(evaluations.consumptionSeq, content.consumptionSeq)))
+        .limit(1);
+      if (earlier) {
+        log.info({ traceId, contentId, projectId }, 'Evaluated for this project since the backlog job was queued; skipping');
+        stats.alreadyEvaluated++;
+        continue;
+      }
     }
 
     log.info({ traceId, contentId, snapshotId, rank, matchLevel: candidate.level, distance: candidate.distance }, 'Triage started');
@@ -265,6 +289,11 @@ async function runEvaluation(
  * evaluations the project's latest snapshot moved closer to.
  */
 export async function findBacklogUnevaluatedContents(projectId: string, limit = 100): Promise<string[]> {
+  return (await findBacklogCandidates(projectId, limit)).map(c => c.contentId);
+}
+
+/** The backlog of a project's latest snapshot, each with why it qualifies. */
+export async function findBacklogCandidates(projectId: string, limit = 100): Promise<{ contentId: string; reason: BacklogReason }[]> {
   const [latestSnapshot] = await db.select({
     id: projectSnapshots.id,
     embedding: projectSnapshots.embedding,
@@ -383,10 +412,11 @@ export async function findBacklogUnevaluatedContents(projectId: string, limit = 
   // An article never evaluated for this project goes to the model only if the project is among the
   // article's closest TOP_K_PROJECTS_LIMIT, the same cutoff as when it was clipped. Tentative
   // promotions were evaluated for this project already and moved closer, so they always qualify.
-  const kept: string[] = [];
+  const kept: { contentId: string; reason: BacklogReason }[] = [];
   for (const row of result.rows as unknown as { id: string; promotion: boolean }[]) {
     if (kept.length >= limit) break;
-    if (row.promotion || await projectInTopK(row.id, projectId, embedModel)) kept.push(row.id);
+    if (row.promotion) kept.push({ contentId: row.id, reason: 'promotion' });
+    else if (await projectInTopK(row.id, projectId, embedModel)) kept.push({ contentId: row.id, reason: 'unevaluated' });
   }
   return kept;
 }
@@ -405,20 +435,20 @@ async function projectInTopK(contentId: string, projectId: string, embedModel: s
  * Option A: Automatically enqueues top relevant unevaluated past contents for a reactivated project.
  */
 export async function enqueueProjectBacklogEvaluations(projectId: string, limit = 100): Promise<string[]> {
-  const contentIds = await findBacklogUnevaluatedContents(projectId, limit);
-  if (contentIds.length === 0) {
+  const candidates = await findBacklogCandidates(projectId, limit);
+  if (candidates.length === 0) {
     return [];
   }
 
-  log.info({ projectId, contents: contentIds.length }, 'Enqueueing backlog evaluations');
+  log.info({ projectId, contents: candidates.length }, 'Enqueueing backlog evaluations');
 
-  for (const contentId of contentIds) {
+  for (const { contentId, reason } of candidates) {
     try {
-      await boss.send('evaluate_content', { contentId, targetProjectId: projectId }, EVALUATE_JOB_OPTIONS);
+      await boss.send('evaluate_content', { contentId, targetProjectId: projectId, backlog: reason }, EVALUATE_JOB_OPTIONS);
     } catch (err) {
       log.warn({ err, projectId, contentId }, 'Could not enqueue a backlog evaluation');
     }
   }
 
-  return contentIds;
+  return candidates.map(c => c.contentId);
 }

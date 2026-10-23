@@ -571,7 +571,7 @@ For each candidate project under the 0.6 cutoff:
 
 ### Step 3: Backlog Re-evaluation & Tentative Promotions
 When a project's notes change:
-- `findBacklogUnevaluatedContents`: Evaluates ready contents that were never checked against the project, within the 0.6 threshold, **only if the project is among the content's `TOP_K_PROJECTS_LIMIT` (3) closest projects**, checked with the same `retrieveCandidates` call as ingestion. Without that check every note edit sent the project's rank-4+ pairs to the model. At most 100 contents per snapshot; 500 candidates are read before the check.
+- `findBacklogUnevaluatedContents`: Evaluates ready contents that were never checked against the project, within the 0.6 threshold, **only if the project is among the content's `TOP_K_PROJECTS_LIMIT` (3) closest projects**, checked with the same `retrieveCandidates` call as ingestion. Without that check every note edit sent the project's rank-4+ pairs to the model. At most 100 contents per snapshot; 500 candidates are read before the check. Each queued job carries why it was queued (`backlog: 'unevaluated' | 'promotion'`); an `unevaluated` job that runs after another job evaluated the pair, for any snapshot of the project, is skipped (F-29), so a late job never pays twice or adds a second suggestion.
 - **Tentative Promotion Engine**: If a past evaluation was `tentative`, Rekindle automatically checks if:
   - The project moved closer to the content by at least `PROMOTION_DELTA_THRESHOLD` (`0.08`), OR
   - A new or updated note in the project has strong affinity (`< 0.50` distance).

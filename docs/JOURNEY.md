@@ -317,7 +317,8 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
   - F-15: the expected burst on remount does not happen (a missing folder hashes as empty, and an unchanged folder makes no snapshot), but the unmount left every project inactive until a restart, because the unchanged hash returned before reactivating it. It is reactivated now (`129c98f`).
   - F-28: a model writes accented names composed (NFC) while macOS often stores them decomposed (NFD), so a named target note fell back to the closest one; names are compared in NFC and the stored path is kept (`ab35190`).
 - **Evidence:** `tests/synergy_synthesis_limits.test.ts`, `tests/extension_queue.test.ts`, `tests/vault_remount.test.ts`, `tests/failure_target_path.test.ts`; each new test fails on the code before its fix.
-- **Outcome / lesson:** F-29 (backlog jobs racing the watcher) was investigated and reported to the owner before any change (below).
+  - F-29: most overlaps of backlog jobs and the watcher were already safe (one reconcile per project at a time, idempotent jobs, a unique index per snapshot), but a backlog job queued because an article was never evaluated for a project could run after another job had evaluated it against an earlier snapshot. A probe showed a second paid call and a second pending suggestion for the pair. Backlog jobs now carry why they were queued, and an "unevaluated" job for a pair evaluated since is skipped; tentative promotions still re-evaluate (`tests/backlog_race.test.ts`). How often this happened on the owner's vault is **not measured**.
+- **Outcome / lesson:** the audit's description of F-15 predicted a burst that the code does not produce; the bug it hid was the opposite (projects left inactive). Each fix here was written as a failing test first.
 
 ## Bugs and vulnerabilities found
 
