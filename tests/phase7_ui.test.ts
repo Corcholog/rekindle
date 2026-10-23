@@ -678,7 +678,7 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
   it('Feature 5: GET /api/projects/synergies detecta sinergias y puentes semánticos entre proyectos activos', async () => {
     const { projects, projectSnapshots, projectNoteSnapshots } = await import('../src/db/schema');
     const { db: drizzleDb } = await import('../src/db/index');
-    const { eq } = await import('drizzle-orm');
+    const { eq, desc } = await import('drizzle-orm');
 
     // Create a second active project with snapshot & note
     const [projB] = await drizzleDb.insert(projects).values({
@@ -703,11 +703,13 @@ describe('Phase 7: Web UI API & Static Serving Integration Tests', () => {
       .set({ embedding: vectorA, embeddingModel: 'bge-m3' })
       .where(eq(projectSnapshots.projectId, projectId));
 
-    // Seed note snapshots for both projects
+    // Seed note snapshots for both projects, each in its own project's latest snapshot (F-14: only
+    // those count)
+    const [snapA] = await drizzleDb.select().from(projectSnapshots).where(eq(projectSnapshots.projectId, projectId)).orderBy(desc(projectSnapshots.capturedAt)).limit(1);
     await drizzleDb.insert(projectNoteSnapshots).values([
       {
         projectId,
-        projectSnapshotId: snapB.id, // reference valid snap
+        projectSnapshotId: snapA.id,
         noteTitle: 'Arquitectura de Agentes',
         notePath: 'Projects/AI_Agents/architecture.md',
         contentSnippet: 'Coordinación de agentes pub/sub y memoria distribuida.',
