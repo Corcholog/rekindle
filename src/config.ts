@@ -52,6 +52,9 @@ export const TOP_K_PROJECTS_LIMIT = 3;
 export const NOTES_CONTEXT_CHARS = 60_000;
 // Characters of an article, transcript or clipped selection that Rekindle reads and summarizes
 export const MAX_ARTICLE_CHARS = 50_000;
+// Fewer characters than this from a page, with nothing selected, is held for the owner to paste the
+// text: a cookie wall, a paywall or a page built by scripts (real articles in the eval set: 3,841 or more)
+export const MIN_ARTICLE_CHARS = 500;
 // Largest ingest request accepted; the extension cuts selections to MAX_ARTICLE_CHARS before sending
 export const MAX_INGEST_BODY_BYTES = 256 * 1024;
 // Consultor: the library items and notes closest to the question, each cut (titles, sources and

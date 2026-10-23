@@ -83,7 +83,7 @@ describe('Web UI renders untrusted text as text', () => {
     }).returning();
     readyContentId = content.id;
     await db.insert(schema.contents).values({
-      uri: 'https://example.com/fallo', title: XSS, ingestStatus: 'failed', ingestStatusReason: XSS,
+      uri: 'https://example.com/fallo', title: XSS, ingestStatus: 'failed', ingestStatusReason: XSS, ingestFailureKind: 'pdf',
     });
     // A later tentative evaluation of the same article for Alfa, with the reasoning in two parts
     await db.insert(schema.evaluations).values({
@@ -164,6 +164,15 @@ describe('Web UI renders untrusted text as text', () => {
         await waitFor(() => doc().querySelectorAll('.content-item-card').length === 2, 'the reading list');
         expect(injected()).toEqual(clean);
         expect(doc().body.textContent).toContain('<img src=x onerror="window.__xss=1">');
+
+        // A failed item says why in the interface language, keeps the raw reason as text, and offers to paste
+        const failure = doc().querySelector('.ingest-failure')!;
+        expect(failure.textContent).toContain(lang === 'en' ? 'It is a PDF' : 'Es un PDF');
+        expect(failure.querySelector('.ingest-failure-detail')!.textContent).toContain('<svg onload');
+        (failure.querySelector('.btn-paste') as HTMLButtonElement).click();
+        await waitFor(() => !!failure.querySelector('.paste-form textarea'), 'the paste box');
+        expect((failure.querySelector('.paste-form textarea') as HTMLTextAreaElement).maxLength).toBe(50000);
+        expect(injected()).toEqual(clean);
 
         // Each project's verdict opens in place to show the full reasoning, still as text
         const toggle = doc().querySelector('.evaluation-toggle') as HTMLButtonElement;

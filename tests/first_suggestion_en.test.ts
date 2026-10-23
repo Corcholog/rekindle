@@ -9,11 +9,12 @@ defineFirstSuggestionSuite({
   lighthouseTitle: 'The Lighthouse at the End of the World',
   nestedNote: 'characters/the_keeper.md',
   matchUrl: 'https://en.wikipedia.org/wiki/Lighthouse',
-  matchHtml: '<html><head><title>Lighthouse</title></head><body><article><p>A lighthouse is a tower on the coast with a powerful light that guides ships through the night and the fog. The Fresnel lens concentrates the beam, and the keeper keeps the light burning through the storms.</p></article></body></html>',
+  // Each paragraph repeated: a real article is longer than MIN_ARTICLE_CHARS
+  matchHtml: '<html><head><title>Lighthouse</title></head><body><article><p>A lighthouse is a tower on the coast with a powerful light that guides ships through the night and the fog. The Fresnel lens concentrates the beam, and the keeper keeps the light burning through the storms.</p><p>A lighthouse is a tower on the coast with a powerful light that guides ships through the night and the fog. The Fresnel lens concentrates the beam, and the keeper keeps the light burning through the storms.</p><p>A lighthouse is a tower on the coast with a powerful light that guides ships through the night and the fog. The Fresnel lens concentrates the beam, and the keeper keeps the light burning through the storms.</p></article></body></html>',
   matchWord: 'keeper',
   matchSummary: 'A lighthouse is a tower on the coast whose light guides ships at night and in fog; the keeper keeps the light burning through the storms.',
   controlUrl: 'https://en.wikipedia.org/wiki/Photosynthesis',
-  controlHtml: '<html><head><title>Photosynthesis</title></head><body><article><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p></article></body></html>',
+  controlHtml: '<html><head><title>Photosynthesis</title></head><body><article><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p><p>Chlorophyll in leaves absorbs solar energy and turns carbon dioxide and water into glucose and oxygen inside the chloroplast.</p></article></body></html>',
   controlSummary: 'Photosynthesis turns solar energy into glucose and oxygen thanks to the chlorophyll in leaves.',
   targetNote: 'lighthouse_research.md',
   action: {

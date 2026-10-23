@@ -478,9 +478,13 @@ DB Insert (new URL only; a known URL is not re-queued unless its previous ingest
   ▼
 pg-boss 'ingest_url' job
   │
+  ├───► Pasted text (contents.pasted_text): the owner's text, no fetch
   ├───► YouTube: oEmbed metadata + youtube-transcript
   └───► Web Page: fetchPublicPage (every resolved IP and redirect hop must be public, 15s timeout,
          5MB streamed cap, content-type check) + Readability
+         · page unreadable and a selection sent: the selection is the article
+         · under MIN_ARTICLE_CHARS (500) extracted with nothing selected: held as too_little_text
+         · any failure: status 'failed' + ingest_failure_kind (src/workers/ingestFailure.ts)
   │
   ▼
 LLM Summarization (Spanish summary schema, raw text capped at 50k chars; only the summary is embedded)
@@ -640,11 +644,14 @@ Base URL: `http://<HOST>:<PORT>` (default `http://127.0.0.1:3000`).
 
 ### 1. Ingestion & Contents
 - `POST /api/ingest`
-  - Body: `{ url: string, title?: string, selection?: string }` (public `http(s)` URLs only)
-  - Returns: `202 { message, contentId, status: 'pending' }` for a new URL. For a known URL, `200` with the same shape: `status: 'pending'` if a failed ingest is retried, otherwise its current status (nothing is re-queued).
+  - Body: `{ url: string, title?: string, selection?: string, text?: string }` (public `http(s)` URLs only). With `text` (the article pasted by the owner) the page is not fetched; the text is cut at 50,000 characters. With only a `selection`, the selection becomes the article when the page cannot be read.
+  - Returns: `202 { message, contentId, status: 'pending' }` for a new URL. For a known URL, `200` with the same shape: `status: 'pending'` if a failed ingest is retried (with the pasted text, if any), otherwise its current status (nothing is re-queued).
+- `POST /api/contents/:id/text` (web UI only; the request guard keeps the extension to `/api/ingest`)
+  - Body: `{ text: string }` (not blank; at most 256 KB of request, cut at 50,000 characters)
+  - Only for an item whose ingest failed: stores the text as the article (`pasted_text = true`), clears the failure and queues it without a fetch. `200 { contentId, status: 'pending' }`; `404 content_not_found`; `409 not_failed` for any other status (an item already read keeps its text, I6).
 - `GET /api/contents`
   - Query: `status?`, `limit?` (default 30), `offset?` (default 0)
-  - Returns: List of contents with evaluation counts, verdicts, spatial affinity flag, and active processing status.
+  - Returns: List of contents with evaluation counts, verdicts, spatial affinity flag, and active processing status. A failed item carries `ingestFailureKind`: `pdf`, `unsupported_type`, `blocked` (401/403/429/451), `not_found` (404/410), `fetch_failed`, `no_text`, `too_little_text`, `no_transcript`, `not_allowed` (local or private address) or `other`; Reading explains it in the interface language and offers **Paste the text** (except for `not_allowed`) and **Retry** (only where a retry can help). `pastedText` marks items whose text the owner pasted.
 - `GET /api/contents/:id`
   - Returns: Full content metadata, clean text preview, summary, and evaluations list.
 

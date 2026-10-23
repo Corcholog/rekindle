@@ -111,6 +111,7 @@ The language of the model's **instructions** is not a setting: it stays Spanish 
 |---|---|---|
 | `/api/ingest` | `POST` | Queue a URL (`202` new, `200` re-queued) |
 | `/api/contents`, `/api/contents/:id` | `GET` | Reading feed, status indicators, and content details |
+| `/api/contents/:id/text` | `POST` | Paste the text of a link that failed (PDF, blocked page, too little text); analyzed without fetching the page |
 | `/api/library/consult` | `POST` | Research Partner over the library items and notes closest to the question |
 | `/api/projects` | `GET` | Projects list with counters and note metadata |
 | `/api/projects/synergies` | `GET` | Cross-project thematic synergies via note-to-note cosine distance |

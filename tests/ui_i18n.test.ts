@@ -47,7 +47,7 @@ describe('web UI dictionaries', () => {
   });
 
   it('label every error code the API sends', async () => {
-    const api = (await Promise.all(['ingest', 'library', 'projects', 'settings', 'suggestions'].map(f => fs.readFile(`src/api/routes/${f}.ts`, 'utf-8')))).join('\n')
+    const api = (await Promise.all(['ingest', 'library', 'projects', 'settings', 'suggestions', 'contents'].map(f => fs.readFile(`src/api/routes/${f}.ts`, 'utf-8')))).join('\n')
       + await fs.readFile('src/api/server.ts', 'utf-8');
     const codes = [...new Set([...api.matchAll(/code: '(\w+)'/g)].map(m => m[1]))];
     expect(codes.length).toBeGreaterThan(5);

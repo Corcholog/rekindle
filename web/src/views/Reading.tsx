@@ -2,18 +2,24 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowUpRight, ChevronRight, Link2, RefreshCw, Puzzle, Loader2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import { api, ApiError, type ContentDetail, type ContentItem, type IngestStatus } from '@/lib/api';
+import { api, ApiError, type ContentDetail, type ContentItem, type IngestFailureKind, type IngestStatus } from '@/lib/api';
 import { cn, safeHref } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/field';
+import { Input, Select, Textarea } from '@/components/ui/field';
 import { Dialog } from '@/components/ui/dialog';
 import { VerdictChip } from '@/components/VerdictChip';
 
 const IN_FLIGHT: IngestStatus[] = ['pending', 'extracting', 'summarizing', 'embedding'];
+// Same limit as MAX_ARTICLE_CHARS in src/config.ts: the server cuts anything longer
+const MAX_PASTE_CHARS = 50000;
+// Failures a retry can fix; the others need the text pasted (or nothing helps: not_allowed)
+const RETRYABLE: (IngestFailureKind | null | undefined)[] = ['fetch_failed', 'blocked', 'other', null, undefined];
 
 export function Reading({ refreshKey, onChange }: { refreshKey: number; onChange: () => void }) {
   const { t, tRich, apiError, locale, lang } = useI18n();
   const [url, setUrl] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [filter, setFilter] = useState<IngestStatus | ''>('');
@@ -51,8 +57,10 @@ export function Reading({ refreshKey, onChange }: { refreshKey: number; onChange
     setSubmitting(true);
     setFormError(null);
     try {
-      const { status, data } = await api.ingest(value);
+      const { status, data } = await api.ingest(value, pasteOpen ? pasted : undefined);
       setUrl('');
+      setPasted('');
+      setPasteOpen(false);
       if (status === 202) toast.success(t('inbox.queued'));
       else toast.info(data.status === 'pending' ? t('inbox.retrying') : t('inbox.alreadyInLibrary'));
       await load();
@@ -92,6 +100,15 @@ export function Reading({ refreshKey, onChange }: { refreshKey: number; onChange
             {t('inbox.submit')}
           </Button>
         </form>
+        <button type="button" className="paste-toggle mt-2 text-sm text-ink-2 underline-offset-2 hover:text-ink hover:underline" aria-expanded={pasteOpen} aria-controls="paste-input" onClick={() => setPasteOpen(open => !open)}>
+          {t('inbox.pasteToggle')}
+        </button>
+        {pasteOpen && (
+          <div className="mt-2">
+            <label htmlFor="paste-input" className="sr-only">{t('feed.pasteLabel')}</label>
+            <Textarea id="paste-input" form="ingest-form" rows={6} maxLength={MAX_PASTE_CHARS} value={pasted} onChange={e => setPasted(e.target.value)} placeholder={t('feed.pastePlaceholder')} />
+          </div>
+        )}
         {formError && <p role="alert" className="mt-3 text-sm text-danger">{formError}</p>}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-3">
           <span>{t('inbox.clipperText')}</span>
@@ -135,7 +152,7 @@ export function Reading({ refreshKey, onChange }: { refreshKey: number; onChange
 
         <ul className="grid gap-3">
           {(items ?? []).map(item => (
-            <ContentRow key={item.id} item={item} locale={locale} onOpen={() => setDetailId(item.id)} onRetry={() => retry(item.uri)} />
+            <ContentRow key={item.id} item={item} locale={locale} onOpen={() => setDetailId(item.id)} onRetry={() => retry(item.uri)} onPasted={load} />
           ))}
         </ul>
       </section>
@@ -146,8 +163,28 @@ export function Reading({ refreshKey, onChange }: { refreshKey: number; onChange
   );
 }
 
-function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; locale: string; onOpen: () => void; onRetry: () => void }) {
-  const { t } = useI18n();
+function ContentRow({ item, locale, onOpen, onRetry, onPasted }: { item: ContentItem; locale: string; onOpen: () => void; onRetry: () => void; onPasted: () => void }) {
+  const { t, apiError } = useI18n();
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const [sending, setSending] = useState(false);
+  const kind = item.ingestFailureKind;
+  const sendPasted = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pasted.trim()) return;
+    setSending(true);
+    try {
+      await api.pasteText(item.id, pasted);
+      toast.success(t('feed.pasteQueued'));
+      setPasteOpen(false);
+      setPasted('');
+      onPasted();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? apiError(err.body, 'error.paste') : t('error.paste'));
+    } finally {
+      setSending(false);
+    }
+  };
   const title = item.title || t('feed.extractingTitle');
   const statusLabel = t(`ingestStatus.${item.ingestStatus}`);
   const ready = item.ingestStatus === 'ready';
@@ -190,15 +227,40 @@ function ContentRow({ item, locale, onOpen, onRetry }: { item: ContentItem; loca
         </ul>
       )}
 
-      {item.ingestStatus === 'failed' && item.ingestStatusReason && (
-        <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
-          <span><strong>{t('ingestStatus.failed')}:</strong> {item.ingestStatusReason}</span>
-          <Button size="sm" onClick={onRetry}>{t('feed.retry')}</Button>
+      {item.ingestStatus === 'failed' && (
+        <div role="alert" className="ingest-failure mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              <strong>{t('ingestStatus.failed')}:</strong> {kind ? t(`ingestFailure.${kind}`) : item.ingestStatusReason}
+            </span>
+            <span className="flex flex-wrap gap-2">
+              {kind !== 'not_allowed' && !pasteOpen && (
+                <Button size="sm" className="btn-paste" onClick={() => setPasteOpen(true)}>{t('feed.pasteText')}</Button>
+              )}
+              {RETRYABLE.includes(kind) && <Button size="sm" variant="ghost" onClick={onRetry}>{t('feed.retry')}</Button>}
+            </span>
+          </div>
+          {kind && item.ingestStatusReason && (
+            <p className="ingest-failure-detail mt-1 text-xs text-ink-3">{t('feed.failureDetail')}: {item.ingestStatusReason}</p>
+          )}
+          {pasteOpen && (
+            <form onSubmit={sendPasted} className="paste-form mt-2 grid gap-2">
+              <label htmlFor={`paste-${item.id}`} className="sr-only">{t('feed.pasteLabel')}</label>
+              <Textarea id={`paste-${item.id}`} rows={6} required maxLength={MAX_PASTE_CHARS} value={pasted} onChange={e => setPasted(e.target.value)} placeholder={t('feed.pastePlaceholder')} />
+              <span className="flex flex-wrap justify-end gap-2">
+                <Button size="sm" variant="ghost" type="button" onClick={() => setPasteOpen(false)}>{t('feed.pasteCancel')}</Button>
+                <Button size="sm" variant="primary" type="submit" disabled={sending || !pasted.trim()}>
+                  {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}{t('feed.pasteSubmit')}
+                </Button>
+              </span>
+            </form>
+          )}
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-3">
         <span>{when}</span>
+        {item.pastedText && <span className="pasted-tag rounded-full border border-line px-2 py-0.5">{t('feed.pastedTag')}</span>}
         <span>
           {item.counts.evaluations > 0
             ? t('feed.evaluations', { n: item.counts.evaluations, actionable: item.counts.actionable, tentative: item.counts.tentative || 0 })

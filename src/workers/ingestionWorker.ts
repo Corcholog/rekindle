@@ -5,7 +5,8 @@ import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { sharedAiProvider } from '../ai/aiProvider';
-import { env, MAX_ARTICLE_CHARS } from '../config';
+import { env, MAX_ARTICLE_CHARS, MIN_ARTICLE_CHARS } from '../config';
+import { classifyIngestFailure, TooLittleTextError } from './ingestFailure';
 import { summarizeText } from '../ai/summarize';
 import * as net from 'net';
 import { fetchPublicPage, isBlockedAddress } from '../net/safeFetch';
@@ -135,11 +136,13 @@ export const setupIngestionWorker = async () => {
     for (const job of jobArray) {
       if (!job || !job.data) continue;
       
-      const { contentId, url, initialTitle, selection, traceId: jobTraceId } = job.data as {
+      const { contentId, url, initialTitle, selection, pasted, traceId: jobTraceId } = job.data as {
         contentId: string;
         url: string;
         initialTitle?: string;
         selection?: string;
+        /** The owner pasted the text (POST /api/contents/:id/text or /api/ingest with text): no fetch. */
+        pasted?: boolean;
         traceId?: string;
       };
       // Jobs enqueued before tracing existed carry no trace ID
@@ -161,7 +164,7 @@ export const setupIngestionWorker = async () => {
 
         // 2. Update status to extracting
         await db.update(contents)
-          .set({ ingestStatus: 'extracting', ingestStatusReason: null })
+          .set({ ingestStatus: 'extracting', ingestStatusReason: null, ingestFailureKind: null })
           .where(eq(contents.id, contentId));
 
         // 2. Extract content (YouTube vs Standard Web Page)
@@ -169,9 +172,31 @@ export const setupIngestionWorker = async () => {
         let title: string;
         let channelOrDomain: string | null = null;
 
-        if (isYouTubeUrl(url)) {
-          const yt = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'youtube' } },
-            () => extractYouTubeContent(url), r => ({ chars: r.rawText.length }));
+        // Text the owner gave instead of the page: their own paste, or a selection when the page
+        // cannot be read (a PDF in the browser's viewer, a blocked site)
+        const ownText = (fallback: unknown) => {
+          const text = clipText(null, selection);
+          if (text === null) throw fallback;
+          return { text, title: initialTitle?.trim() || new URL(url).hostname.replace(/^www\./, '') };
+        };
+
+        if (pasted) {
+          const [row] = await db.select({ rawText: contents.rawText, title: contents.title }).from(contents).where(eq(contents.id, contentId));
+          // Stored already trimmed and cut by the API
+          const text = (row?.rawText ?? '').substring(0, MAX_ARTICLE_CHARS);
+          if (!text.trim()) throw new Error('Pasted text is empty');
+          rawText = text;
+          channelOrDomain = new URL(url).hostname.replace(/^www\./, '');
+          title = row?.title?.trim() || initialTitle?.trim() || channelOrDomain;
+        } else if (isYouTubeUrl(url)) {
+          let yt: { title: string; rawText: string; author: string };
+          try {
+            yt = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'youtube' } },
+              () => extractYouTubeContent(url), r => ({ chars: r.rawText.length }));
+          } catch (err) {
+            const own = ownText(err);
+            yt = { title: own.title, rawText: own.text, author: '' };
+          }
           rawText = yt.rawText;
           channelOrDomain = yt.author || 'YouTube';
           title = yt.author && !yt.title.toLowerCase().includes(yt.author.toLowerCase())
@@ -179,14 +204,25 @@ export const setupIngestionWorker = async () => {
             : yt.title;
         } else {
           // Public-internet only: every redirect hop and resolved IP is checked, body capped at 5 MB
-          const page = await timeStage({ ...stage, stage: 'fetch', attrs: { source: 'web' } },
-            () => fetchPublicPage(url), r => ({ bytes: r.text.length }));
-          const html = page.text;
-          const article = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'web' } }, async () => {
-            const doc = new JSDOM(html, { url: page.finalUrl });
-            return new Readability(doc.window.document).parse();
-          }, r => ({ chars: r?.textContent?.length ?? 0 }));
+          let article: { textContent?: string | null; title?: string | null; byline?: string | null } | null;
+          try {
+            const page = await timeStage({ ...stage, stage: 'fetch', attrs: { source: 'web' } },
+              () => fetchPublicPage(url), r => ({ bytes: r.text.length }));
+            const html = page.text;
+            article = await timeStage({ ...stage, stage: 'extract', attrs: { source: 'web' } }, async () => {
+              const doc = new JSDOM(html, { url: page.finalUrl });
+              return new Readability(doc.window.document).parse();
+            }, r => ({ chars: r?.textContent?.length ?? 0 }));
+          } catch (err) {
+            // Rekindle could not read the page; the owner's selection, if any, is the article
+            if (err instanceof Error && /SSRF|Protocol '|Protocolo '/.test(err.message)) throw err;
+            const own = ownText(err);
+            article = { textContent: own.text, title: own.title, byline: null };
+          }
 
+          const extracted = (article?.textContent ?? '').trim();
+          // A cookie wall, a paywall or a page built by scripts gives back almost nothing
+          if (!selection?.trim() && extracted.length > 0 && extracted.length < MIN_ARTICLE_CHARS) throw new TooLittleTextError(extracted.length);
           const text = clipText(article?.textContent, selection);
           if (text === null) throw new Error('Readability failed to extract text content');
           rawText = text;
@@ -236,14 +272,15 @@ export const setupIngestionWorker = async () => {
         await db.update(contents)
           .set({ 
             ingestStatus: 'failed',
-            ingestStatusReason: error.message || 'Unknown error'
+            ingestStatusReason: error.message || 'Unknown error',
+            ingestFailureKind: classifyIngestFailure(error.message || '', url),
           })
           .where(eq(contents.id, contentId));
 
         // For permanent / non-retryable errors (e.g. 404, bad URL, unsupported format, no transcripts),
         // do not rethrow to pg-boss so it doesn't wastefully retry.
         const errMsg = error.message || '';
-        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No subtitles or transcript|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Access denied \(SSRF\)|Acceso denegado \(SSRF\)|Protocol '|Protocolo '|more than \d+ redirects/i.test(errMsg);
+        const isNonRetryable = /Failed to fetch URL: (?:400|401|403|404|410|422)|No subtitles or transcript|No se encontraron subtítulos|Unsupported content type|Content size exceeds|Downloaded content exceeds|Invalid URL|Readability failed|Too little text extracted|Pasted text is empty|Access denied \(SSRF\)|Acceso denegado \(SSRF\)|Protocol '|Protocolo '|more than \d+ redirects/i.test(errMsg);
         log.error({ err: error, traceId, contentId, attempt, retryable: !isNonRetryable }, 'Ingestion failed');
         await recordStage({
           ...stage, stage: 'ingest_job', durationMs: Date.now() - jobStarted, ok: false, errorKind: errorKindOf(error),

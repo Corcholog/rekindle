@@ -27,6 +27,8 @@ export type SuggestionStatus = 'active' | 'pending' | 'tentative' | 'accepted' |
 export type Language = 'es' | 'en';
 export type DiscardReason = 'unrelated' | 'obvious' | 'wrong_note' | 'poorly_worded' | 'other';
 
+export type IngestFailureKind = 'pdf' | 'unsupported_type' | 'blocked' | 'not_found' | 'fetch_failed' | 'no_text' | 'too_little_text' | 'no_transcript' | 'not_allowed' | 'other';
+
 export interface ContentItem {
   id: string;
   uri: string;
@@ -34,6 +36,10 @@ export interface ContentItem {
   channelOrDomain?: string | null;
   ingestStatus: IngestStatus;
   ingestStatusReason: string | null;
+  /** Why a failed ingest failed; the row explains it and offers to paste the text. */
+  ingestFailureKind?: IngestFailureKind | null;
+  /** The owner pasted the text; the page was not fetched. */
+  pastedText?: boolean;
   consumedAt: string;
   counts: { evaluations: number; actionable: number; tentative: number; irrelevant: number; suggestions: number };
   evaluationsList?: {
@@ -161,7 +167,8 @@ export interface SystemStatus { isProcessing: boolean; evaluatingJobs: number; i
 
 export const api = {
   status: () => get<SystemStatus>('/api/system/status'),
-  ingest: (url: string) => request<{ contentId: string; status: string }>('POST', '/api/ingest', { url }),
+  ingest: (url: string, text?: string) => request<{ contentId: string; status: string }>('POST', '/api/ingest', text?.trim() ? { url, text } : { url }),
+  pasteText: (id: string, text: string) => send<{ contentId: string; status: string }>('POST', `/api/contents/${id}/text`, { text }),
   contents: (status?: IngestStatus) => get<{ items: ContentItem[]; total: number }>(`/api/contents?limit=50${status ? `&status=${status}` : ''}`),
   content: (id: string) => get<ContentDetail>(`/api/contents/${id}`),
   consult: (query: string) => send<ConsultAnswer>('POST', '/api/library/consult', { query }),

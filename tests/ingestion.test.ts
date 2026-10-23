@@ -49,7 +49,7 @@ describe('Ingestion Pipeline Integration', () => {
     // Mock fetch to simulate downloading an article
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      text: async () => `<html><head><title>Test Article</title></head><body><p>Este es un articulo de prueba sobre inteligencia artificial. Habla sobre redes neuronales y machine learning.</p></body></html>`
+      text: async () => `<html><head><title>Test Article</title></head><body>${'<p>Este es un articulo de prueba sobre inteligencia artificial. Habla sobre redes neuronales y machine learning.</p>'.repeat(5)}</body></html>`
     } as any);
   }, 300000);
 

@@ -20,6 +20,8 @@ import type { NoteIssueReason } from '../vault/parser';
 
 /** A note the reconciler left out or changed; see project_snapshots.note_issues. */
 export interface NoteIssue { path: string; reason: NoteIssueReason; bytes: number }
+/** Why an ingest failed; every kind except not_allowed and other can be fixed by pasting the text. */
+export type IngestFailureKind = 'pdf' | 'unsupported_type' | 'blocked' | 'not_found' | 'fetch_failed' | 'no_text' | 'too_little_text' | 'no_transcript' | 'not_allowed' | 'other';
 /** One step of a suggested action (src/evaluator/actionSteps.ts); `note` is a validated project note path. */
 export interface ActionStep { note: string | null; noteIsNew: boolean; where: string | null; change: string; text: string | null }
 
@@ -62,6 +64,10 @@ export const contents = pgTable('contents', {
   consumptionSeq: integer('consumption_seq').default(1).notNull(),
   ingestStatus: ingestStatusEnum('ingest_status').default('pending').notNull(),
   ingestStatusReason: text('ingest_status_reason'),
+  /** Why a failed ingest failed, as a code the UI explains (src/workers/ingestFailure.ts); null otherwise. */
+  ingestFailureKind: text('ingest_failure_kind').$type<IngestFailureKind>(),
+  /** The owner pasted the text: the page is never fetched. */
+  pastedText: boolean('pasted_text').default(false).notNull(),
   // Correlation ID of the ingestion that produced this row (Phase 4)
   traceId: uuid('trace_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

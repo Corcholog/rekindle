@@ -301,6 +301,13 @@ A factual record of what was decided, tried, broken, and fixed while taking Loom
 - **Evidence:** `tests/language.test.ts` (field order and the rule, both languages); result file `*-deepseek-flash-top3-reason-first-private.json`.
 - **Outcome / lesson:** the order of an answer's fields is part of the prompt: reasoning first made the model consistent and much stricter. The README and EVALUATION tables now show this as the default.
 
+### 2026-10-23 — Paste the text when a page cannot be read
+- **Context:** the owner noted that some links never work (PDF readers, sites that block, pages built by scripts) and asked for a way to paste the text, with Rekindle saying when that happened. A PDF failed with a raw error, and a cookie wall or a script-built page could "succeed" with almost no text and nothing to warn about it.
+- **What happened:** every failed ingest now records a code (`contents.ingest_failure_kind`, migration 0013): pdf, unsupported_type, blocked, not_found, fetch_failed, no_text, too_little_text, no_transcript, not_allowed or other. A page that gives back under 500 characters with nothing selected is held as `too_little_text` instead of being summarized (the 29 real articles of the eval set are 3,841 characters or longer; the 18 shorter ones are synthetic). Reading explains each code in the interface language and offers **Paste the text**; the add-link form has the same option. Pasted text is stored as the article (`pasted_text`) and analyzed without fetching the page; `POST /api/contents/:id/text` takes it only for a failed item. When a page cannot be read and the extension sent a selection, the selection is the article, which covers PDFs open in Chrome's viewer.
+- **Alternatives considered:** a PDF parser (another dependency that parses untrusted binary files, for what pasting already solves); replacing the text of an item that was already read (it would need re-evaluation, against I6; left out).
+- **Evidence:** `tests/paste_text.test.ts` (every failure code, a PDF then its pasted text with no second fetch, too little text, a selection as the article, text on a new link, 409 for an item already read, the 50,000-character cut), `tests/ui_xss.test.ts` (the explanation in both languages and the paste box, hostile reason text shown as text), `tests/article_limits.test.ts`.
+- **Outcome / lesson:** how often each failure happens on the owner's clips is **not measured**; the 500-character threshold was checked only against the eval set's real articles.
+
 ## Bugs and vulnerabilities found
 
 | ID | What was wrong | How it was found | Severity | Fixed in | Test that proves the fix |

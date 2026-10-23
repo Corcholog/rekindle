@@ -6,7 +6,7 @@ import { boss, INGEST_JOB_OPTIONS } from '../../queue';
 import { canonicalizeUrl, isPrivateOrLoopbackHost } from '../../workers/ingestionWorker';
 import { newTraceId } from '../../observability/pipeline';
 import { and, eq } from 'drizzle-orm';
-import { MAX_INGEST_BODY_BYTES } from '../../config';
+import { MAX_INGEST_BODY_BYTES, MAX_ARTICLE_CHARS } from '../../config';
 
 const IngestRequestSchema = z.object({
   url: z.string().url().refine((val) => {
@@ -20,6 +20,8 @@ const IngestRequestSchema = z.object({
   }, { message: 'Only public http(s) URLs are accepted (no local or private addresses)' }),
   title: z.string().optional(),
   selection: z.string().optional(),
+  /** The article's text, pasted by the owner: the page is not fetched (PDFs, blocked or script-built pages). */
+  text: z.string().optional(),
 });
 
 export default async function (server: FastifyInstance) {
@@ -50,8 +52,9 @@ export default async function (server: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const { url: rawUrl, title: passedTitle, selection } = request.body as { url: string; title?: string; selection?: string };
+    const { url: rawUrl, title: passedTitle, selection, text } = request.body as { url: string; title?: string; selection?: string; text?: string };
     const url = canonicalizeUrl(rawUrl);
+    const pastedText = text?.trim() ? text.trim().substring(0, MAX_ARTICLE_CHARS) : null;
 
     try {
       // Each ingestion starts a trace that follows the content to its suggestions
@@ -62,6 +65,7 @@ export default async function (server: FastifyInstance) {
         url,
         initialTitle: passedTitle,
         selection,
+        ...(pastedText ? { pasted: true } : {}),
       }, INGEST_JOB_OPTIONS);
 
       // New URL: the insert wins atomically, even with concurrent requests
@@ -72,7 +76,7 @@ export default async function (server: FastifyInstance) {
           consumedAt: new Date(),
           traceId,
           ...(passedTitle ? { title: passedTitle } : {}),
-          ...(selection ? { rawText: selection } : {}),
+          ...(pastedText ? { rawText: pastedText, pastedText: true } : selection ? { rawText: selection } : {}),
         })
         .onConflictDoNothing({ target: contents.uri })
         .returning({ id: contents.id });
@@ -92,10 +96,11 @@ export default async function (server: FastifyInstance) {
         .set({
           ingestStatus: 'pending',
           ingestStatusReason: null,
+          ingestFailureKind: null,
           consumedAt: new Date(),
           traceId,
           ...(passedTitle ? { title: passedTitle } : {}),
-          ...(selection ? { rawText: selection } : {}),
+          ...(pastedText ? { rawText: pastedText, pastedText: true } : selection ? { rawText: selection } : {}),
         })
         .where(and(eq(contents.uri, url), eq(contents.ingestStatus, 'failed')))
         .returning({ id: contents.id });

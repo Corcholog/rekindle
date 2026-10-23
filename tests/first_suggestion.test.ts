@@ -9,11 +9,12 @@ defineFirstSuggestionSuite({
   lighthouseTitle: 'El faro del fin del mundo',
   nestedNote: 'personajes/el_farero.md',
   matchUrl: 'https://es.wikipedia.org/wiki/Faro',
-  matchHtml: '<html><head><title>Faro</title></head><body><article><p>Un faro es una torre en la costa con una luz potente para guiar a los barcos durante la noche y la niebla. La lente de Fresnel concentra la luz del faro y el farero mantiene la luz encendida durante los temporales.</p></article></body></html>',
+  // Each paragraph repeated: a real article is longer than MIN_ARTICLE_CHARS
+  matchHtml: '<html><head><title>Faro</title></head><body><article><p>Un faro es una torre en la costa con una luz potente para guiar a los barcos durante la noche y la niebla. La lente de Fresnel concentra la luz del faro y el farero mantiene la luz encendida durante los temporales.</p><p>Un faro es una torre en la costa con una luz potente para guiar a los barcos durante la noche y la niebla. La lente de Fresnel concentra la luz del faro y el farero mantiene la luz encendida durante los temporales.</p><p>Un faro es una torre en la costa con una luz potente para guiar a los barcos durante la noche y la niebla. La lente de Fresnel concentra la luz del faro y el farero mantiene la luz encendida durante los temporales.</p></article></body></html>',
   matchWord: 'farero',
   matchSummary: 'Un faro es una torre en la costa con una luz para guiar a los barcos en la noche y la niebla; el farero mantiene la luz encendida durante los temporales.',
   controlUrl: 'https://es.wikipedia.org/wiki/Fotos%C3%ADntesis',
-  controlHtml: '<html><head><title>Fotosíntesis</title></head><body><article><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p></article></body></html>',
+  controlHtml: '<html><head><title>Fotosíntesis</title></head><body><article><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p><p>La clorofila de las hojas absorbe energía solar y transforma dióxido de carbono y agua en glucosa y oxígeno dentro del cloroplasto.</p></article></body></html>',
   controlSummary: 'La fotosíntesis convierte la energía solar en glucosa y oxígeno gracias a la clorofila de las hojas.',
   targetNote: 'investigacion_faros.md',
   action: {

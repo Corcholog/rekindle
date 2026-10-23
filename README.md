@@ -4,7 +4,7 @@
 
 **What you read rekindles what you stopped writing.**
 
-Writing projects get set aside for weeks, and then you read something that connects to one of them without noticing. Rekindle is a **local-first** assistant that notices for you. You keep your projects as Markdown notes in an Obsidian vault and clip the articles and YouTube videos you read. Rekindle summarizes each one, compares it with every project and note, and proposes a concrete action ("cite this in the research notes", "use this as a counter-argument"). Projects you haven't touched in a while cool down to ash, and a suggestion that could relight one is marked. Rekindle never edits your notes: a suggestion you accept is added to a `suggestions.md` file in that project.
+Writing projects get set aside for weeks, and then you read something that connects to one of them without noticing. Rekindle is a **local-first** assistant that notices for you. You keep your projects as Markdown notes in an Obsidian vault and clip the articles and YouTube videos you read. When a page can't be read (a PDF, a blocked site, a paywall), Rekindle says why and you can paste the text instead. Rekindle summarizes each one, compares it with every project and note, and proposes a concrete action ("cite this in the research notes", "use this as a counter-argument"). Projects you haven't touched in a while cool down to ash, and a suggestion that could relight one is marked. Rekindle never edits your notes: a suggestion you accept is added to a `suggestions.md` file in that project.
 
 | Light | Dark |
 |---|---|

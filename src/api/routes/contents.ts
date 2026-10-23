@@ -2,8 +2,14 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { contents, evaluations, projectSnapshots, projects } from '../../db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
-import { env, VECTOR_DISTANCE_THRESHOLD } from '../../config';
+import { eq, desc, sql, and } from 'drizzle-orm';
+import { env, VECTOR_DISTANCE_THRESHOLD, MAX_INGEST_BODY_BYTES, MAX_ARTICLE_CHARS } from '../../config';
+import { boss, INGEST_JOB_OPTIONS } from '../../queue';
+import { newTraceId } from '../../observability/pipeline';
+
+const PasteTextBodySchema = z.object({
+  text: z.string().refine(t => t.trim().length > 0, { message: 'The pasted text is empty' }),
+});
 
 const IngestStatusSchema = z.enum(['pending', 'extracting', 'summarizing', 'embedding', 'ready', 'failed']);
 
@@ -14,6 +20,10 @@ const ContentItemSchema = z.object({
   channelOrDomain: z.string().nullable().optional(),
   ingestStatus: IngestStatusSchema,
   ingestStatusReason: z.string().nullable(),
+  /** Why a failed ingest failed (src/workers/ingestFailure.ts); the UI explains it and offers to paste the text. */
+  ingestFailureKind: z.enum(['pdf', 'unsupported_type', 'blocked', 'not_found', 'fetch_failed', 'no_text', 'too_little_text', 'no_transcript', 'not_allowed', 'other']).nullable().optional(),
+  /** The owner pasted the text; the page was not fetched. */
+  pastedText: z.boolean().optional(),
   consumedAt: z.string(),
   createdAt: z.string(),
   counts: z.object({
@@ -129,6 +139,8 @@ function getItemSelection(hasJobTable: boolean) {
     channelOrDomain: contents.channelOrDomain,
     ingestStatus: contents.ingestStatus,
     ingestStatusReason: contents.ingestStatusReason,
+    ingestFailureKind: contents.ingestFailureKind,
+    pastedText: contents.pastedText,
     consumedAt: contents.consumedAt,
     createdAt: contents.createdAt,
     evaluationsCount,
@@ -276,5 +288,38 @@ export default async function (server: FastifyInstance) {
       ...toItem(row),
       evaluations: evals.map(e => ({ ...e, evaluatedAt: e.evaluatedAt.toISOString() })),
     });
+  });
+
+  // 3. The owner pastes the text of an item Rekindle could not read (a PDF, a blocked page, too
+  // little text). Only a failed item takes it: one that was read and evaluated keeps its text (I6).
+  // The text is untrusted like any page and is cut at MAX_ARTICLE_CHARS; the page is not fetched.
+  server.post('/api/contents/:id/text', {
+    bodyLimit: MAX_INGEST_BODY_BYTES,
+    schema: {
+      params: IdParamSchema,
+      body: PasteTextBodySchema,
+      response: {
+        200: z.object({ contentId: z.string().uuid(), status: z.string() }),
+        404: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+        409: z.object({ error: z.string(), message: z.string(), code: z.string().optional() }),
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as z.infer<typeof IdParamSchema>;
+    const { text } = request.body as z.infer<typeof PasteTextBodySchema>;
+    const [row] = await db.select({ id: contents.id, uri: contents.uri, title: contents.title, ingestStatus: contents.ingestStatus })
+      .from(contents).where(eq(contents.id, id)).limit(1);
+    if (!row) return reply.status(404).send({ error: 'Not Found', message: `Content with id ${id} not found`, code: 'content_not_found' });
+
+    const traceId = newTraceId();
+    const [updated] = await db.update(contents)
+      .set({ rawText: text.trim().substring(0, MAX_ARTICLE_CHARS), pastedText: true, ingestStatus: 'pending', ingestStatusReason: null, ingestFailureKind: null, traceId })
+      .where(and(eq(contents.id, id), eq(contents.ingestStatus, 'failed')))
+      .returning({ id: contents.id });
+    if (!updated) {
+      return reply.status(409).send({ error: 'Conflict', message: 'Only an item that failed to ingest takes pasted text.', code: 'not_failed' });
+    }
+    await boss.send('ingest_url', { contentId: id, traceId, url: row.uri, initialTitle: row.title ?? undefined, pasted: true }, INGEST_JOB_OPTIONS);
+    return reply.send({ contentId: id, status: 'pending' });
   });
 }

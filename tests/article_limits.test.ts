@@ -58,5 +58,7 @@ describe('article size limits', () => {
       expect(source.match(/\.slice\(0, MAX_SELECTION_CHARS\)/g)!.length, file).toBeGreaterThanOrEqual(2);
     }
     expect(await fs.readFile('extension/popup.html', 'utf-8')).toContain(`maxlength="${MAX_ARTICLE_CHARS}"`);
+    // The web UI's paste boxes use the same limit
+    expect(await fs.readFile('web/src/views/Reading.tsx', 'utf-8')).toContain(`const MAX_PASTE_CHARS = ${MAX_ARTICLE_CHARS};`);
   });
 });
