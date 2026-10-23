@@ -28,21 +28,26 @@ const MAX_NEW_NOTE_LENGTH = 120;
 const UNSAFE_NAME = /[[\]|#^:*?"<>\\]/;
 const hasControlCharacter = (name: string) => [...name].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127);
 
+// Accented names can reach Rekindle in either Unicode form (macOS file systems often give the
+// decomposed one, a model writes the composed one), so names are compared in NFC, case-insensitively,
+// and the note's own stored path is returned (F-28)
+const key = (value: string) => value.normalize('NFC').toLowerCase();
+
 function existingNote(name: string, notes: readonly ProjectNoteRef[]): string | null {
   const paths = notes.map(n => n.path);
   const withMd = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
   for (const candidate of [name, withMd]) {
     if (paths.includes(candidate)) return candidate;
   }
-  const lower = withMd.toLowerCase();
-  const byPath = paths.filter(p => p.toLowerCase() === lower);
+  const lower = key(withMd);
+  const byPath = paths.filter(p => key(p) === lower);
   if (byPath.length === 1) return byPath[0];
   // A bare file name ("mechanics.md") names the note only if exactly one note has it
-  const bySuffix = paths.filter(p => p.toLowerCase().endsWith(`/${lower}`));
+  const bySuffix = paths.filter(p => key(p).endsWith(`/${lower}`));
   if (bySuffix.length === 1) return bySuffix[0];
   // The index shows titles too, and models often answer with one
-  const title = name.replace(/\.md$/i, '').trim().toLowerCase();
-  const byTitle = notes.filter(n => n.title.trim().toLowerCase() === title);
+  const title = key(name.replace(/\.md$/i, '').trim());
+  const byTitle = notes.filter(n => key(n.title.trim()) === title);
   return byTitle.length === 1 ? byTitle[0].path : null;
 }
 
@@ -52,7 +57,7 @@ function newNotePath(name: string, notes: readonly ProjectNoteRef[]): string | n
   if (segments.some(s => !s.trim() || s.startsWith('.') || s !== s.trim())) return null;
   const withMd = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
   const folder = withMd.includes('/') ? withMd.slice(0, withMd.lastIndexOf('/')) : '';
-  if (folder && !notes.some(n => n.path.startsWith(`${folder}/`))) return null;
+  if (folder && !notes.some(n => key(n.path).startsWith(`${key(folder)}/`))) return null;
   return withMd;
 }
 

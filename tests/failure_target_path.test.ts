@@ -62,6 +62,18 @@ describe('resolveTarget', () => {
     expect(resolveTarget(proposed, true, notes, 'fallback.md')).toEqual(existing('fallback.md'));
   });
 
+  it('matches accented names in either Unicode form, and keeps the stored path (F-28)', () => {
+    // On disk the names are decomposed (as macOS often stores them); the model writes them composed
+    const nfd = [
+      { path: 'investigación/fuentes.md'.normalize('NFD'), title: 'Fuentes' },
+      { path: 'ideas.md', title: 'Ideas sobre la niñez'.normalize('NFD') },
+    ];
+    expect(resolveTarget('investigación/fuentes.md'.normalize('NFC'), false, nfd, null)).toEqual({ path: nfd[0].path, isNew: false });
+    expect(resolveTarget('Ideas sobre la niñez'.normalize('NFC'), false, nfd, null)).toEqual({ path: 'ideas.md', isNew: false });
+    // A new note in that folder is accepted whichever form the model used
+    expect(resolveTarget('investigación/nueva.md'.normalize('NFC'), true, nfd, null)).toMatchObject({ isNew: true });
+  });
+
   it('points at no note when retrieval matched no note', () => {
     expect(resolveTarget('../x.md', false, notes, null)).toEqual(existing('unknown'));
   });
