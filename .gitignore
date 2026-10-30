@@ -15,10 +15,9 @@ tests/DummyVault*/
 .DS_Store
 Thumbs.db
 
-# The agent's working plan (goals, audit, roadmap) stays local
-docs/agent/
-# Audit report stays local until its findings are fixed
-docs/audit/
+# The agent's audit prompts are kept in docs/audit/ as history
+# The audit report stays local until its findings are fixed
+docs/audit/AUDIT_REPORT.md
 
 # Private eval data: real notes, article texts, labels and caches (never committed)
 evals/private/
