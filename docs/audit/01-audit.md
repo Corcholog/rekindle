@@ -1,3 +1,5 @@
+> Historical artifact: the prompt used for the read-only audit of 2026-10-17, kept for transparency.
+
 # Phase 0 — Read-Only Engineering & Security Audit
 
 Act as a senior software and security engineer auditing Loom (TypeScript, Fastify, PostgreSQL/pgvector, Drizzle, pg-boss, Ollama, optional Gemini, Obsidian vault integration, Manifest V3 extension, vanilla-JS web UI).

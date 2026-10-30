@@ -12,6 +12,12 @@ Writing projects get set aside for weeks, and then you read something that conne
 
 Rekindle runs in **English or Spanish** (interface, suggestions and what it writes to your vault).
 
+Most of the code here was written with AI agents as a pair programmer; the design, the threat model, the evaluation
+methodology and every number below are mine. The agent's instructions for the read-only security and correctness audit
+are kept in [`docs/audit/`](docs/audit/), and the build log — decisions, dead ends and bugs found along the way — is in
+[`docs/JOURNEY.md`](docs/JOURNEY.md). The check on the agent's work is the test suite: 81 test files, 40 of them
+against a throwaway PostgreSQL with pgvector in a Testcontainer.
+
 ## How it works
 
 ![How Rekindle works: you clip an article or a YouTube video; Rekindle reads the page text or the video transcript, summarizes it and embeds it locally, and compares it with snapshots of your projects; the 3 closest projects go to an LLM for a verdict; you review each suggestion, and only an accepted one is saved to the project's suggestions.md; the vault is watched and changed notes are re-embedded locally](docs/images/architecture.svg)
@@ -48,7 +54,7 @@ corepack enable && pnpm install
 ./start.sh        # copies .env.example, starts Postgres, migrates, checks the install, starts the server
 ```
 
-Open <http://127.0.0.1:3000>. Until you point it at your vault (Settings, or `VAULT_PATH`), Rekindle uses a demo vault with 4 projects. Paste the links from [`demo_vault_en/ARTICLES.md`](demo_vault_en/ARTICLES.md) into **Reading**, wait for the summaries, and open **Suggestions**. Windows has `start.bat`, which has not been tested on a real Windows machine.
+Open <http://127.0.0.1:3000>. Until you point it at your vault (Settings, or `VAULT_PATH`), Rekindle uses a demo vault with 4 projects. Paste the links from [`demo_vault_en/ARTICLES.md`](demo_vault_en/ARTICLES.md) into **Reading**, wait for the summaries, and open **Suggestions**. Windows has `start.bat`, the same six steps as `start.sh`; CI exercises the Ubuntu path.
 
 ## Evaluation
 
@@ -66,6 +72,10 @@ The default column is the current setup: since 2026-10-21 the model sees every n
 ![Connections found against extra connections: DeepSeek Flash with thinking off (the default) finds 35 of 56 and proposes 4 extra; with thinking on 49 and 26 (earlier prompt); Gemini 3.1 Flash Lite 49 and 25 (earlier prompt); local Qwen 2.5 7B 30 and 9 (earlier prompt)](docs/images/eval-connections.svg)
 
 What counts as a connection is partly subjective: a model can force links, and it can also find ones I had missed (after reading the thinking-on answers I changed 7 labels, which favors it). *Extra* means a pair I labeled irrelevant that the model connected. This is one labeler and a small dataset, so gaps of a few points are noise. Method, caveats, costs and the language experiments: [docs/EVALUATION.md](docs/EVALUATION.md).
+
+The 376 labeled pairs are my own reading notes, so they are not published; [`evals/dataset/`](evals/dataset) ships a
+synthetic dataset with the same shape. The harness, the metrics and the quality gates are public, so the method can be
+run against anyone's own labels.
 
 ## Privacy and security
 
@@ -106,6 +116,7 @@ The full list of threats, mitigations, tests and residual risks is in [docs/THRE
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Threats, mitigations, the test behind each, residual risks |
 | [docs/JOURNEY.md](docs/JOURNEY.md) | Build log: decisions, dead ends, bugs found and fixed |
 | [docs/adr/](docs/adr) | Architecture decision records (Spanish) |
+| [docs/audit/](docs/audit) | The agent prompts for the read-only security and correctness audit |
 
 ## License and citation
 

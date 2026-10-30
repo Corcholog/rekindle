@@ -1,3 +1,5 @@
+> Historical artifact: the prompt used for the read-only audit of 2026-10-17, kept for transparency.
+
 # Roadmap
 
 Work one phase per session, only when the owner names it. For every phase: plan first, wait for approval, implement in small commits, verify, then tick the checkbox and add an entry to `docs/JOURNEY.md`.

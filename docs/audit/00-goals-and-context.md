@@ -1,3 +1,5 @@
+> Historical artifact: the prompt used for the read-only audit of 2026-10-17, kept for transparency.
+
 # Goals and Context
 
 Read this before any phase. It explains why the work exists and what "done" means.
